@@ -189,7 +189,7 @@ NAME       TYPE     DATA   AGE
 cf-token   Opaque   1      2m34s
 ```
 
-- You have now hooked up your first secret to be made available for helm chart depl;oyments!
+- You have now hooked up your first secret to be made available for helm chart deployments!
 
 
 ## Applications

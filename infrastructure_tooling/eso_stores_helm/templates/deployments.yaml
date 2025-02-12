@@ -16,24 +16,3 @@ spec:
           name: "vault-token"
           key: "token"
           namespace: "default"
-
----
-# Sets up the secret store for the namespace with the external secrets provider
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: alexprinter-secret
-  namespace: alexprinter
-spec:
-  refreshInterval: "15s"
-  secretStoreRef:
-    name: vault-backend
-    kind: ClusterSecretStore
-  target:
-    name: cf-token
-    creationPolicy: Owner
-  data:
-    - secretKey: TUNNEL_TOKEN
-      remoteRef:
-        key: kv/cloudflare
-        property: token

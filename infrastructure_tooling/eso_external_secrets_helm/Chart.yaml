@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-secrets-provider-deployment
+version: 0.1.0
+description: A Helm chart to deploy ExternalSecret provider resources
