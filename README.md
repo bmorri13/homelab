@@ -13,6 +13,7 @@
 ## Continuous Deployment
 ### ArgoCD 
 - In order to manage deployments in a GitOps workflow metholdogy, I will be using ArgoCD as my CD tool to deploy out my subsequent applications
+
 #### Setup
 - Following the [ArgoCD Getting Starting Guide][https://argo-cd.readthedocs.io/en/stable/getting_started/], we will deploy ArgoCD
 > NOTE: I am only including the steps that I have run that are a subset of the steps on the guide (e.g. not installing argocd cli, etc.)
@@ -63,6 +64,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 ### Vault 
 - In order to manage kubernetes secrets, we will deploy [Vault](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)
 >NOTE: This is just one example of a password manager, you can use local secrets, or other soultions such as AWS Secrets manager, GCP Secrets Manager, etc.
+
 #### Setup
 1. Using kubectl, create a new namespace for vault
 ```bash
@@ -130,6 +132,7 @@ http://bmo-nuc.com:31080/
 
 ### External Secrets Operator 
 - In order to utlize external secret stors such as Hashicorp Vault, AWS Secrets Manager, GCP Secrets Manager, etc. [External Secrets Operator](https://external-secrets.io/latest/) will allow us to leverage those secrets witin our Cluster
+
 #### Setup
 1. Using kubectl, create a new namespace for vault
 ```bash
@@ -165,7 +168,7 @@ kubectl create secret generic vault-token -n default --from-literal=token=$VAULT
 kubectl create ns alexprinter
 ```
 
-5. We are now ready to deploy the `ClusterSecretStore` and first `ExternalSecret`
+5. We are now ready to deploy the `ClusterSecretStore`
     - You will need to update the [deployments.yaml](https://github.com/bmorri13/homelab) to match your cluster or needs
         - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_stores_helm/templates/deployments.yaml#L11) line to reflect your correct cluster name and port
 
@@ -177,11 +180,27 @@ kubectl create ns alexprinter
         - Leave the `Git` dropdown
         - Repository URL: https://github.com/bmorri13/homelab
         - Revision: HEAD
-        - Path: infrastructure_tooling/eso_stores_helm
+        - Path: infrastructure_tooling/eso_cluster_provider_helm
+        - Cluster URL: https://kubernetes.default.svc
+        - Namesapce: external-secrets
+
+7. We are now ready to deploy the `ExternalSecret`
+    - You will need to update the [deployments.yaml](https://github.com/bmorri13/homelab) to match your cluster or needs
+        - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_stores_helm/templates/deployments.yaml#L11) line to reflect your correct cluster name and port
+
+8. Within the ArgoCD UI, create a new app with the below parameter
+    - General
+        - Application Name: eso-vault-secrets
+        - Project Name: default
+    - Source
+        - Leave the `Git` dropdown
+        - Repository URL: https://github.com/bmorri13/homelab
+        - Revision: HEAD
+        - Path: infrastructure_tooling/eso_external_secrets_helm
         - Cluster URL: https://kubernetes.default.svc
         - Namesapce: alexprinter
 
-7. Confirm both in the UI and backend with kubectl that the secert was created
+9. Confirm both in the UI and backend with kubectl that the secert was created
 ```bash
 kubectl get secrets -n alexprinter
 
