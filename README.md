@@ -214,5 +214,5 @@ cf-token   Opaque   1      2m34s
 
 
 To Do:
-- [] Adding reverse proxy
-- [] Adding Monitoring Stack
+- [ ] Adding reverse proxy
+- [ ] Adding Monitoring Stack
