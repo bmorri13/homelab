@@ -1,6 +1,21 @@
 # homelab
 - This repo contains the configurations and setup information for my homelab k3s cluster. Currnetly I am running this on a single Intel NUC
 
+## Table of Contents
+- [Prerequisites](#prerequisites)
+- [Tooling](#tooling)
+  - [Continuous Deployment](#continuous-deployment)
+    - [ArgoCD](#argocd)
+      - [Setup](#setup)
+    - [Vault](#vault)
+      - [Setup](#setup-1)
+    - [External Secrets Operator](#external-secrets-operator)
+      - [Setup](#setup-2)
+- [Applications](#applications)
+  - [Alex Printer tracker](#alex-printer-tracker)
+    - [Setup](#setup-3)
+- [To Do](#to-do)
+
 ## Prerequisites
 - Setup a machine running Linux (e.g. an old laptop, Intel Nuc, cloud VM, etc.)
     - For me, I am running this on an Intel Nuc with ubuntu server installed
@@ -174,7 +189,7 @@ kubectl create ns alexprinter
 
 6. Within the ArgoCD UI, create a new app with the below parameter
     - General
-        - Application Name: eso-vault-secrets
+        - Application Name: eso-cluster-provider-helm
         - Project Name: default
     - Source
         - Leave the `Git` dropdown
@@ -190,7 +205,7 @@ kubectl create ns alexprinter
 
 8. Within the ArgoCD UI, create a new app with the below parameter
     - General
-        - Application Name: eso-vault-secrets
+        - Application Name: eso-external-secrets-helm
         - Project Name: default
     - Source
         - Leave the `Git` dropdown
@@ -198,7 +213,7 @@ kubectl create ns alexprinter
         - Revision: HEAD
         - Path: infrastructure_tooling/eso_external_secrets_helm
         - Cluster URL: https://kubernetes.default.svc
-        - Namesapce: alexprinter
+        - Namesapce: external-secrets
 
 9. Confirm both in the UI and backend with kubectl that the secert was created
 ```bash
