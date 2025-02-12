@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-secrets-deployment
+version: 0.1.0
+description: A Helm chart to deploy ClusterSecretStore and ExternalSecret resources

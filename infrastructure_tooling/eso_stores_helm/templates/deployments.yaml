@@ -1,0 +1,38 @@
+---
+
+# Setups up the cluser wide secret store
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "http://bmo-nuc.com:31080"
+      path: "kv"
+      version: "v2"
+      auth:
+        tokenSecretRef:
+          name: "vault-token"
+          key: "token"
+          namespace: "default"
+
+# Sets up the secret store for the namespace with the external secrets provider
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: alexprinter-secret
+  namespace: alexprinter
+spec:
+  refreshInterval: "15s"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: cf-token
+    creationPolicy: Owner
+  data:
+    - secretKey: TUNNEL_TOKEN
+      remoteRef:
+        key: kv/cloudflare
+        property: token

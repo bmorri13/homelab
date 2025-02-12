@@ -1,0 +1,19 @@
+# Terraform local files
+*.tfvars
+*.tfvars.json
+.terraform.tfstate.lock.info
+.terraform.lock.hcl
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Vault keys and tokens
+vault-keys.json
+*vault-keys.json
+*vault.token
+.vault-token
+
+# Local environment files
+.env
+.env.local
+*.local
