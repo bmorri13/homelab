@@ -30,7 +30,7 @@
 - In order to manage deployments in a GitOps workflow metholdogy, I will be using ArgoCD as my CD tool to deploy out my subsequent applications
 
 #### Setup
-- Following the [ArgoCD Getting Starting Guide][https://argo-cd.readthedocs.io/en/stable/getting_started/], we will deploy ArgoCD
+- Following the [ArgoCD Getting Starting Guide](https://argo-cd.readthedocs.io/en/stable/getting_started/), we will deploy ArgoCD
 > NOTE: I am only including the steps that I have run that are a subset of the steps on the guide (e.g. not installing argocd cli, etc.)
 
 1. Install ArgoCD
