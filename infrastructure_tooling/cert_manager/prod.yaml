@@ -2,28 +2,21 @@
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: letsencrypt-production
+  name: bmosan-cert
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
     email: bryanmorrison017@gmail.com
     privateKeySecretRef:
-      name: letsencrypt-production
+      name: bmosan-cert
     solvers:
       - dns01:
           cloudflare:
             email: bryanmorrison017@gmail.com
             apiTokenSecretRef:
               name: cf-api-token
-              key: token
+              key: cf-api-token
         selector:
           dnsZones:
             - "bmosan.com"
             - "*.bmosan.com"
-
-
-
-# helm install cert-manager jetstack/cert-manager \
-#   --namespace cert-manager \
-#   --version v1.17.1 \
-#   --set crds.enabled=true
