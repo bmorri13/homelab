@@ -4,7 +4,7 @@ apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: cf-api-token
-  namespace: cert-manager
+  namespace: default
 spec:
   refreshInterval: "15s"
   secretStoreRef:

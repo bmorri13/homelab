@@ -226,6 +226,19 @@ cf-token   Opaque   1      2m34s
 - You have now hooked up your first secret to be made available for helm chart deployments!
 
 
+### Cert Manager
+- Deploying Cert Manager to configure valid certs within the enviornment
+#### Setup
+
+
+1. Deploy helm chart
+```bash
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --version v1.17.1 \
+  --set crds.enabled=true
+```
+
 ## Applications
 ### Alex Printer tracker
 - This is a sample app that I have created to track how long it is taking a buddy to build his printer with a nextjs app and as well test out Cloudflare Tunnels
