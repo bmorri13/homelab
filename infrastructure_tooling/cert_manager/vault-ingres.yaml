@@ -5,16 +5,12 @@ metadata:
   name: vault
   namespace: vault
   annotations:
-    metallb.universe.tf/address-pool: addr-pool
+    metallb.universe.tf/address-pool: metallb-default
 spec:
   type: LoadBalancer
   selector:
     app: vault
   ports:
-  - name: http
-    protocol: TCP
-    port: 80
-    targetPort: 8200
   - name: https
     protocol: TCP
     port: 443
@@ -43,7 +39,7 @@ spec:
           service:
             name: vault
             port:
-              name: http
+              name: https
   tls:
   - hosts:
     - vault.bmosan.com
