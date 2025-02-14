@@ -8,7 +8,7 @@ metadata:
 spec:
   provider:
     vault:
-      server: "http://bmo-nuc.com:31080"
+      server: "http://bmo-nuc.com:30788"
       path: "kv"
       version: "v2"
       auth:
