@@ -9,7 +9,6 @@ spec:
   issuerRef:
     name: bmosan-cert
     kind: ClusterIssuer
-  commonName: "*.bmosan.com"
+  commonName: nginx.bmosan.com
   dnsNames:
-  - "bmosan.com"
-  - "*.bmosan.com"
+  - "nginx.bmosan.com"
