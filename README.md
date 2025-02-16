@@ -11,9 +11,15 @@
       - [Setup](#setup-1)
     - [External Secrets Operator](#external-secrets-operator)
       - [Setup](#setup-2)
+    - [Cert Manager](#cert-manager)
+      - [Setup](#setup-3)
+    - [Metal LB](#metal-lb)
+      - [Setup](#setup-4)
+    - [Core Infrastructure Ingress](#core-infrstructure-ingress)
+      - [Setup](#setup-5)
 - [Applications](#applications)
   - [Alex Printer tracker](#alex-printer-tracker)
-    - [Setup](#setup-3)
+    - [Setup](#setup-6)
 - [To Do](#to-do)
 
 ## Prerequisites
