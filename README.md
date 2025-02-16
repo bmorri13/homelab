@@ -229,8 +229,6 @@ cf-token   Opaque   1      2m34s
 ### Cert Manager
 - Deploying Cert Manager to configure valid certs within the enviornment
 #### Setup
-
-
 1. Deploy helm chart
 ```bash
 helm install cert-manager jetstack/cert-manager \
@@ -238,6 +236,75 @@ helm install cert-manager jetstack/cert-manager \
   --version v1.17.1 \
   --set crds.enabled=true
 ```
+2. Deploy out the `prod_cert_issuer.yaml` from the cert_manager directory
+```bash
+kubectl apply -f prod_cert_issuer.yaml
+```
+
+3. Verify that the issuer has successfully been created
+```bash
+kubectl get clusterissuers
+- You should see someting like
+```bash
+NAME          READY   AGE
+bmosan-cert   True    46h
+```
+
+4. Deploy out a test deployment chart, we can use the `nginx_deployment.yaml`
+```bash
+kubectl apply -f nginx_deployment.yaml
+```
+
+5. Test going to your site (e.g. https://nginx.bmosan.com)
+- You should be able to get to the site and then validat that the cert is valid and issued by Let's Encrypt
+
+### Metal LB 
+- Deploying the MetalLb Configuraiton via ArgoCD
+#### Setup
+1. Create the `metallb-system` namespace
+```bash
+kubectl create ns metallb-system
+```
+
+2. Within the ArgoCD UI, create a new app with the below parameter
+    - General
+        - Application Name: metallb
+        - Project Name: default
+    - Source
+        - Leave the `Git` dropdown
+        - Repository URL: https://github.com/bmorri13/homelab
+        - Revision: HEAD
+        - Path: infrastructure_tooling/metallb
+        - Cluster URL: https://kubernetes.default.svc
+        - Namesapce: metallb-system
+
+3. You can now configure your services to get assigned an EXTERNAL-IP when using the `LoadBalancer` type. An exmaple of this with ArgoCD is below:
+```bash
+kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+```
+
+4. You can now access the ArgoCD front end via the EXTERNAL-IP, get that by running
+```
+ kubectl get svc argocd-server -n argocd
+NAME            TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                      AGE
+argocd-server   LoadBalancer   10.43.45.220   192.168.3.101   80:30766/TCP,443:32660/TCP   2d
+```
+
+### Core Infrstructure Ingress
+- Deploying the ingress configuratiosn for our main tooling (e.g. vault and ArogCD (WIP))
+#### Setup
+1. Naviateto the `ingress_configs` directory
+
+2. To configure Vault ingress, apply the `vault-ingress.ymal`
+```bash
+kubectl apply -f vault-ingress.yaml
+```
+
+3. You should now be able to go to Vault with a secure connction (e.g. https://vault.bmosan.com/ui/)
+    - NOTE: You must natviate to `/ui` in order to get the secure connection
+        - You can most likely add redirects for this, but not worried about this in my homelab currently
+
+
 
 ## Applications
 ### Alex Printer tracker

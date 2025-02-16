@@ -1,0 +1,29 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault-ingress
+  namespace: vault
+  annotations:
+    cert-manager.io/cluster-issuer: bmosan-cert
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    # Remove the passthrough annotation
+spec:
+  ingressClassName: traefik
+  # Rest remains the same
+  rules:
+  - host: vault.bmosan.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vault
+            port:
+              number: 8200
+  tls:
+  - hosts:
+    - vault.bmosan.com
+    secretName: vault-bmosan-com

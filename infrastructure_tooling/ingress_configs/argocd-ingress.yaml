@@ -1,0 +1,103 @@
+# apiVersion: traefik.io/v1alpha1
+# kind: IngressRoute
+# metadata:
+#   name: argocd-server
+#   namespace: argocd
+#   annotations:
+#     cert-manager.io/cluster-issuer: "bmosan-cert"
+# spec:
+#   entryPoints:
+#     - websecure
+#   routes:
+#     - kind: Rule
+#       match: Host(`argocd.bmosan.com`)
+#       priority: 10
+#       services:
+#         - name: argocd-server
+#           port: 80
+#     - kind: Rule
+#       match: Host(`argocd.bmosan.com`) && Headers(`Content-Type`, `application/grpc`)
+#       priority: 11
+#       services:
+#         - name: argocd-server
+#           port: 80
+#           scheme: h2c
+#   tls:
+#     secretName: argocd-bmosan-com
+#     domains:
+#       - main: argocd.bmosan.com
+# ---
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: argocd-bmosan-com
+#   namespace: argocd
+# spec:
+#   secretName: argocd-bmosan-com
+#   dnsNames:
+#     - argocd.bmosan.com
+#   issuerRef:
+#     name: bmosan-cert
+#     kind: ClusterIssuer
+# ---
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: argocd-cmd-params-cm
+#   namespace: argocd
+# data:
+#   server.insecure: "false"
+
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-http
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  entryPoints:
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`argocd.bmosan.com`)
+    priority: 10
+    middlewares:
+      - name: redirect-http-https
+    services:
+    - kind: Service
+      name: argocd-server
+      port: http
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-https
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - kind: Rule
+    match: Host(`argocd.bmosan.com`)
+    priority: 10
+    services:
+    - kind: Service
+      name: argocd-server
+      port: http
+  - kind: Rule
+    match: >-
+      Host(`argocd.bmosan.com`) &&
+      Headers(`Content-Type`, `application/grpc`)
+    priority: 11
+    services:
+    - kind: Service
+      name: argocd-server
+      port: http
+      scheme: h2c
+  tls:
+    secretName: argocd-bmosan-com
