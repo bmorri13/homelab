@@ -337,6 +337,37 @@ kubectl apply -f vault-ingress.yaml
 
 - You now have deployed a helm chart that is calling the secret that is stored in Vault successfully
 
+## Proxmox Setup
+
+### Fixing Repository Issues Without Subscription
+
+- When you run `apt-get update` on Proxmox without a valid subscription, it often fails because it's trying to access the enterprise repository that requires a subscription. To resolve this, you can disable the enterprise repository and switch to the no-subscription repository:
+
+#### Disable the Enterprise Repository:
+- Open the file `/etc/apt/sources.list.d/pve-enterprise.list` in your favorite text editor (e.g., nano or vim) and comment out the line by adding a `#` at the beginning:
+
+```bash
+# Original line
+# deb https://enterprise.proxmox.com/debian/pve bookworm pve-enterprise
+```
+
+## Enable the No-Subscription Repository:
+- Next, add the no-subscription repository. Create or edit /etc/apt/sources.list.d/pve-no-subscription.list and add the appropriate line:
+
+For Proxmox VE 8.x (running on Debian Bookworm):
+```bash
+deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
+```
+
+Update the Package List:
+Finally, run:
+```bash
+apt-get update
+```
+
+> Note: Using the no-subscription repository means you won't have access to the enterprise support updates, but you'll still receive regular community updates. This setup is common for home labs or non-production environments.
+
+
 
 To Do:
 - [ ] Adding reverse proxy
