@@ -390,8 +390,10 @@ apt-get update
 
 > Note: Using the no-subscription repository means you won't have access to the enterprise support updates, but you'll still receive regular community updates. This setup is common for home labs or non-production environments.
 
-
+### Adding Valid HTTPS Certs via Cloudflare
+- Utlized the video [Secure Proxmox with LetsEncrypt HTTPS Certificates Validated with Cloudflare DNS](https://www.youtube.com/watch?v=2_PhwHOxytM)
+- Once completed, you can now access your Proxmox instnace via the DNS name used with a valid cert
+    - E.g. `https://proxmox.bmosan.com:8006`
 
 To Do:
-- [ ] Adding reverse proxy
 - [ ] Adding Monitoring Stack
