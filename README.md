@@ -24,6 +24,7 @@
   - [Fixing Repository Issues Without Subscription](#fixing-repository-issues-without-subscription)
     - [Update PVE List](#update-pve-list)
     - [Update Ceph List](#update-ceph-list)
+  - [Adding Valid HTTPS Certs via Cloudflare](#adding-valid-https-certs-via-cloudflare)
 - [To Do](#to-do)
 
 ## Prerequisites
