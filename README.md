@@ -25,6 +25,11 @@
     - [Update PVE List](#update-pve-list)
     - [Update Ceph List](#update-ceph-list)
   - [Adding Valid HTTPS Certs via Cloudflare](#adding-valid-https-certs-via-cloudflare)
+  - [Setting up Virtual Machines](#setting-up-virtual-machines)
+    - [Linux](#linux)
+      - [Ubuntu](#ubuntu)
+    - [Windows](#windows)
+      - [Windows Pro](#windows-pro)
 - [To Do](#to-do)
 
 ## Prerequisites
@@ -395,6 +400,17 @@ apt-get update
 - Utlized the video [Secure Proxmox with LetsEncrypt HTTPS Certificates Validated with Cloudflare DNS](https://www.youtube.com/watch?v=2_PhwHOxytM)
 - Once completed, you can now access your Proxmox instnace via the DNS name used with a valid cert
     - E.g. `https://proxmox.bmosan.com:8006`
+
+
+### Setting up Virtual Machines
+#### Linux
+##### Ubuntu
+- Uploaded Ubuntu Server ISO and installed, will update the steps later but it is pretty straight forward
+
+#### Windows
+##### Windows Pro
+- Using the (Proxmox - Windows 11 VM (with VirtIO drivers))[https://www.youtube.com/watch?v=eboCDiDpOCs]
+> NOTE: This gudie (e.g. needing the extra VirtIO drivers) is needed since Windows requires having the extra drivers to get it installed correctly.
 
 To Do:
 - [ ] Adding Monitoring Stack
