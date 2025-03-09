@@ -412,5 +412,8 @@ apt-get update
 - Using the (Proxmox - Windows 11 VM (with VirtIO drivers))[https://www.youtube.com/watch?v=eboCDiDpOCs]
 > NOTE: This gudie (e.g. needing the extra VirtIO drivers) is needed since Windows requires having the extra drivers to get it installed correctly.
 
+### Additional Links
+- [Don’t run Proxmox without these settings](https://www.youtube.com/watch?v=VAJWUZ3sTSI)
+
 To Do:
 - [ ] Adding Monitoring Stack
