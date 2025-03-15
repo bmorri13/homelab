@@ -30,6 +30,8 @@
       - [Ubuntu](#ubuntu)
     - [Windows](#windows)
       - [Windows Pro](#windows-pro)
+      - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
+        - [Setup](#setup-7)
 - [To Do](#to-do)
 
 ## Prerequisites
@@ -411,6 +413,7 @@ apt-get update
 ##### Windows Pro
 - Using the (Proxmox - Windows 11 VM (with VirtIO drivers))[https://www.youtube.com/watch?v=eboCDiDpOCs]
 > NOTE: This gudie (e.g. needing the extra VirtIO drivers) is needed since Windows requires having the extra drivers to get it installed correctly.
+
 ##### Tiny 11 Windows Image Builder
 ###### Setup
 1. Download the latest Windows 11 iso
