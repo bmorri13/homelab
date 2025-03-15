@@ -411,6 +411,35 @@ apt-get update
 ##### Windows Pro
 - Using the (Proxmox - Windows 11 VM (with VirtIO drivers))[https://www.youtube.com/watch?v=eboCDiDpOCs]
 > NOTE: This gudie (e.g. needing the extra VirtIO drivers) is needed since Windows requires having the extra drivers to get it installed correctly.
+##### Tiny 11 Windows Image Builder
+###### Setup
+1. Download the latest Windows 11 iso
+2. Download the [Tiny11 Builder files](https://github.com/ntdevlabs/tiny11builder)
+3. Mount the Windows 11 iso
+4. Start up Powershell as Administrator
+5. Update execusition policy to unrestricted
+```bash
+Set-ExecutionPolicy unrestricted
+```
+6. Run the `tiny11maker.ps1` script
+```bash
+& "C:\Users\bryan\Documents\tiny_11\tiny11builder-main\tiny11maker.ps1"
+```
+> NOTE: Hit `Y` to proced if needed
+8. Select the Windows iso you wish to use (e.g. Windows 11 Pro - Index `6`)
+9. Once finished, reenabled the exection policy
+```bash
+Set-ExecutionPolicy Restricted
+```
+> NOTE: Hit `Y` to proced if needed
+10. Validatte the execution policy is set correctly again
+```bash
+Get-ExecutionPolicy -List
+```
+11. Your iso should be available for use with the name of `tiny11.iso`
+
+> Video Guide: [Tiny11 Builder: Create custom ISO and install Windows 11 without bloatware or Microsoft account](https://www.youtube.com/watch?v=VdKVph3G6hQ)
+
 
 ### Additional Links
 - [Don’t run Proxmox without these settings](https://www.youtube.com/watch?v=VAJWUZ3sTSI)
