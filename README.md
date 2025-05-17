@@ -20,6 +20,8 @@
 - [Applications](#applications)
   - [Alex Printer tracker](#alex-printer-tracker)
     - [Setup](#setup-6)
+  - [Uptime Kuma](#uptime-kuma)
+    - [Setup](#setup-7)
 - [Proxmox Setup](#proxmox-setup)
   - [Fixing Repository Issues Without Subscription](#fixing-repository-issues-without-subscription)
     - [Update PVE List](#update-pve-list)
@@ -29,9 +31,8 @@
     - [Linux](#linux)
       - [Ubuntu](#ubuntu)
     - [Windows](#windows)
-      - [Windows Pro](#windows-pro)
-      - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
-        - [Setup](#setup-7)
+      - [Windows Pro](#windows-pro)      - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
+        - [Setup](#setup-8)
 - [To Do](#to-do)
 
 ## Prerequisites
@@ -348,6 +349,45 @@ kubectl apply -f vault-ingress.yaml
         - Namesapce: alexprinter
 
 - You now have deployed a helm chart that is calling the secret that is stored in Vault successfully
+
+### Uptime Kuma
+- Uptime Kuma is an easy-to-use self-hosted monitoring tool that provides status pages, monitoring for HTTP(s), TCP, DNS, and more
+- The helm chart deploys Uptime Kuma in the `uptime-kuma` namespace with a LoadBalancer service type that uses MetalLB for IP assignment
+
+#### Setup
+1. Create the `uptime-kuma` namespace:
+```bash
+kubectl create ns uptime-kuma
+```
+
+2. Within the ArgoCD UI, create a new app with the below parameters:
+    - General
+        - Application Name: uptime-kuma
+        - Project Name: default
+    - Source
+        - Leave the `Git` dropdown
+        - Repository URL: https://github.com/bmorri13/homelab
+        - Revision: HEAD
+        - Path: infrastructure_tooling/uptime_kuma
+        - Cluster URL: https://kubernetes.default.svc
+        - Namesapce: uptime-kuma
+
+3. Once deployed, you can access Uptime Kuma using the dynamically assigned IP address provided by MetalLB:
+```bash
+kubectl get svc -n uptime-kuma
+```
+
+4. Navigate to the assigned IP address on port 3001 in your browser:
+```
+http://<EXTERNAL-IP>:3001
+```
+
+5. Follow the initial setup wizard to create your admin user and start monitoring your services.
+
+- For uninstalling the Uptime Kuma chart:
+```bash
+helm uninstall uptime-kuma -n uptime-kuma
+```
 
 ## Proxmox Setup
 

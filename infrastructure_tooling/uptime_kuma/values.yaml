@@ -1,0 +1,54 @@
+## Uptime Kuma Configuration
+# Note: This chart deploys to the "uptime-kuma" namespace by default
+
+image:
+  repository: louislam/uptime-kuma
+  tag: "1"
+  pullPolicy: IfNotPresent
+
+## Deployment configuration
+replicaCount: 1
+
+## Service configuration
+service:
+  # Options: ClusterIP, NodePort, LoadBalancer
+  type: LoadBalancer
+  port: 3001
+  targetPort: 3001
+  # If using NodePort
+  # nodePort: 30301
+  # Annotations empty to allow MetalLB to assign IP dynamically
+  annotations: {}
+
+## Persistence configuration
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+
+## Resource limits and requests
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+## Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+## Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: uptime-kuma.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
