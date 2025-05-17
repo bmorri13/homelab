@@ -364,13 +364,27 @@ kubectl create ns uptime-kuma
     - General
         - Application Name: uptime-kuma
         - Project Name: default
+        
     - Source
         - Leave the `Git` dropdown
         - Repository URL: https://github.com/bmorri13/homelab
         - Revision: HEAD
         - Path: infrastructure_tooling/uptime_kuma
+        - Helm parameter:
+            - Release Name: uptime-kuma (make sure to use all lowercase with hyphens, not spaces)
+            - Values: (leave empty or add any custom values)
+            
+    - Destination
         - Cluster URL: https://kubernetes.default.svc
-        - Namesapce: uptime-kuma
+        - Namespace: uptime-kuma
+        
+    - Sync Policy
+        - Click "AUTO-CREATE NAMESPACE" checkbox
+        - Enable "Auto-sync" (optional)
+        - In the "SYNC OPTIONS" section:
+            - Click "+ ADD SYNC OPTION"
+            - Add: CreateNamespace=true
+            - Add: ServerSideApply=true
 
 3. Once deployed, you can access Uptime Kuma using the dynamically assigned IP address provided by MetalLB:
 ```bash
@@ -384,9 +398,54 @@ http://<EXTERNAL-IP>:3001
 
 5. Follow the initial setup wizard to create your admin user and start monitoring your services.
 
-- For uninstalling the Uptime Kuma chart:
+#### Troubleshooting Deployment Issues
+
+If you encounter a `Resource not found in cluster` error for all resources:
+
+1. **Create namespace manually first**:
 ```bash
-helm uninstall uptime-kuma -n uptime-kuma
+kubectl create namespace uptime-kuma
+```
+
+2. **Apply the ArgoCD application directly**:
+```bash
+kubectl apply -f infrastructure_tooling/uptime_kuma/uptime-kuma-application.yaml
+```
+
+3. **Test the chart directly with Helm**:
+```bash
+helm install uptime-kuma ./infrastructure_tooling/uptime_kuma/ -n uptime-kuma
+```
+
+4. **Verify ArgoCD has proper permissions**:
+```bash
+kubectl get clusterrolebindings | grep argocd
+```
+
+5. **Check for specific PVC issues**:
+   - Ensure your cluster has a default StorageClass available:
+   ```bash
+   kubectl get storageclass
+   ```
+
+   - Update the `values.yaml` file to specify your available StorageClass:
+   ```yaml
+   persistence:
+     enabled: true
+     storageClassName: "local-path"  # Use your available storage class name
+     accessMode: ReadWriteOnce
+     size: 1Gi
+   ```
+
+   - If you don't need persistence, you can disable it in `values.yaml`:
+   ```yaml
+   persistence:
+     enabled: false
+   ```
+
+6. **Check ArgoCD logs for more detailed errors**:
+```bash
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller -f
 ```
 
 ## Proxmox Setup
