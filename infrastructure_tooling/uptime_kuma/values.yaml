@@ -1,15 +1,15 @@
-## Uptime Kuma Configuration
-# Note: This chart deploys to the "uptime-kuma" namespace by default
+# Simplified Uptime Kuma Configuration
+# This chart deploys to the "uptime-kuma" namespace by default
 
 image:
   repository: louislam/uptime-kuma
-  tag: "1"
+  tag: "1.23.11"
   pullPolicy: IfNotPresent
 
-## Deployment configuration
+# Deployment configuration
 replicaCount: 1
 
-## Service configuration
+# Service configuration
 service:
   # Options: ClusterIP, NodePort, LoadBalancer
   type: LoadBalancer

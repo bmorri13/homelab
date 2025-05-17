@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "uptime-kuma.fullname" . }}
+  name: {{ .Release.Name }}
   namespace: uptime-kuma
   labels:
-    {{- include "uptime-kuma.labels" . | nindent 4 }}
+    app: {{ .Release.Name }}
 spec:
   accessModes:
     - {{ .Values.persistence.accessMode | quote }}

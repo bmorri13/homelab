@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "uptime-kuma.fullname" . }}
+  name: {{ .Release.Name }}
   namespace: uptime-kuma
   labels:
-    {{- include "uptime-kuma.labels" . | nindent 4 }}
+    app: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "uptime-kuma.selectorLabels" . | nindent 6 }}
+      app: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        {{- include "uptime-kuma.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -27,12 +27,11 @@ spec:
             - name: data
               mountPath: /app/data
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-      volumes:
+            {{- toYaml .Values.resources | nindent 12 }}      volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "uptime-kuma.fullname" . }}
+            claimName: {{ .Release.Name }}
           {{- else }}
           emptyDir: {}
           {{- end }}
