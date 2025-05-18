@@ -1,32 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}
-  labels:
-    app: {{ .Release.Name }}
-    release: {{ .Release.Name }}
+  name: uptime-kuma
 spec:
-  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
-      release: {{ .Release.Name }}
+      app: uptime-kuma
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
-        release: {{ .Release.Name }}
+        app: uptime-kuma
     spec:
       containers:
-      - name: {{ .Release.Name }}
+      - name: uptime-kuma
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-        - containerPort: {{ .Values.containerPort }}
+        - containerPort: 3001
         volumeMounts:
         - name: data
-          mountPath: {{ .Values.persistence.mountPath }}
+          mountPath: {{ .Values.persistence.path }}
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: {{ .Release.Name }}-pvc
+          claimName: uptime-kuma-pvc

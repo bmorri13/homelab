@@ -4,27 +4,11 @@ replicaCount: 1
 image:
   repository: louislam/uptime-kuma
   tag: "1"
-  pullPolicy: IfNotPresent
 
 service:
   type: LoadBalancer
-  annotations: {}
-  port: 3001
-  loadBalancerIP: ""
-  # For NodePort type, optionally set nodePort above 30000
-  # nodePort: 30001
-
-containerPort: 3001
-
-# If you wish to map host port directly, enable hostPort mapping
-hostPort:
-  enabled: false
   port: 3001
 
 persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
   size: 1Gi
-  # Storage class (empty will use default)
-  storageClass: ""
-  mountPath: /app/data
+  path: /app/data
