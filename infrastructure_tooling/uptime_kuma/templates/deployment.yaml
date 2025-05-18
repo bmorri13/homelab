@@ -5,7 +5,8 @@ metadata:
   labels:
     app: {{ .Release.Name }}
     release: {{ .Release.Name }}
-spec:  replicas: {{ .Values.replicaCount }}
+spec:
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}
@@ -17,15 +18,15 @@ spec:  replicas: {{ .Values.replicaCount }}
         release: {{ .Release.Name }}
     spec:
       containers:
-        - name: {{ .Release.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - containerPort: {{ .Values.containerPort }}
-          volumeMounts:
-            - name: data
-              mountPath: {{ .Values.persistence.mountPath }}
-      volumes:
+      - name: {{ .Release.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        volumeMounts:
         - name: data
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-pvc
+          mountPath: {{ .Values.persistence.mountPath }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-pvc
