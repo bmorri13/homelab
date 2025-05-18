@@ -315,16 +315,17 @@ argocd-server   LoadBalancer   10.43.45.220   192.168.3.101   80:30766/TCP,443:3
 ```
 
 ### Core Infrstructure Ingress
-- Deploying the ingress configuratiosn for our main tooling (e.g. vault and ArogCD (WIP))
+- Deploying the ingress configuratiosn for our main tooling (e.g. Vault, Uptime Kuma, and ArogCD (WIP))
 #### Setup
 1. Naviate to the `ingress_configs` directory
 
 2. To configure Vault ingress, apply the `vault-ingress.ymal`
 ```bash
 kubectl apply -f vault-ingress.yaml
+kubectl apply -f uptime-kuma-ingress.yaml
 ```
 
-3. You should now be able to go to Vault with a secure connction (e.g. https://vault.bmosan.com/ui/)
+3. You should now be able to go to Vault & Uptime Kuma with a secure connction (e.g. https://vault.bmosan.com/ui/ & https://uptime-kuma.bmosan.com/)
     - NOTE: You must natviate to `/ui` in order to get the secure connection
         - You can most likely add redirects for this, but not worried about this in my homelab currently
 
