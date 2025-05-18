@@ -6,19 +6,18 @@ metadata:
     app: {{ .Release.Name }}
     release: {{ .Release.Name }}
 spec:
-  replicas: {{ .Values.replicaCount }}
-  selector:
+  replicas: {{ .Values.replicaCount }}  selector:
     matchLabels:
-      app: {{ include "uptime-kuma.name" . }}
+      app: {{ .Release.Name }}
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ include "uptime-kuma.name" . }}
+        app: {{ .Release.Name }}
         release: {{ .Release.Name }}
     spec:
       containers:
-        - name: {{ include "uptime-kuma.name" . }}
+        - name: {{ .Release.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -27,6 +26,5 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
       volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: {{ include "uptime-kuma.fullname" . }}-pvc
+        - name: data          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-pvc
