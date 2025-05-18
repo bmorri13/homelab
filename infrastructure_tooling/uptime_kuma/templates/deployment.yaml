@@ -5,8 +5,8 @@ metadata:
   labels:
     app: {{ .Release.Name }}
     release: {{ .Release.Name }}
-spec:
-  replicas: {{ .Values.replicaCount }}  selector:
+spec:  replicas: {{ .Values.replicaCount }}
+  selector:
     matchLabels:
       app: {{ .Release.Name }}
       release: {{ .Release.Name }}
@@ -26,5 +26,6 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
       volumes:
-        - name: data          persistentVolumeClaim:
+        - name: data
+          persistentVolumeClaim:
             claimName: {{ .Release.Name }}-pvc
