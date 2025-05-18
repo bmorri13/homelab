@@ -1,37 +1,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}
-  namespace: uptime-kuma
+  name: {{ include "uptime-kuma.fullname" . }}
   labels:
-    app: {{ .Release.Name }}
+    app: {{ include "uptime-kuma.name" . }}
+    chart: {{ include "uptime-kuma.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      app: {{ include "uptime-kuma.name" . }}
+      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
+        app: {{ include "uptime-kuma.name" . }}
+        release: {{ .Release.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ include "uptime-kuma.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - name: http
-              containerPort: 3001
-              protocol: TCP
+            - containerPort: {{ .Values.containerPort }}
           volumeMounts:
             - name: data
-              mountPath: /app/data
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}      volumes:
+              mountPath: {{ .Values.persistence.mountPath }}
+      volumes:
         - name: data
-          {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ .Release.Name }}
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
+            claimName: {{ include "uptime-kuma.fullname" . }}-pvc

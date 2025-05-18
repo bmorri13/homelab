@@ -1,23 +1,26 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}
-  namespace: uptime-kuma
+  name: {{ include "uptime-kuma.fullname" . }}
   labels:
-    app: {{ .Release.Name }}
-  {{- if .Values.service.annotations }}
+    app: {{ include "uptime-kuma.name" . }}
+    release: {{ .Release.Name }}
+  {{- with .Values.service.annotations }}
   annotations:
-    {{- toYaml .Values.service.annotations | nindent 4 }}
+{{ toYaml . | indent 4 }}
   {{- end }}
 spec:
   type: {{ .Values.service.type }}
+  {{- if and (eq .Values.service.type "LoadBalancer") .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+  {{- end }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.targetPort }}
+      targetPort: {{ .Values.containerPort }}
       protocol: TCP
-      name: http
-      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
-      nodePort: {{ .Values.service.nodePort }}
+      {{- if .Values.hostPort.enabled }}
+      nodePort: {{ .Values.hostPort.port }}
       {{- end }}
   selector:
-    app: {{ .Release.Name }}
+    app: {{ include "uptime-kuma.name" . }}
+    release: {{ .Release.Name }}
