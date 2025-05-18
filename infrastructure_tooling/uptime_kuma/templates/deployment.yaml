@@ -1,12 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "uptime-kuma.fullname" . }}
+  name: {{ .Release.Name }}
   labels:
-    app: {{ include "uptime-kuma.name" . }}
-    chart: {{ include "uptime-kuma.chart" . }}
+    app: {{ .Release.Name }}
     release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
