@@ -1,11 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: uptime-kuma
+  name: {{ .Release.Name }}
 spec:
   type: {{ .Values.service.type }}
   ports:
-  - port: {{ .Values.service.port }}
-    targetPort: 3001
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
   selector:
-    app: uptime-kuma
+    app: {{ .Release.Name }}

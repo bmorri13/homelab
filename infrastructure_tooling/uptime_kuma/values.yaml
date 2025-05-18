@@ -1,14 +1,15 @@
-# Default values for uptime-kuma chart
-replicaCount: 1
-
 image:
   repository: louislam/uptime-kuma
   tag: "1"
+  pullPolicy: IfNotPresent
 
 service:
   type: LoadBalancer
   port: 3001
+  targetPort: 3001
 
 persistence:
+  enabled: true
+  storageClass: ""  # leave empty to use default
+  accessMode: ReadWriteOnce
   size: 1Gi
-  path: /app/data
