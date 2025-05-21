@@ -1,5 +1,5 @@
 # homelab
-- This repo contains the configurations and setup information for my homelab k3s cluster. Currnetly I am running this on a single Intel NUC
+- This repo contains the configurations and setup information for my homelab k3s cluster. Currnetly I am running an Intel NUC and [Beelink Mini PC](https://www.amazon.com/dp/B0DF7FFN22?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1) running Proxmox.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
