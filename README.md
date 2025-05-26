@@ -525,7 +525,7 @@ Get-ExecutionPolicy -List
 
 ### Elastic
 - Following the [Getting started with the Elastic Stack and Docker Compose: Part 1](https://www.elastic.co/blog/getting-started-with-the-elastic-stack-and-docker-compose) guide, I have deployed the Elastic stack with Docker compose.
-- The `docker-compose.yml` file can be found at [elastic-stack-docker-part-one](https://github.com/elkninja/elastic-stack-docker-part-one) or in the [monitoring_stack/elastic](homelab\infrastructure_tooling\monitoring_stack\elastic\docker-compose.yml) directory in this repo.
+- The `docker-compose.yml` file can be found at [elastic-stack-docker-part-one](https://github.com/elkninja/elastic-stack-docker-part-one) or in the [monitoring_stack/elastic](homelab/infrastructure_tooling/monitoring_stack/elastic/docker-compose.yml) directory in this repo.
 
 
 ### Cribl
@@ -536,7 +536,7 @@ Get-ExecutionPolicy -List
 
 #### Setup
 1. To begin we will cofigure Elastic, change into the directory where you have your `docker-compose.yml` file for elastic and run the docker compose up command.
-> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](homelab\infrastructure_tooling\monitoring_stack\elastic\filebeat.yml), [monitoring_stack/elastic/logstash.conf](homelab\infrastructure_tooling\monitoring_stack\elastic\logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](homelab\infrastructure_tooling\monitoring_stack\elastic\metricbeat.yml), and [monitoring_stack/elastic/.env-example](homelab\infrastructure_tooling\monitoring_stack\elastic\.env-exmaple) file in the same directory as your `docker-compse.yml` file.
+> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](homelab/infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](homelab/infrastructure_tooling/monitoring_stack/elastic/logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](homelab/infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](homelab/infrastructure_tooling/monitoring_stack/elastic/.env-exmaple) file in the same directory as your `docker-compse.yml` file.
 
 ```bash
 docker compose up -d
