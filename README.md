@@ -536,7 +536,7 @@ Get-ExecutionPolicy -List
 
 #### Setup
 1. To begin we will cofigure Elastic, change into the directory where you have your `docker-compose.yml` file for elastic and run the docker compose up command.
-> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](infrastructure_tooling/monitoring_stack/elastic/logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](infrastructure_tooling/monitoring_stack/elastic/.env-exmaple) file in the same directory as your `docker-compse.yml` file.
+> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](infrastructure_tooling/monitoring_stack/elastic/logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](infrastructure_tooling/monitoring_stack/elastic/.env-example) file in the same directory as your `docker-compse.yml` file.
 
 ```bash
 docker compose up -d
