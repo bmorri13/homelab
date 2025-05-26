@@ -643,13 +643,13 @@ docker compose up -d
 > NOTE: A common theme with Cribl will be to always validate you have done the `Commit & Deploy` as that is what will make your changes 'active'.
 
 20. At the top left, click Data > Destinations > Elasticsearch. On the top right, click `Add Destionation` and then fill out the New Destination pane with infomration such as:
-  - Output ID: elastic_dev
-  - Description: Elastic Destination for necessary logs with a Default index set to `failover`
-  - Bulk API URLs: https://<vm_instance_ip>:9200
-  - Enable Authentication: Toggle to Enabled (e.g. it should show blue)
-    - Authenitcation method: Manual
-    - Username: cribl_writer
-    - Password: criblpass
+  - *Output ID:* elastic_dev
+  - *Description:* Elastic Destination for necessary logs with a Default index set to `failover`
+  - *Bulk API URLs:* https://<vm_instance_ip>:9200
+  - *Enable Authentication:* Toggle to Enabled (e.g. it should show blue)
+    - *Authenitcation method:* Manual
+    - *Username:* cribl_writer
+    - *Password:* criblpass
 
 21. Under `Advanced Settings`, toggle Validate server certs to off (e.g. make it gray).
 
@@ -676,9 +676,9 @@ docker run --rm sample_dev_logs
 28. Go back into your Cribl browser window and on the HEC input, navigate up to `Live Data` > Click Capture... >Change Capture time to 60 and click `Start`.
 
 29. After 30 to 60 seconds, you should see events populate on your feed. Once they are there, on the bottom right, click `Save as Sample File` with the information below:
-  - File name: sample_dev_logs.txt
-  - Description: Sample Dev Logs
-  - Expiration: 0
+  - *File name:* sample_dev_logs.txt
+  - *Description:* Sample Dev Logs
+  - *Expiration:* 0
 
 30. Once you have filled that information out, click `Save`.
 
@@ -693,8 +693,8 @@ docker run --rm sample_dev_logs
 
 35. We will now add another function to remove the `_raw` field and update the metadata fields to route our events to the `dev_logs` index. Click Add Function > Type in `Eval` anbd click Eval. Configure the new Function as below:
   - Click Add Field
-    - Name: __index
-    - Value Expression: 'dev_logs'
+    - *Name:* __index
+    - *Value Expression:* 'dev_logs'
       > NOTE: You must add the single quotes as Cribl requires this to be in a javascript string format
   - Remove fields, add each of these fields individually and hit tab. You should see it turn into a grab box for each of the fields accordingly.
     - index
@@ -706,10 +706,10 @@ docker run --rm sample_dev_logs
 37. On the top right click Commit and enter in a message such as `Adding in dev logs processing pipeline` and click `Commit & Deploy`
 
 38. We are now ready to build our route. On the top left, click Routing > Data Routes > Add Route. Fill out the route with the information below:
-  - Route name: dev_logs
-  - Filter: __inputId=='splunk_hec:in_splunk_hec' && sourcetype=='sample_dev_logs'
-  - Pipeline: dev_logs_processing
-  - Destination: elastic:elastic_dev
+  - *Route name:* dev_logs
+  - *Filter:* __inputId=='splunk_hec:in_splunk_hec' && sourcetype=='sample_dev_logs'
+  - *Pipeline:* dev_logs_processing
+  - *Destination:* elastic:elastic_dev
 
 39. Click `Save` and move your new Route up to the first position (e.g. on the left hand side the stakced dots next to the numbers will allow you to click and drag) and on the top right, click `Commit` and enter a message such as `Adding dev_logs route` and click `Commit & Deploy` 
 
@@ -725,9 +725,9 @@ GET /dev_logs/_count
 > NOTE: ont he right hand side, you should see a number greater than `0` for the count value.
 
 42. We can now go search the logs. On the left hand side, if it is not expanded, click the hamburger menu (e.g. three stacked bars) to expand the menu and under Analytics, click Discover > Create data view with the information below:
-  - Name: dev_logs
-  - Index pattern: dev_logs
-  - Timestamp field: @timestamp
+  - *Name:* dev_logs
+  - *Index pattern:* dev_logs
+  - *Timestamp field:* @timestamp
 
 43. Click `Save data view to Kibana`
 
