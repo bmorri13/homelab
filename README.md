@@ -525,7 +525,7 @@ Get-ExecutionPolicy -List
 
 ### Elastic
 - Following the [Getting started with the Elastic Stack and Docker Compose: Part 1](https://www.elastic.co/blog/getting-started-with-the-elastic-stack-and-docker-compose) guide, I have deployed the Elastic stack with Docker compose.
-- The `docker-compose.yml` file can be found at [elastic-stack-docker-part-one](https://github.com/elkninja/elastic-stack-docker-part-one) or in the [monitoring_stack/elastic](homelab/infrastructure_tooling/monitoring_stack/elastic/docker-compose.yml) directory in this repo.
+- The `docker-compose.yml` file can be found at [elastic-stack-docker-part-one](https://github.com/elkninja/elastic-stack-docker-part-one) or in the [monitoring_stack/elastic](infrastructure_tooling/monitoring_stack/elastic/docker-compose.yml) directory in this repo.
 
 
 ### Cribl
