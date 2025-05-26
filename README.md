@@ -660,7 +660,7 @@ docker compose up -d
 24. We will now capture some sample data to use in our Processing Pipeline. Click Data > Sources > Splunk HEC. Now click on the Splunk HEC source labeled `in_splunk_hec`. Go to Auth Tokens > Drop down the `Smaple HEC Logs` token and on the right hand side click on the crossed out eye to revael your HEC token and copy that.
 
 25. In order to send sample logs, we will use the `sample_dev_logs.py` script to send data. In order to run this, copy the `.env-example` file to `.env` and update this to inclue the URL of your VM Server IP and the HEC token from the previous step.
-> NOTE: This is assuming that you have copied down all of the contents fo the [monitoring_stack/cribl](homelab\infrastructure_tooling\monitoring_stack\cribl) directory and are running this from your local PC that has access to your VM.
+> NOTE: This is assuming that you have copied down all of the contents fo the [monitoring_stack/cribl](infrastructure_tooling/monitoring_stack/cribl) directory and are running this from your local PC that has access to your VM.
 
 26. After saving the `.env` file, run
 ```bash
