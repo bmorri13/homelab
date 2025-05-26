@@ -497,8 +497,9 @@ Get-ExecutionPolicy -List
 - In this section I will breakdown setting up both Elastic and Cribl utilizing running both Elastic and Cribl on a single VM with Docker Compose
 
 ### Prerequisites
-- Have Virtual Machine
-  - In my case, I am runnin Ubuntu Server on a VM within my Proxmox homelab
+- Virtual Machine - *Recommended*
+  - In my case, I am running a Ubuntu Server on a VM within my Proxmox homelab
+    - You can run this all locally but for my Homelab, I want this running uninterrupted 
 - Services that are required to run this
   - [Docker](https://docs.docker.com/engine/install/)
   - [Docker Compose](https://docs.docker.com/compose/install/linux/)
