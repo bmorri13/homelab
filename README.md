@@ -33,6 +33,16 @@
     - [Windows](#windows)
       - [Windows Pro](#windows-pro)      - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
         - [Setup](#setup-8)
+- [Monitoring Stack Setup - Elastic & Cribl](#monitoring-stack-setup---elastic--cribl)
+  - [Prerequisites](#prerequisites-1)
+  - [In Scope](#in-scope)
+    - [Elastic](#elastic-1)
+    - [Cribl](#cribl-1)
+  - [Out of Scope](#out-of-scope)
+  - [Elastic](#elastic-2)
+  - [Cribl](#cribl-2)
+    - [Setup](#setup-9)
+  - [Additional Links](#additional-links)
 - [To Do](#to-do)
 
 ## Prerequisites
