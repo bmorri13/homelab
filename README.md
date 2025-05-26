@@ -530,13 +530,13 @@ Get-ExecutionPolicy -List
 
 ### Cribl
 - Following the [Docker Deployment](https://docs.cribl.io/stream/deploy-docker/) guide, I have deployed Cribl with a Leader and worker node with Docker compose.
-- The `docker-compose.yml` file can be found in the link above or in the [monitoring_stack/cribl](homelab\infrastructure_tooling\monitoring_stack\cribl\docker-compose.yml) directory in this repo.
+- The `docker-compose.yml` file can be found in the link above or in the [monitoring_stack/cribl](infrastructure_tooling/monitoring_stack/cribl/docker-compose.yml) directory in this repo.
 > NOTE: I have modifed my `docker-compose.yml` file to expose Port 8088 in order to allow for us to ingest logs via the [Splunk HEC Source](https://docs.cribl.io/stream/sources-splunk-hec/)
 
 
 #### Setup
 1. To begin we will cofigure Elastic, change into the directory where you have your `docker-compose.yml` file for elastic and run the docker compose up command.
-> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](homelab/infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](homelab/infrastructure_tooling/monitoring_stack/elastic/logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](homelab/infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](homelab/infrastructure_tooling/monitoring_stack/elastic/.env-exmaple) file in the same directory as your `docker-compse.yml` file.
+> NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](infrastructure_tooling/monitoring_stack/elastic/logstash.confyml), [monitoring_stack/elastic/metricbeat.yml](infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](infrastructure_tooling/monitoring_stack/elastic/.env-exmaple) file in the same directory as your `docker-compse.yml` file.
 
 ```bash
 docker compose up -d
