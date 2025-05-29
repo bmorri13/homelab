@@ -333,6 +333,7 @@ argocd-server   LoadBalancer   10.43.45.220   192.168.3.101   80:30766/TCP,443:3
 ```bash
 kubectl apply -f vault-ingress.yaml
 kubectl apply -f uptime-kuma-ingress.yaml
+kubectl apply -f n8n-ingress.yaml
 ```
 
 3. You should now be able to go to Vault & Uptime Kuma with a secure connction (e.g. https://vault.bmosan.com/ui/ & https://uptime-kuma.bmosan.com/)
