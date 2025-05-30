@@ -505,6 +505,7 @@ Get-ExecutionPolicy -List
   - [Docker](https://docs.docker.com/engine/install/)
   - [Docker Compose](https://docs.docker.com/compose/install/linux/)
   - Git
+  - Clone down this repository
 
 ### In Scope
 - Initial stand up and configuration of Elastic and Cribl
@@ -537,10 +538,11 @@ Get-ExecutionPolicy -List
 
 
 #### Setup
-1. To begin we will cofigure Elastic, change into the directory where you have your `docker-compose.yml` file for elastic and run the docker compose up command.
+1. To begin we will cofigure Elastic, change into the directory where you have your `docker-compose.yml` (e.g. the [monitoring_stack/elastic](infrastructure_tooling/monitoring_stack/elastic/) directory) file for elastic and run the docker compose up command. Run the two commands to move the [monitoring_stack/elastic/.env-example](infrastructure_tooling/monitoring_stack/elastic/.env-example) file to `.env` and then start up the Docker compose stack.
 > NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](infrastructure_tooling/monitoring_stack/elastic/logstash.conf), [monitoring_stack/elastic/metricbeat.yml](infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](infrastructure_tooling/monitoring_stack/elastic/.env-example) file in the same directory as your `docker-compse.yml` file.
 
 ```bash
+mv .env-exmaple .env
 docker compose up -d
 ```
 2. Once up, in a browser go to `http://<vm_instnace_ip>:5601` and login with the credentials you have in the `.env` file.
@@ -550,7 +552,8 @@ docker compose up -d
 
 4. On the left hand side, if it is not expanded, click the hamburger menu (e.g. three stacked bars) to expand the menu and then scroll down to Management > Click Dev Tools
 
-5. In your Dev Tools Console, paste in the line below to create the `dev_logs` index and the `failover` index.
+5. In your Dev Tools Console, paste in the line below to create the `dev_logs` index and the `failover` index. 
+> NOTE: Once you paste the below code into your Dev Tools console, click on each code area and hit the play button on the right hand side of your Dev Tools console. You will have to do this for each command you place into the Dev Tools console.
 ```
 PUT /dev_logs
 {
@@ -644,10 +647,11 @@ docker compose up -d
 19. At the top right, click Commit and enter in a message such as `Enabling Splunk HEC source.`. Then on the right hand side click `Commit & Deploy`
 > NOTE: A common theme with Cribl will be to always validate you have done the `Commit & Deploy` as that is what will make your changes 'active'.
 
-20. At the top left, click Data > Destinations > Elasticsearch. On the top right, click `Add Destionation` and then fill out the New Destination pane with infomration such as:
+20. At the top left, click Data > Destinations > Elasticsearch. On the top right, click `Add Destination` and then fill out the New Destination pane with infomration such as:
   - *Output ID:* elastic_dev
   - *Description:* Elastic Destination for necessary logs with a Default index set to `failover`
   - *Bulk API URLs:* https://<vm_instance_ip>:9200
+  - *Index or data stream:* failover
   - *Enable Authentication:* Toggle to Enabled (e.g. it should show blue)
     - *Authenitcation method:* Manual
     - *Username:* cribl_writer
@@ -657,7 +661,8 @@ docker compose up -d
 
 22. Once you have finished filling that out. hit `Save`. And then at the top right click, `Commit`. Add a message such as `Enabling elastic dev destination` and then at the right hit `Commit & Deploy`
 
-23. Click back on the new destination that was created labeled `elastic_dev`
+23. Click back on the new destination that was created labeled `elastic_dev`. On the top navigation bar of your destination window, click Test > Run Test. This will send sample events to the failover index. If successful, you will see on the bottom left.
+> NOTE: If you get an error here, confirm that you have committed and deployed your new Destination. 
 
 24. We will now capture some sample data to use in our Processing Pipeline. Click Data > Sources > Splunk HEC. Now click on the Splunk HEC source labeled `in_splunk_hec`. Go to Auth Tokens > Drop down the `Smaple HEC Logs` token and on the right hand side click on the crossed out eye to revael your HEC token and copy that.
 
@@ -713,7 +718,7 @@ docker run --rm sample_dev_logs
   - *Pipeline:* dev_logs_processing
   - *Destination:* elastic:elastic_dev
 
-39. Click `Save` and move your new Route up to the first position (e.g. on the left hand side the stakced dots next to the numbers will allow you to click and drag) and on the top right, click `Commit` and enter a message such as `Adding dev_logs route` and click `Commit & Deploy` 
+39. Click `Save` and move your new Route up to the first position (e.g. on the left hand side the stacked dots next to the numbers will allow you to click and drag) and on the top right, click `Commit` and enter a message such as `Adding dev_logs route` and click `Commit & Deploy` 
 
 40. Once deployed, rerun the sample dev logs container on your PC
 ```bash
@@ -724,7 +729,7 @@ docker run --rm sample_dev_logs
 ```bash
 GET /dev_logs/_count
 ```
-> NOTE: ont he right hand side, you should see a number greater than `0` for the count value.
+> NOTE: On the right hand side, you should see a number greater than `0` for the count value.
 
 42. We can now go search the logs. On the left hand side, if it is not expanded, click the hamburger menu (e.g. three stacked bars) to expand the menu and under Analytics, click Discover > Create data view with the information below:
   - *Name:* dev_logs
