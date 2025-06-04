@@ -731,7 +731,7 @@ GET /dev_logs/_count
 ```
 > NOTE: On the right hand side, you should see a number greater than `0` for the count value.
 
-42. We can now go search the logs. On the left hand side, if it is not expanded, click the hamburger menu (e.g. three stacked bars) to expand the menu and under Analytics, click Discover > Create data view with the information below:
+42. We can now go search the logs. On the left hand side, if it is not expanded, click the hamburger menu (e.g. three stacked bars) to expand the menu and under Analytics, Click Discover > Create data view with the information below:
   - *Name:* dev_logs
   - *Index pattern:* dev_logs
   - *Timestamp field:* @timestamp
@@ -743,6 +743,14 @@ GET /dev_logs/_count
 - At this point your Elastic stack and Cribl pipelines should be ready for you to create additional dashboards, searches, and ingest additional data as necessary.
 
 > NOTE: As stated, this guide is the initial stand up elements and does not cover more advanced use cases at this point.
+
+##### Cribl Links
+- [Using ACLs to allow Cribl Edge to Read Files](https://docs.cribl.io/edge/usecase-edge-acls/)
+- [Cribl Edge to Cribl Stream](https://docs.cribl.io/edge/usecase-edge-stream/)
+- [Cribl Stream Persistent Queues](https://docs.cribl.io/stream/persistent-queues/)
+- [Cribl Edge Persistent Queues](https://docs.cribl.io/edge/persistent-queues/)
+
+##### Elastic Links
 
 ### Additional Links
 - [Don’t run Proxmox without these settings](https://www.youtube.com/watch?v=VAJWUZ3sTSI)
