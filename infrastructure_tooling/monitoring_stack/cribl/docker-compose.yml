@@ -1,6 +1,6 @@
 services:
   leader:
-    image: cribl/cribl:latest
+    image: cribl/cribl:sha256:4d2f48d2f2dc80e9225632dbc90ac0656ea13f819d2c1d9097d72b5a949b3656
     container_name: cribl-leader
     environment:
       - CRIBL_DIST_MODE=master
@@ -13,7 +13,7 @@ services:
       - ./cribl-config:/opt/cribl/config-volume
 
   worker:
-    image: cribl/cribl:latest
+    image: cribl/cribl:latesha256:4d2f48d2f2dc80e9225632dbc90ac0656ea13f819d2c1d9097d72b5a949b3656st
     container_name: cribl-worker
     depends_on:
       - leader
