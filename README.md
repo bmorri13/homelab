@@ -22,6 +22,8 @@
     - [Setup](#setup-6)
   - [Uptime Kuma](#uptime-kuma)
     - [Setup](#setup-7)
+  - [Stirling PDF](#stirling-pdf)
+    - [Setup](#setup-8)
 - [Proxmox Setup](#proxmox-setup)
   - [Fixing Repository Issues Without Subscription](#fixing-repository-issues-without-subscription)
     - [Update PVE List](#update-pve-list)
@@ -31,8 +33,9 @@
     - [Linux](#linux)
       - [Ubuntu](#ubuntu)
     - [Windows](#windows)
-      - [Windows Pro](#windows-pro)      - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
-        - [Setup](#setup-8)
+      - [Windows Pro](#windows-pro)      
+        - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
+        - [Setup](#setup-9)
 - [Monitoring Stack Setup - Elastic & Cribl](#monitoring-stack-setup---elastic--cribl)
   - [Prerequisites](#prerequisites-1)
   - [In Scope](#in-scope)
@@ -41,7 +44,7 @@
   - [Out of Scope](#out-of-scope)
   - [Elastic](#elastic-2)
   - [Cribl](#cribl-2)
-    - [Setup](#setup-9)
+    - [Setup](#setup-10)
   - [Additional Links](#additional-links)
 - [To Do](#to-do)
 
@@ -56,7 +59,7 @@
 ## Tooling
 ## Continuous Deployment
 ### ArgoCD 
-- In order to manage deployments in a GitOps workflow metholdogy, I will be using ArgoCD as my CD tool to deploy out my subsequent applications
+- In order to manage deployments in a GitOps workflow metholdology, I will be using ArgoCD as my CD tool to deploy out my subsequent applications
 
 #### Setup
 - Following the [ArgoCD Getting Starting Guide](https://argo-cd.readthedocs.io/en/stable/getting_started/), we will deploy ArgoCD
@@ -333,7 +336,7 @@ argocd-server   LoadBalancer   10.43.45.220   192.168.3.101   80:30766/TCP,443:3
 ```bash
 kubectl apply -f vault-ingress.yaml
 kubectl apply -f uptime-kuma-ingress.yaml
-kubectl apply -f n8n-ingress.yaml
+kubectl apply -f stirling-pdf.yaml
 ```
 
 3. You should now be able to go to Vault & Uptime Kuma with a secure connction (e.g. https://vault.bmosan.com/ui/ & https://uptime-kuma.bmosan.com/)
@@ -397,6 +400,31 @@ http://<EXTERNAL-IP>:3001
 ```
 
 5. Follow the initial setup wizard to create your admin user and start monitoring your services.
+
+### Stirling PDF
+- Stirling PDF is a locally hosted web application that allows you to perform various operations on PDF files, such as merging, splitting, converting, and more.
+- The helm chart deploys Stirling PDF in the `stirling-pdf` namespace.
+
+#### Setup
+1. Create the `stirling-pdf` namespace:
+```bash
+kubectl create ns stirling-pdf
+```
+
+2. Within the ArgoCD UI, create a new app with the below parameters:
+    - General
+        - Application Name: `stirling-pdf`
+        - Project Name: `default`
+    - Source
+        - Leave the `Git` dropdown
+        - Repository URL: `https://github.com/bmorri13/homelab`
+        - Revision: `HEAD`
+        - Path: `infrastructure_tooling/stirling_pdf`
+        - Cluster URL: `https://kubernetes.default.svc`
+        - Namespace: `stirling-pdf`
+
+3. Once deployed, you can access Stirling PDF via the ingress configuration. Ensure you have deployed the [stirling-pdf-ingress.yaml](infrastructure_tooling/ingress_configs/stirling-pdf.yaml) configuration.
+    - You should be able to access it at `https://stirling-pdf.bmosan.com`
 
 ## Proxmox Setup
 
@@ -644,7 +672,7 @@ docker compose up -d
 
 18. In the same window, click on Auth Tokens > Add Token > On the right hand side click `Generate`, add a Description such as `Sample HEC Logs`, and then hit `Save`.
 
-19. At the top right, click Commit and enter in a message such as `Enabling Splunk HEC source.`. Then on the right hand side click `Commit & Deploy`
+19. At the top right, click Commit and enter a message such as `Enabling Splunk HEC source.`. Then on the right hand side click `Commit & Deploy`
 > NOTE: A common theme with Cribl will be to always validate you have done the `Commit & Deploy` as that is what will make your changes 'active'.
 
 20. At the top left, click Data > Destinations > Elasticsearch. On the top right, click `Add Destination` and then fill out the New Destination pane with infomration such as:

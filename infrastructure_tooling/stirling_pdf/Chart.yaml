@@ -1,8 +1,8 @@
 apiVersion: v2
-name: my-stirling-pdf
+name: stirling-pdf
 description: A wrapper chart for Stirling-PDF
 version: 0.1.0
 dependencies:
-  - name: stirling-pdf-chart        # ← must match upstream chart name
-    version: "1.10.0"               # ← pick the release you want
+  - name: stirling-pdf-chart
+    version: "1.10.0"
     repository: "https://stirling-tools.github.io/Stirling-PDF-chart"
