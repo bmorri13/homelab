@@ -3,6 +3,6 @@ name: my-stirling-pdf
 description: A wrapper chart for Stirling-PDF
 version: 0.1.0
 dependencies:
-  - name: stirling-pdf
-    version: "1.10.0"
+  - name: stirling-pdf-chart        # ← must match upstream chart name
+    version: "1.10.0"               # ← pick the release you want
     repository: "https://stirling-tools.github.io/Stirling-PDF-chart"
