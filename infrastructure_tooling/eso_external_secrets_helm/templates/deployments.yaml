@@ -1,6 +1,6 @@
 ---
 # Sets up a secret for alexprinter namespace to be able to use the cloudflare token
-apiVersion: external-secrets.io/v1
+apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: alexprinter-secret
