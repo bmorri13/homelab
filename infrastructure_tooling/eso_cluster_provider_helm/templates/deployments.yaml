@@ -1,17 +1,18 @@
 ---
-# Sets up the cluster-wide secret store
-apiVersion: external-secrets.io/v1
+
+# Setups up the cluser wide secret store
+apiVersion: external-secrets.io/v1beta1
 kind: ClusterSecretStore
 metadata:
   name: vault-backend
 spec:
   provider:
     vault:
-      server: http://bmo-nuc.com:31109
-      path: kv
-      version: v2
+      server: "http://bmo-nuc.com:31109"
+      path: "kv"
+      version: "v2"
       auth:
         tokenSecretRef:
-          name: vault-token
-          key: token
-          namespace: default
+          name: "vault-token"
+          key: "token"
+          namespace: "default"
