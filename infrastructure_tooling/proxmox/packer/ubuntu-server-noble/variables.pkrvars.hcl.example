@@ -1,0 +1,26 @@
+# Packer Variables Configuration
+# Copy this file to 'variables.pkrvars.hcl' and update with your actual values
+
+# Proxmox connection details
+proxmox_url      = "https://your-proxmox-server.example.com:8006/api2/json"
+proxmox_username = "root@pam!packer"  # Proxmox API user for Packer operations
+
+# Note: Leave token empty here, provide it in secrets.pkrvars.hcl for security
+# proxmox_token = ""  # This should be set in secrets.pkrvars.hcl
+
+# VM template configuration
+vm_id        = "9000"  # VM template ID (should be unique)
+proxmox_node = "your-proxmox-node-name"  # Name of your Proxmox node
+
+# ISO and installation settings
+iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"  # Path to Ubuntu ISO in Proxmox
+ssh_username = "ubuntu"  # Default username for the VM template
+
+# Additional configuration options (uncomment and modify as needed):
+# vm_name        = "ubuntu-2404-template"
+# vm_description = "Ubuntu 24.04 LTS Template built with Packer"
+# vm_cores       = 2
+# vm_memory      = 2048
+# vm_disk_size   = "32G"
+# vm_storage     = "local-lvm"
+# network_bridge = "vmbr0"

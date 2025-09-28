@@ -36,6 +36,8 @@
       - [Windows Pro](#windows-pro)      
         - [Tiny 11 Windows Image Builder](#tiny-11-windows-image-builder)
         - [Setup](#setup-9)
+  - [Infrastructure Automation](#infrastructure-automation)
+    - [Packer & Terraform](#packer--terraform)
 - [Monitoring Stack Setup - Elastic & Cribl](#monitoring-stack-setup---elastic--cribl)
   - [Prerequisites](#prerequisites-1)
   - [In Scope](#in-scope)
@@ -519,6 +521,40 @@ Get-ExecutionPolicy -List
 11. Your iso should be available for use with the name of `tiny11.iso`
 
 > Video Guide: [Tiny11 Builder: Create custom ISO and install Windows 11 without bloatware or Microsoft account](https://www.youtube.com/watch?v=VdKVph3G6hQ)
+
+### Infrastructure Automation
+
+For automated infrastructure provisioning and management on Proxmox, this homelab uses Packer and Terraform for Infrastructure as Code (IaC).
+
+#### Packer & Terraform
+
+The `infrastructure_tooling/proxmox/` directory contains comprehensive automation tools for:
+
+- **VM Template Creation** - Packer builds Ubuntu 24.04 LTS templates with cloud-init support
+- **Infrastructure Provisioning** - Terraform manages VM lifecycle and configuration
+- **State Management** - Remote state storage using Consul running on Unraid
+- **Security** - All sensitive credentials are excluded from version control
+
+**Key Features:**
+- Automated Ubuntu 24.04 template creation with Packer
+- Multi-VM provisioning with Terraform
+- Remote state storage in Consul for team collaboration
+- Complete Infrastructure as Code workflow
+- Secure credential management with example templates
+
+**Quick Start:**
+```bash
+# Build VM template with Packer
+cd infrastructure_tooling/proxmox/packer/ubuntu-server-noble
+packer build -var-file="secrets.pkrvars.hcl" ubuntu-2404.pkr.hcl
+
+# Deploy VMs with Terraform
+cd ../terraform
+terraform plan -var-file="secrets.tfvars"
+terraform apply -var-file="secrets.tfvars"
+```
+
+📖 **Full Documentation:** See the complete setup guide, configuration examples, and security practices in [`infrastructure_tooling/proxmox/README.md`](infrastructure_tooling/proxmox/README.md)
 
 ## Monitoring Stack Setup - Elastic & Cribl
 - Using Docker Compose on a VM within Proxmox, I have configured a basic monitoring stack leveraging Elastic and Cribl for my logging infastructure

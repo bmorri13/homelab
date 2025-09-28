@@ -1,0 +1,63 @@
+# Terraform Configuration Variables
+# Copy this file to 'terraform.tfvars' and update with your actual values
+
+# Proxmox API connection details
+proxmox_api_url = "https://your-proxmox-server.example.com:8006/api2/json"
+
+# Proxmox node settings
+target_node = "your-proxmox-node-name" # Replace with your Proxmox node name
+
+# Storage settings
+disk_storage = "local-lvm" # Your Proxmox storage pool name
+
+# Network settings
+network_bridge = "vmbr0"          # Your network bridge name
+gateway        = "192.168.1.1"    # Your network gateway IP
+dns_servers    = ["8.8.8.8", "8.8.4.4"] # DNS server IPs
+dns_domain     = "home"           # Your local domain
+
+# SSH public keys for cloud-init (add your actual public key content)
+ssh_public_keys = "ssh-rsa AAAAB3NzaC1yc2EAAAA... your-public-key-here"
+
+# VM configurations - each VM with its own settings
+# Customize VM specifications based on your requirements
+vms = {
+  "vm-name-1" = {
+    template_vm_id = 9000  # VM template ID created by Packer
+    cores          = 4     # Number of CPU cores
+    memory         = 4096  # RAM in MB
+    disk_size      = "100" # Disk size in GB
+  },
+  "vm-name-2" = {
+    template_vm_id = 9000  # VM template ID created by Packer
+    cores          = 2     # Number of CPU cores
+    memory         = 2048  # RAM in MB
+    disk_size      = "50"  # Disk size in GB
+  }
+}
+
+# Example VM configurations for common use cases:
+#
+# Development Server:
+# "dev-server" = {
+#   template_vm_id = 9000
+#   cores          = 2
+#   memory         = 2048
+#   disk_size      = "50"
+# }
+#
+# Production Application Server:
+# "app-server" = {
+#   template_vm_id = 9000
+#   cores          = 8
+#   memory         = 8192
+#   disk_size      = "200"
+# }
+#
+# Database Server:
+# "db-server" = {
+#   template_vm_id = 9000
+#   cores          = 4
+#   memory         = 4096
+#   disk_size      = "150"
+# }

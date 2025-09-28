@@ -7,6 +7,11 @@
 terraform.tfstate
 terraform.tfstate.backup
 
+# Packer sensitive files
+*.pkrvars.hcl
+credentials.json
+packer-debug.log
+
 # Vault keys and tokens
 vault-keys.json
 *vault-keys.json
