@@ -97,57 +97,47 @@ jobs:
           VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
           NODE="${{ secrets.PROXMOX_NODE || 'proxmox' }}"
 
-          echo "Checking if VM/template with ID $VM_ID exists on node $NODE..."
+          echo "Checking if VM/template with ID $VM_ID exists..."
 
-          # List all VMs on the node and check if our VM ID exists
-          VM_LIST=$(curl -k -s \
+          # Query cluster resources for all VMs and templates
+          CLUSTER_RESOURCES=$(curl -k -s \
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-            "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu")
+            "${{ secrets.PROXMOX_URL }}/api2/json/cluster/resources?type=vm")
 
-          echo "Searching for VM ID $VM_ID in VM list..."
+          echo "Searching for VM ID $VM_ID in cluster resources..."
 
-          # Check if VM exists in the list
-          VM_EXISTS=$(echo "$VM_LIST" | grep -o "\"vmid\":$VM_ID" || echo "")
+          # Check if VM/template exists with this ID
+          VM_INFO=$(echo "$CLUSTER_RESOURCES" | jq -r ".data[] | select(.vmid == $VM_ID)")
 
-          if [ -n "$VM_EXISTS" ]; then
-            echo "VM/template with ID $VM_ID found. Deleting..."
+          if [ -n "$VM_INFO" ]; then
+            echo "Found VM/template with ID $VM_ID"
+            echo "VM Info: $VM_INFO"
 
-            # Get VM status
-            VM_STATUS_RESPONSE=$(curl -k -s \
-              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID/status/current")
+            # Check if it's a template
+            IS_TEMPLATE=$(echo "$VM_INFO" | jq -r '.template // 0')
+            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status')
+            VM_NODE=$(echo "$VM_INFO" | jq -r '.node')
 
-            echo "VM Status: $VM_STATUS_RESPONSE"
+            echo "Template: $IS_TEMPLATE"
+            echo "Status: $VM_STATUS"
+            echo "Node: $VM_NODE"
 
-            VM_STATUS=$(echo "$VM_STATUS_RESPONSE" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
-
+            # Stop VM if running
             if [ "$VM_STATUS" = "running" ]; then
               echo "VM is running, stopping it first..."
               curl -k -X POST \
                 -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-                "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID/status/stop"
+                "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$VM_NODE/qemu/$VM_ID/status/stop"
 
               echo "Waiting for VM to stop..."
               sleep 15
             fi
 
-            # If it's a template, convert it back to VM first
-            IS_TEMPLATE=$(echo "$VM_LIST" | grep "\"vmid\":$VM_ID" | grep -o '"template":[0-9]' | cut -d':' -f2)
-            if [ "$IS_TEMPLATE" = "1" ]; then
-              echo "VM $VM_ID is a template, converting to VM first..."
-              curl -k -X POST \
-                -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-                -H "Content-Type: application/json" \
-                -d '{"template":0}' \
-                "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID/config"
-              sleep 3
-            fi
-
-            # Delete the VM
-            echo "Deleting VM $VM_ID..."
+            # Delete the VM/template (works for both)
+            echo "Deleting VM/template $VM_ID from node $VM_NODE..."
             DELETE_RESPONSE=$(curl -k -s -X DELETE \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID")
+              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$VM_NODE/qemu/$VM_ID?purge=1")
 
             echo "Delete response: $DELETE_RESPONSE"
 
@@ -155,22 +145,21 @@ jobs:
             echo "Waiting for deletion to complete..."
             sleep 15
 
-            # Verify deletion by checking VM list again
-            VM_LIST_AFTER=$(curl -k -s \
+            # Verify deletion
+            VERIFY_RESOURCES=$(curl -k -s \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu")
+              "${{ secrets.PROXMOX_URL }}/api2/json/cluster/resources?type=vm")
 
-            VM_STILL_EXISTS=$(echo "$VM_LIST_AFTER" | grep -o "\"vmid\":$VM_ID" || echo "")
+            VM_STILL_EXISTS=$(echo "$VERIFY_RESOURCES" | jq -r ".data[] | select(.vmid == $VM_ID)")
 
             if [ -n "$VM_STILL_EXISTS" ]; then
               echo "ERROR: VM $VM_ID still exists after deletion attempt!"
-              echo "Current VM list contains: $VM_LIST_AFTER"
               exit 1
             else
               echo "VM/template $VM_ID deleted successfully"
             fi
           else
-            echo "VM/template with ID $VM_ID does not exist in VM list"
+            echo "VM/template with ID $VM_ID does not exist"
           fi
 
           echo "Proceeding with build..."
