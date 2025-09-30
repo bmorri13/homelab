@@ -46,19 +46,33 @@ jobs:
       - name: Check Required Secrets
         run: |
           echo "Checking required secrets..."
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          
+          # Debug secret lengths (not values)
+          echo "PROXMOX_URL length: ${#PROXMOX_URL}"
+          echo "PROXMOX_TOKEN length: ${#PROXMOX_TOKEN}"
+          echo "SSH_PASSWORD length: ${#SSH_PASSWORD}"
+          
           if [ -z "${{ secrets.PROXMOX_URL }}" ]; then
-            echo "❌ PROXMOX_URL secret is not set"
+            echo "❌ PROXMOX_URL secret is not set or empty"
+            echo "Available secrets context: ${{ toJson(secrets) }}"
             exit 1
           fi
           if [ -z "${{ secrets.PROXMOX_TOKEN }}" ]; then
-            echo "❌ PROXMOX_TOKEN secret is not set"  
+            echo "❌ PROXMOX_TOKEN secret is not set or empty"  
             exit 1
           fi
           if [ -z "${{ secrets.SSH_PASSWORD }}" ]; then
-            echo "❌ SSH_PASSWORD secret is not set"
+            echo "❌ SSH_PASSWORD secret is not set or empty"
             exit 1
           fi
           echo "✅ All required secrets are configured"
+        env:
+          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
+          PROXMOX_TOKEN: ${{ secrets.PROXMOX_TOKEN }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
 
       - name: Initialize Packer
         working-directory: ${{ env.WORKING_DIR }}
