@@ -102,12 +102,22 @@ jobs:
           # Query cluster resources for all VMs and templates
           CLUSTER_RESOURCES=$(curl -k -s \
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-            "${{ secrets.PROXMOX_URL }}/api2/json/cluster/resources?type=vm")
+            "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
+
+          echo "API Response (first 500 chars):"
+          echo "$CLUSTER_RESOURCES" | head -c 500
+
+          # Validate JSON response
+          if ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
+            echo "ERROR: Invalid JSON response from Proxmox API"
+            echo "Full response: $CLUSTER_RESOURCES"
+            exit 1
+          fi
 
           echo "Searching for VM ID $VM_ID in cluster resources..."
 
           # Check if VM/template exists with this ID
-          VM_INFO=$(echo "$CLUSTER_RESOURCES" | jq -r ".data[] | select(.vmid == $VM_ID)")
+          VM_INFO=$(echo "$CLUSTER_RESOURCES" | jq -r "if .data then .data[] else .[] end | select(.vmid == $VM_ID)" 2>/dev/null || echo "")
 
           if [ -n "$VM_INFO" ]; then
             echo "Found VM/template with ID $VM_ID"
@@ -115,7 +125,7 @@ jobs:
 
             # Check if it's a template
             IS_TEMPLATE=$(echo "$VM_INFO" | jq -r '.template // 0')
-            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status')
+            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status // "unknown"')
             VM_NODE=$(echo "$VM_INFO" | jq -r '.node')
 
             echo "Template: $IS_TEMPLATE"
@@ -127,7 +137,7 @@ jobs:
               echo "VM is running, stopping it first..."
               curl -k -X POST \
                 -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-                "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$VM_NODE/qemu/$VM_ID/status/stop"
+                "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID/status/stop"
 
               echo "Waiting for VM to stop..."
               sleep 15
@@ -137,7 +147,7 @@ jobs:
             echo "Deleting VM/template $VM_ID from node $VM_NODE..."
             DELETE_RESPONSE=$(curl -k -s -X DELETE \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$VM_NODE/qemu/$VM_ID?purge=1")
+              "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID?purge=1")
 
             echo "Delete response: $DELETE_RESPONSE"
 
@@ -148,9 +158,9 @@ jobs:
             # Verify deletion
             VERIFY_RESOURCES=$(curl -k -s \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-              "${{ secrets.PROXMOX_URL }}/api2/json/cluster/resources?type=vm")
+              "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
 
-            VM_STILL_EXISTS=$(echo "$VERIFY_RESOURCES" | jq -r ".data[] | select(.vmid == $VM_ID)")
+            VM_STILL_EXISTS=$(echo "$VERIFY_RESOURCES" | jq -r "if .data then .data[] else .[] end | select(.vmid == $VM_ID)" 2>/dev/null || echo "")
 
             if [ -n "$VM_STILL_EXISTS" ]; then
               echo "ERROR: VM $VM_ID still exists after deletion attempt!"
