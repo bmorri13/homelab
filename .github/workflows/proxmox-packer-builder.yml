@@ -1,0 +1,20 @@
+name: Curl Proxmox (manual)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  curl:
+    runs-on: [self-hosted, Linux, X64]  # matches your runner's labels
+    steps:
+      - name: Ensure curl is available
+        run: |
+          if ! command -v curl >/dev/null; then
+            (command -v sudo >/dev/null && sudo apt-get update && sudo apt-get install -y curl) || \
+            (apt-get update && apt-get install -y curl)
+          fi
+
+      - name: curl -v proxmox
+        run: |
+          # -k ignores cert errors (useful if Proxmox uses self-signed certs)
+          curl -vk https://proxmox.bmosan.com:8006/
