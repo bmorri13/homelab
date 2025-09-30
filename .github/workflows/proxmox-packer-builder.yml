@@ -48,6 +48,19 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
 
+      - name: Generate Password Hash
+        id: gen_hash
+        run: |
+          PASSWORD="${{ secrets.SSH_PASSWORD }}"
+          HASH=$(openssl passwd -6 "$PASSWORD")
+          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Create Dynamic User-Data
+        working-directory: ${{ env.WORKING_DIR }}/http
+        run: |
+          cp user-data user-data.backup
+          sed -i "s|password: \".*\"|password: \"${{ steps.gen_hash.outputs.password_hash }}\"|" user-data
+
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -185,6 +198,19 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
 
+      - name: Generate Password Hash
+        id: gen_hash_build
+        run: |
+          PASSWORD="${{ secrets.SSH_PASSWORD }}"
+          HASH=$(openssl passwd -6 "$PASSWORD")
+          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Create Dynamic User-Data
+        working-directory: ${{ env.WORKING_DIR }}/http
+        run: |
+          cp user-data user-data.backup
+          sed -i "s|password: \".*\"|password: \"${{ steps.gen_hash_build.outputs.password_hash }}\"|" user-data
+
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -218,7 +244,11 @@ jobs:
       - name: Cleanup Temporary Files
         if: always()
         working-directory: ${{ env.WORKING_DIR }}
-        run: rm -f variables.pkrvars.hcl
+        run: |
+          rm -f variables.pkrvars.hcl
+          if [ -f http/user-data.backup ]; then
+            mv http/user-data.backup http/user-data
+          fi
 
       - name: Upload Packer Logs
         if: always()
