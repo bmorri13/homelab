@@ -44,92 +44,37 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      - name: Check Required Secrets
-        run: |
-          echo "Checking required secrets..."
-          echo "Repository: ${{ github.repository }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Ref: ${{ github.ref }}"
-          
-          # Debug secret lengths (not values)
-          echo "PROXMOX_URL length: ${#PROXMOX_URL}"
-          echo "PROXMOX_TOKEN length: ${#PROXMOX_TOKEN}"
-          echo "SSH_PASSWORD length: ${#SSH_PASSWORD}"
-          
-          if [ -z "${{ secrets.PROXMOX_URL }}" ]; then
-            echo "❌ PROXMOX_URL secret is not set or empty"
-            echo "Available secrets context: ${{ toJson(secrets) }}"
-            exit 1
-          fi
-          if [ -z "${{ secrets.PROXMOX_TOKEN }}" ]; then
-            echo "❌ PROXMOX_TOKEN secret is not set or empty"  
-            exit 1
-          fi
-          if [ -z "${{ secrets.SSH_PASSWORD }}" ]; then
-            echo "❌ SSH_PASSWORD secret is not set or empty"
-            exit 1
-          fi
-          echo "✅ All required secrets are configured"
-        env:
-          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_TOKEN: ${{ secrets.PROXMOX_TOKEN }}
-          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-
       - name: Initialize Packer
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "Initializing Packer and installing plugins..."
-          packer init ubuntu-2404.pkr.hcl
-          echo "✅ Packer plugins installed successfully"
-          
-          # Verify plugin installation
-          echo "Checking installed plugins..."
-          packer plugins installed
+        run: packer init ubuntu-2404.pkr.hcl
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          echo "Creating variables.pkrvars.hcl from template..."
-          # Create variables file with non-secret values
           cat > variables.pkrvars.hcl << EOF
           # Proxmox connection details
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
-          
-          # VM template configuration  
+
+          # VM template configuration
           vm_id        = "9002"
           proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
-          
+
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
           ssh_username = "ubuntu"
           EOF
-          
-          echo "✅ Variables file created successfully"
-          echo "Variables file contents:"
-          cat variables.pkrvars.hcl
 
       - name: Validate Packer Template
         id: validate
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          echo "Validating Packer template..."
-          echo "Using Packer version: $(packer version)"
-          echo "Checking plugins again before validation..."
-          packer plugins installed || echo "No plugins listed, but continuing..."
-          
-          if packer validate \
+          packer validate \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var-file="variables.pkrvars.hcl" \
-            ubuntu-2404.pkr.hcl; then
-            echo "valid=true" >> $GITHUB_OUTPUT
-            echo "✅ Packer template is valid"
-          else
-            echo "valid=false" >> $GITHUB_OUTPUT
-            echo "❌ Packer template validation failed"
-            exit 1
-          fi
+            ubuntu-2404.pkr.hcl
+          echo "valid=true" >> $GITHUB_OUTPUT
 
   build:
     name: Build Proxmox Template
@@ -171,37 +116,25 @@ jobs:
 
       - name: Initialize Packer
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "Initializing Packer and installing plugins..."
-          packer init ubuntu-2404.pkr.hcl
-          echo "✅ Packer plugins installed successfully"
-          
-          # Verify plugin installation
-          echo "Checking installed plugins..."
-          packer plugins installed
+        run: packer init ubuntu-2404.pkr.hcl
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
-          echo "Creating variables.pkrvars.hcl for VM ID: $VM_ID..."
-          
-          # Create variables file with non-secret values
           cat > variables.pkrvars.hcl << EOF
           # Proxmox connection details
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
-          
-          # VM template configuration  
+
+          # VM template configuration
           vm_id        = "$VM_ID"
           proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
-          
+
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
           ssh_username = "ubuntu"
           EOF
-          
-          echo "✅ Variables file created successfully"
 
       - name: Build Packer Template
         if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
@@ -210,24 +143,16 @@ jobs:
           PACKER_LOG: 1
           PACKER_LOG_PATH: "/tmp/packer.log"
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
-          echo "🚀 Building Proxmox template with VM ID: $VM_ID"
-          
-          # Build the template using variables file and direct secret vars
           packer build \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
-          
-          echo "✅ Packer build completed successfully!"
 
       - name: Cleanup Temporary Files
         if: always()
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          rm -f variables.pkrvars.hcl
-          echo "🧹 Cleaned up temporary variables file"
+        run: rm -f variables.pkrvars.hcl
 
       - name: Upload Packer Logs
         if: always()
