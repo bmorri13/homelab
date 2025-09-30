@@ -1,20 +1,152 @@
-name: Curl Proxmox (manual)
+name: Build Proxmox Packer Template
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      vm_id:
+        description: 'VM Template ID'
+        required: false
+        default: '9002'
+        type: string
+      force_build:
+        description: 'Force build even if template exists'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/proxmox/packer/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/proxmox/packer/**'
+
+env:
+  PACKER_VERSION: "1.10.0"
+  WORKING_DIR: "infrastructure_tooling/proxmox/packer/ubuntu-server-noble"
 
 jobs:
-  curl:
-    runs-on: [self-hosted, Linux, X64]  # matches your runner's labels
+  validate:
+    name: Validate Packer Template
+    runs-on: [self-hosted, Linux, X64]
+    outputs:
+      template_valid: ${{ steps.validate.outputs.valid }}
     steps:
-      - name: Ensure curl is available
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Validate Packer Template
+        id: validate
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
-          if ! command -v curl >/dev/null; then
-            (command -v sudo >/dev/null && sudo apt-get update && sudo apt-get install -y curl) || \
-            (apt-get update && apt-get install -y curl)
+          echo "Validating Packer template..."
+          if packer validate \
+            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
+            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
+            -var-file="variables.pkrvars.hcl" \
+            ubuntu-2404.pkr.hcl; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "✅ Packer template is valid"
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "❌ Packer template validation failed"
+            exit 1
           fi
 
-      - name: curl -v proxmox
+  build:
+    name: Build Proxmox Template
+    runs-on: [self-hosted, Linux, X64]
+    needs: validate
+    if: needs.validate.outputs.template_valid == 'true'
+    environment: production
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Check if Template Already Exists
+        id: check_template
+        if: github.event.inputs.force_build != 'true'
         run: |
-          # -k ignores cert errors (useful if Proxmox uses self-signed certs)
-          curl -vk https://proxmox.bmosan.com:8006/
+          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          echo "Checking if template VM ID $VM_ID already exists..."
+          
+          # Use curl to check if VM exists via Proxmox API
+          RESPONSE=$(curl -k -s \
+            -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+            "${{ secrets.PROXMOX_URL }}/nodes/proxmox/qemu/$VM_ID/config" \
+            -w "%{http_code}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -c 4)
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "template_exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Template VM ID $VM_ID already exists"
+          else
+            echo "template_exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Template VM ID $VM_ID does not exist, proceeding with build"
+          fi
+
+      - name: Build Packer Template
+        if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          PACKER_LOG: 1
+          PACKER_LOG_PATH: "/tmp/packer.log"
+        run: |
+          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          echo "🚀 Building Proxmox template with VM ID: $VM_ID"
+          
+          # Create secrets file for Packer
+          cat > secrets.pkrvars.hcl << EOF
+          proxmox_token = "${{ secrets.PROXMOX_TOKEN }}"
+          ssh_password = "${{ secrets.SSH_PASSWORD }}"
+          EOF
+          
+          # Build the template
+          packer build \
+            -var "vm_id=$VM_ID" \
+            -var-file="variables.pkrvars.hcl" \
+            -var-file="secrets.pkrvars.hcl" \
+            ubuntu-2404.pkr.hcl
+          
+          echo "✅ Packer build completed successfully!"
+
+      - name: Cleanup Secrets
+        if: always()
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          rm -f secrets.pkrvars.hcl
+          echo "🧹 Cleaned up temporary secrets file"
+
+      - name: Upload Packer Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packer-logs-${{ github.run_number }}
+          path: /tmp/packer.log
+          retention-days: 7
+
+      - name: Template Build Summary
+        if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
+        run: |
+          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          echo "## 🎉 Packer Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template ID:** $VM_ID" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template Name:** ubuntu-2404-template" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Ubuntu 24.04 template is now available in Proxmox and ready for use!" >> $GITHUB_STEP_SUMMARY
