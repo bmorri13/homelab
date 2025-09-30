@@ -156,10 +156,9 @@ source "proxmox-iso" "ubuntu-2404" {
     "<esc><wait>",
     "e<wait>",
     "<down><down><down><end>",
-    " autoinstall quiet ds=nocloud",
+    " autoinstall ds=nocloud",
     "<f10><wait>",
-    "<wait1m>",
-    "yes<enter>"
+    "<wait2m>"
   ]
 
   # Communicator Settings
