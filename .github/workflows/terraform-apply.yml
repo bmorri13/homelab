@@ -22,6 +22,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -61,7 +66,7 @@ jobs:
         if: success()
         run: |
           echo "## Terraform Apply Completed" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:**  Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Infrastructure has been successfully deployed to Proxmox!" >> $GITHUB_STEP_SUMMARY
