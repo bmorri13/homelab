@@ -1,0 +1,75 @@
+name: Terraform Validate and Plan
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/proxmox/terraform/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/proxmox/terraform/**'
+  workflow_dispatch:
+
+env:
+  TF_VERSION: "1.10.0"
+  WORKING_DIR: "infrastructure_tooling/proxmox/terraform"
+
+jobs:
+  terraform-plan:
+    name: Terraform Validate and Plan
+    runs-on: [self-hosted, Linux, X64]
+    environment: prod
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+        env:
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="proxmox_api_url=${{ secrets.PROXMOX_URL }}" \
+            -var="proxmox_api_token_id=${{ secrets.PROXMOX_USERNAME }}" \
+            -var="proxmox_api_token_secret=${{ secrets.PROXMOX_TOKEN }}" \
+            -var="target_node=${{ secrets.PROXMOX_NODE }}" \
+            -var="vm_password=${{ secrets.SSH_PASSWORD }}" \
+            -out=tfplan
+        env:
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_number }}
+          path: ${{ env.WORKING_DIR }}/tfplan
+          retention-days: 7
+
+      - name: Plan Summary
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "## Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color tfplan | head -n 100 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

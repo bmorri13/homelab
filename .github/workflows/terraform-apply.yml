@@ -1,0 +1,67 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: 'Auto-approve apply (skip manual approval)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  TF_VERSION: "1.10.0"
+  WORKING_DIR: "infrastructure_tooling/proxmox/terraform"
+
+jobs:
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: [self-hosted, Linux, X64]
+    environment: prod
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+        env:
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Terraform Plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="proxmox_api_url=${{ secrets.PROXMOX_URL }}" \
+            -var="proxmox_api_token_id=${{ secrets.PROXMOX_USERNAME }}" \
+            -var="proxmox_api_token_secret=${{ secrets.PROXMOX_TOKEN }}" \
+            -var="target_node=${{ secrets.PROXMOX_NODE }}" \
+            -var="vm_password=${{ secrets.SSH_PASSWORD }}" \
+            -out=tfplan
+        env:
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
+            terraform apply -auto-approve tfplan
+          else
+            terraform apply tfplan
+          fi
+        env:
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Apply Summary
+        if: success()
+        run: |
+          echo "## Terraform Apply Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:**  Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Infrastructure has been successfully deployed to Proxmox!" >> $GITHUB_STEP_SUMMARY
