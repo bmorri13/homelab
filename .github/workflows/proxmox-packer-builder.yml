@@ -6,7 +6,7 @@ on:
       vm_id:
         description: 'VM Template ID'
         required: false
-        default: '9002'
+        default: '9000'
         type: string
       force_build:
         description: 'Force build even if template exists'
@@ -57,7 +57,7 @@ jobs:
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
 
           # VM template configuration
-          vm_id        = "9002"
+          vm_id        = "9000"
           proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
@@ -91,28 +91,35 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      - name: Check if Template Already Exists
+      - name: Check and Delete Existing Template
         id: check_template
-        if: github.event.inputs.force_build != 'true'
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
-          echo "Checking if template VM ID $VM_ID already exists..."
-          
-          # Use curl to check if VM exists via Proxmox API
-          RESPONSE=$(curl -k -s \
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
+          NODE="${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+
+          echo "Checking if template VM ID $VM_ID exists..."
+
+          # Check if VM exists via Proxmox API
+          HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
-            "${{ secrets.PROXMOX_URL }}/nodes/proxmox/qemu/$VM_ID/config" \
-            -w "%{http_code}")
-          
-          HTTP_CODE=$(echo "$RESPONSE" | tail -c 4)
-          
+            "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID/config")
+
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "template_exists=true" >> $GITHUB_OUTPUT
-            echo "⚠️  Template VM ID $VM_ID already exists"
+            echo "Template VM ID $VM_ID exists, deleting..."
+
+            # Delete the existing VM/template
+            curl -k -X DELETE \
+              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+              "${{ secrets.PROXMOX_URL }}/api2/json/nodes/$NODE/qemu/$VM_ID"
+
+            # Wait for deletion to complete
+            sleep 5
+            echo "Template VM ID $VM_ID deleted successfully"
           else
-            echo "template_exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Template VM ID $VM_ID does not exist, proceeding with build"
+            echo "Template VM ID $VM_ID does not exist"
           fi
+
+          echo "Proceeding with build..."
 
       - name: Install Dependencies
         run: |
@@ -128,7 +135,7 @@ jobs:
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
           cat > variables.pkrvars.hcl << EOF
           # Proxmox connection details
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
@@ -144,7 +151,6 @@ jobs:
           EOF
 
       - name: Build Packer Template
-        if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         env:
           PACKER_LOG: 1
@@ -170,9 +176,9 @@ jobs:
           retention-days: 7
 
       - name: Template Build Summary
-        if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
+        if: success()
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
           echo "## 🎉 Packer Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Template ID:** $VM_ID" >> $GITHUB_STEP_SUMMARY
           echo "- **Template Name:** ubuntu-2404-template" >> $GITHUB_STEP_SUMMARY
