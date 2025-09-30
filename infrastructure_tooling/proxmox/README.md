@@ -40,6 +40,95 @@ The `terraform` directory manages VM provisioning using templates created by Pac
 3. **Terraform** installed locally ([Download](https://www.terraform.io/downloads))
 4. **Consul** running for Terraform state storage (see Consul Setup section)
 
+## GitHub Actions Automation
+
+This repository includes automated workflows for building Packer templates and deploying Terraform infrastructure via GitHub Actions.
+
+### Workflows
+
+#### 1. Proxmox Packer Builder
+**File:** `.github/workflows/proxmox-packer-builder.yml`
+
+Builds Ubuntu 24.04 VM templates with automatic deletion of existing templates.
+
+**Features:**
+- Validates Packer templates on PR/push
+- Builds VM templates with VM ID 9000 (default)
+- Automatically deletes existing VM/template before building
+- Dynamic VM naming with build date: `ubuntu-2404-YYYYMMDD`
+- Dynamically generates password hash from GitHub secrets
+- Installs Docker 27.5.1 in the template
+- Uploads Packer logs as artifacts
+
+**Triggers:**
+- Manual (workflow_dispatch)
+- Push to main (when packer files change)
+- Pull requests to main (when packer files change)
+
+**Required GitHub Secrets (prod environment):**
+- `PROXMOX_URL` - Proxmox API URL (e.g., `https://proxmox.example.com:8006`)
+- `PROXMOX_USERNAME` - Proxmox API token ID (e.g., `root@pam!packer`)
+- `PROXMOX_TOKEN` - Proxmox API token secret
+- `PROXMOX_NODE` - Proxmox node name (e.g., `proxmox`)
+- `SSH_PASSWORD` - Password for ubuntu user
+
+#### 2. Terraform Validate and Plan
+**File:** `.github/workflows/terraform-validate-and-plan.yml`
+
+Validates and plans Terraform changes before applying.
+
+**Features:**
+- Terraform format check
+- Validates Terraform configuration
+- Generates execution plan
+- Uploads plan as artifact
+- Shows plan summary in GitHub Actions
+
+**Triggers:**
+- Manual (workflow_dispatch)
+- Push to main (when terraform files change)
+- Pull requests to main (when terraform files change)
+
+**Required GitHub Secrets (prod environment):**
+- `PROXMOX_URL`, `PROXMOX_USERNAME`, `PROXMOX_TOKEN`, `PROXMOX_NODE`
+- `SSH_PASSWORD` - VM password
+- `SSH_PUBLIC_KEYS` - SSH public keys for VM access
+- `CONSUL_HTTP_TOKEN` - Token for Consul backend access
+
+#### 3. Terraform Apply
+**File:** `.github/workflows/terraform-apply.yml`
+
+Applies Terraform configuration to provision VMs.
+
+**Features:**
+- Runs plan before apply
+- Optional auto-approve via workflow input
+- Creates terraform.tfvars dynamically from secrets
+- Cleans up sensitive files after execution
+
+**Triggers:**
+- Manual only (workflow_dispatch)
+
+**Workflow Inputs:**
+- `auto_approve` - Skip manual approval (default: false)
+
+**Required GitHub Secrets (prod environment):**
+- Same as Terraform Validate and Plan workflow
+
+### Setting Up GitHub Secrets
+
+Navigate to your repository settings and add the following secrets to the `prod` environment:
+
+1. Go to Settings → Environments → prod → Environment secrets
+2. Add the following secrets:
+   - `PROXMOX_URL`
+   - `PROXMOX_USERNAME`
+   - `PROXMOX_TOKEN`
+   - `PROXMOX_NODE`
+   - `SSH_PASSWORD`
+   - `SSH_PUBLIC_KEYS`
+   - `CONSUL_HTTP_TOKEN`
+
 ## Running Locally
 
 ### 1. Packer - Build VM Template
@@ -184,8 +273,11 @@ The Terraform configuration supports multiple VM definitions through the `vms` v
 
 ## Notes
 
-- VM templates created by Packer are assigned ID 9000 by default
+- VM templates created by Packer are assigned ID 9000 by default (customizable via workflow input)
+- Template names include build date: `ubuntu-2404-YYYYMMDD`
 - VMs created by Terraform use cloud-init for initial configuration
-- Default login for created VMs: `ubuntu@<ip-address>`
+- Default login for created VMs: `ubuntu@<ip-address>` with password from secrets
 - All VMs are tagged with "terraform" and "ubuntu" for easy identification
 - The Terraform state is stored remotely in Consul for team collaboration and state persistence
+- GitHub Actions workflows automatically manage template lifecycle (delete old, build new)
+- Self-hosted GitHub Actions runner required (Linux, X64) for Packer builds
