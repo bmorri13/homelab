@@ -59,7 +59,12 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}/http
         run: |
           cp user-data user-data.backup
-          sed -i "s|password: \".*\"|password: \"${{ steps.gen_hash.outputs.password_hash }}\"|" user-data
+          HASH='${{ steps.gen_hash.outputs.password_hash }}'
+          # Escape special characters for sed
+          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
+          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
+          echo "Updated user-data password hash"
+          grep "password:" user-data
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
@@ -209,7 +214,12 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}/http
         run: |
           cp user-data user-data.backup
-          sed -i "s|password: \".*\"|password: \"${{ steps.gen_hash_build.outputs.password_hash }}\"|" user-data
+          HASH='${{ steps.gen_hash_build.outputs.password_hash }}'
+          # Escape special characters for sed
+          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
+          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
+          echo "Updated user-data password hash"
+          grep "password:" user-data
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
