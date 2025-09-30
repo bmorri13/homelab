@@ -65,7 +65,7 @@ module "test_instance" {
   description    = "Terraform-managed Ubuntu 24.04 VM for testing, use ubuntu@<ip-address> to login"
   tags           = ["terraform", "ubuntu", "testing"]
   target_node    = var.target_node
-  template_vm_id = 9002
+  template_vm_id = 9000
   cores          = 2
   memory         = 4092
   disk_size      = "50"
