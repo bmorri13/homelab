@@ -32,7 +32,7 @@ jobs:
   validate:
     name: Validate Packer Template
     runs-on: [self-hosted, Linux, X64]
-    environment: production
+    environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
     steps:
@@ -136,7 +136,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     needs: validate
     if: needs.validate.outputs.template_valid == 'true'
-    environment: production
+    environment: prod
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
