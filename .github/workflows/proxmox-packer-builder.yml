@@ -43,6 +43,34 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
+      - name: Check Required Secrets
+        run: |
+          echo "Checking required secrets..."
+          if [ -z "${{ secrets.PROXMOX_URL }}" ]; then
+            echo "❌ PROXMOX_URL secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.PROXMOX_TOKEN }}" ]; then
+            echo "❌ PROXMOX_TOKEN secret is not set"  
+            exit 1
+          fi
+          if [ -z "${{ secrets.SSH_PASSWORD }}" ]; then
+            echo "❌ SSH_PASSWORD secret is not set"
+            exit 1
+          fi
+          echo "✅ All required secrets are configured"
+
+      - name: Initialize Packer
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "Initializing Packer and installing plugins..."
+          packer init ubuntu-2404.pkr.hcl
+          echo "✅ Packer plugins installed successfully"
+          
+          # Verify plugin installation
+          echo "Checking installed plugins..."
+          packer plugins installed
+
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -63,12 +91,18 @@ jobs:
           EOF
           
           echo "✅ Variables file created successfully"
+          echo "Variables file contents:"
+          cat variables.pkrvars.hcl
 
       - name: Validate Packer Template
         id: validate
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           echo "Validating Packer template..."
+          echo "Using Packer version: $(packer version)"
+          echo "Checking plugins again before validation..."
+          packer plugins installed || echo "No plugins listed, but continuing..."
+          
           if packer validate \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
@@ -119,6 +153,17 @@ jobs:
             echo "template_exists=false" >> $GITHUB_OUTPUT
             echo "✅ Template VM ID $VM_ID does not exist, proceeding with build"
           fi
+
+      - name: Initialize Packer
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "Initializing Packer and installing plugins..."
+          packer init ubuntu-2404.pkr.hcl
+          echo "✅ Packer plugins installed successfully"
+          
+          # Verify plugin installation
+          echo "Checking installed plugins..."
+          packer plugins installed
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
