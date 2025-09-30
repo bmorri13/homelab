@@ -114,6 +114,13 @@ jobs:
             echo "✅ Template VM ID $VM_ID does not exist, proceeding with build"
           fi
 
+      - name: Install Dependencies
+        run: |
+          if ! command -v xorriso &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xorriso
+          fi
+
       - name: Initialize Packer
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
