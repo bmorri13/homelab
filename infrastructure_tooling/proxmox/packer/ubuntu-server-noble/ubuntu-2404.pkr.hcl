@@ -76,6 +76,7 @@ variable "ssh_password" {
 
 locals {
   buildtime = formatdate("YYYY-MM-DD hh:mm ZZZ", timestamp())
+  builddate = formatdate("YYYYMMDD", timestamp())
 }
 
 ##################################################################################
@@ -92,7 +93,7 @@ source "proxmox-iso" "ubuntu-2404" {
 
   # VM General Settings
   vm_id                = var.vm_id
-  vm_name              = "ubuntu-2404-template"
+  vm_name              = "ubuntu-2404-${local.builddate}"
   template_description = "Ubuntu 24.04 Server Template, built with Packer on ${local.buildtime}"
 
   # VM ISO Settings
