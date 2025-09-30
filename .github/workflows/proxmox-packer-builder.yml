@@ -43,6 +43,27 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
+      - name: Create Variables File
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "Creating variables.pkrvars.hcl from template..."
+          # Create variables file with non-secret values
+          cat > variables.pkrvars.hcl << EOF
+          # Proxmox connection details
+          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
+          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
+          
+          # VM template configuration  
+          vm_id        = "9002"
+          proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          
+          # ISO and installation settings
+          iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+          ssh_username = "ubuntu"
+          EOF
+          
+          echo "✅ Variables file created successfully"
+
       - name: Validate Packer Template
         id: validate
         working-directory: ${{ env.WORKING_DIR }}
@@ -99,6 +120,29 @@ jobs:
             echo "✅ Template VM ID $VM_ID does not exist, proceeding with build"
           fi
 
+      - name: Create Variables File
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
+          echo "Creating variables.pkrvars.hcl for VM ID: $VM_ID..."
+          
+          # Create variables file with non-secret values
+          cat > variables.pkrvars.hcl << EOF
+          # Proxmox connection details
+          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
+          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
+          
+          # VM template configuration  
+          vm_id        = "$VM_ID"
+          proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          
+          # ISO and installation settings
+          iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+          ssh_username = "ubuntu"
+          EOF
+          
+          echo "✅ Variables file created successfully"
+
       - name: Build Packer Template
         if: steps.check_template.outputs.template_exists != 'true' || github.event.inputs.force_build == 'true'
         working-directory: ${{ env.WORKING_DIR }}
@@ -109,27 +153,21 @@ jobs:
           VM_ID="${{ github.event.inputs.vm_id || '9002' }}"
           echo "🚀 Building Proxmox template with VM ID: $VM_ID"
           
-          # Create secrets file for Packer
-          cat > secrets.pkrvars.hcl << EOF
-          proxmox_token = "${{ secrets.PROXMOX_TOKEN }}"
-          ssh_password = "${{ secrets.SSH_PASSWORD }}"
-          EOF
-          
-          # Build the template
+          # Build the template using variables file and direct secret vars
           packer build \
-            -var "vm_id=$VM_ID" \
+            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
+            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var-file="variables.pkrvars.hcl" \
-            -var-file="secrets.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
           
           echo "✅ Packer build completed successfully!"
 
-      - name: Cleanup Secrets
+      - name: Cleanup Temporary Files
         if: always()
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          rm -f secrets.pkrvars.hcl
-          echo "🧹 Cleaned up temporary secrets file"
+          rm -f variables.pkrvars.hcl
+          echo "🧹 Cleaned up temporary variables file"
 
       - name: Upload Packer Logs
         if: always()
