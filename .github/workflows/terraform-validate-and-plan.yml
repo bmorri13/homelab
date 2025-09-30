@@ -36,6 +36,34 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Create Terraform Variables File
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > terraform.tfvars << EOF
+          # Proxmox API connection details
+          proxmox_api_url          = "${{ secrets.PROXMOX_URL }}"
+          proxmox_api_token_id     = "${{ secrets.PROXMOX_USERNAME }}"
+          proxmox_api_token_secret = "${{ secrets.PROXMOX_TOKEN }}"
+
+          # Proxmox node settings
+          target_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+
+          # Storage settings
+          disk_storage = "local-lvm"
+
+          # Network settings
+          network_bridge = "vmbr0"
+          gateway        = "192.168.1.1"
+          dns_servers    = ["8.8.8.8", "8.8.4.4"]
+          dns_domain     = "home"
+
+          # SSH public keys for cloud-init
+          ssh_public_keys = "${{ secrets.SSH_PUBLIC_KEYS }}"
+
+          # VM password
+          vm_password = "${{ secrets.SSH_PASSWORD }}"
+          EOF
+
       - name: Terraform Format Check
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
@@ -52,14 +80,7 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          terraform plan \
-            -var="proxmox_api_url=${{ secrets.PROXMOX_URL }}" \
-            -var="proxmox_api_token_id=${{ secrets.PROXMOX_USERNAME }}" \
-            -var="proxmox_api_token_secret=${{ secrets.PROXMOX_TOKEN }}" \
-            -var="target_node=${{ secrets.PROXMOX_NODE }}" \
-            -var="vm_password=${{ secrets.SSH_PASSWORD }}" \
-            -out=tfplan
+        run: terraform plan -out=tfplan
         env:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
@@ -69,6 +90,11 @@ jobs:
           name: terraform-plan-${{ github.run_number }}
           path: ${{ env.WORKING_DIR }}/tfplan
           retention-days: 7
+
+      - name: Cleanup Temporary Files
+        if: always()
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f terraform.tfvars
 
       - name: Plan Summary
         working-directory: ${{ env.WORKING_DIR }}
