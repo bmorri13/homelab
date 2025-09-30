@@ -2,7 +2,7 @@ terraform {
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
-      version = "0.84.0"
+      version = "0.84.1"
     }
   }
 }
@@ -13,77 +13,54 @@ provider "proxmox" {
   insecure  = true
 }
 
-resource "proxmox_virtual_environment_vm" "ubuntu_vm" {
-  for_each = var.vms
+# Splunk Docker Compose MCP VM
+module "splunk_docker_compose_mcp" {
+  source = "./modules/proxmox-vm"
 
-  name        = each.key
-  description = "Terraform-managed Ubuntu 24.04 VM, use ubuntu@<ip-address> to login"
-  tags        = ["terraform", "ubuntu"]
-  node_name   = var.target_node
+  vm_name        = "splunk-docker-compose-mcp"
+  description    = "Terraform-managed Ubuntu 24.04 VM for Splunk, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "splunk"]
+  target_node    = var.target_node
+  template_vm_id = 9002
+  cores          = 8
+  memory         = 4092
+  disk_size      = "300"
 
-  # Use template created by Packer
-  clone {
-    vm_id = each.value.template_vm_id
-    full  = true
-  }
-
-  agent {
-    enabled = true
-  }
-
-  cpu {
-    cores = each.value.cores
-    type  = "host"
-  }
-
-  memory {
-    dedicated = each.value.memory
-  }
-
-  network_device {
-    bridge = var.network_bridge
-  }
-
-  # Disk configuration to resize the template's disk
-  disk {
-    interface    = "scsi0" # Must match the template's disk interface
-    size         = each.value.disk_size
-    file_format  = "raw" # Match template's format
-    datastore_id = var.disk_storage
-  }
-
-  operating_system {
-    type = "l26"
-  }
-
-  # Cloud-init configuration for the VM
-  initialization {
-    ip_config {
-      ipv4 {
-        address = "dhcp"
-      }
-    }
-
-    # DNS servers configuration
-    dns {
-      servers = var.dns_servers
-      domain  = var.dns_domain
-    }
-
-    user_account {
-    #   keys     = [var.ssh_public_keys]
-      username = "ubuntu"
-      password = var.vm_password
-    }
-
-    # Note: Hostname is set automatically to the VM name by Proxmox
-    # If you need custom hostname settings, use custom_files with cloud-init config
-  }
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
 }
 
-output "vm_ip_addresses" {
-  description = "IP addresses of the created VMs"
-  value = {
-    for k, v in proxmox_virtual_environment_vm.ubuntu_vm : k => v.ipv4_addresses
-  }
+# GitHub Action Runner VM
+module "github_action_runner" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "github-action-runner"
+  description    = "Terraform-managed Ubuntu 24.04 VM for GitHub Actions, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "github-runner"]
+  target_node    = var.target_node
+  template_vm_id = 9002
+  cores          = 2
+  memory         = 4092
+  disk_size      = "50"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
 }
+
+# output "vm_ip_addresses" {
+#   description = "IP addresses of the created VMs"
+#   value = {
+#     splunk_docker_compose_mcp = module.splunk_docker_compose_mcp.ipv4_addresses
+#     github_action_runner      = module.github_action_runner.ipv4_addresses
+#   }
+# }

@@ -40,7 +40,7 @@ variable "proxmox_node" {
 variable "vm_id" {
   type        = string
   description = "The ID for the VM template"
-  default     = "9000"
+  default     = "9002"
 }
 
 # VM ISO Settings
@@ -240,6 +240,10 @@ build {
       "sudo update-grub",
       "echo 'Clearing cloud-init status to ensure fresh start on first boot...'",
       "sudo cloud-init clean --logs",
+      "echo 'Removing machine-id to ensure unique identity on clone...'",
+      "sudo truncate -s 0 /etc/machine-id",
+      "sudo rm -f /var/lib/dbus/machine-id",
+      "sudo ln -sf /etc/machine-id /var/lib/dbus/machine-id",
       "echo 'Installation and cleanup completed successfully!'"
     ]
     expect_disconnect = true

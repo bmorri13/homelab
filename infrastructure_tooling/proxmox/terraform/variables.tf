@@ -61,21 +61,3 @@ variable "vm_password" {
   sensitive   = true
   default     = null # If null, keeps the password from the template
 }
-
-variable "vms" {
-  description = "Map of VMs to create with their configurations"
-  type = map(object({
-    template_vm_id = number
-    cores          = number
-    memory         = number
-    disk_size      = string
-  }))
-  default = {
-    "test-instance" = {
-      template_vm_id = 9000
-      cores          = 2
-      memory         = 2046
-      disk_size      = "100"
-    }
-  }
-}
