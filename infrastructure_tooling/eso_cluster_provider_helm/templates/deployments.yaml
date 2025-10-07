@@ -8,7 +8,7 @@ metadata:
 spec:
   provider:
     vault:
-      server: "http://192.168.3.100:31109"
+      server: "http://vault.vault.svc.cluster.local:8200"
       path: "kv"
       version: "v2"
       auth:
