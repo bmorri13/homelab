@@ -13,6 +13,8 @@ on:
         required: false
         default: false
         type: boolean
+  schedule:
+    - cron: '0 12 * * 1'  # Every Monday at 0800 ET (1200 UTC)
   push:
     branches:
       - main
