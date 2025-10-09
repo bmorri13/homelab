@@ -57,18 +57,18 @@ module "github_action_runner" {
   vm_password    = var.vm_password
 }
 
-# tester VM
-module "test_instance" {
+# Monitoring Docker Compose VM
+module "monitoring_docker_compose_01" {
   source = "./modules/proxmox-vm"
 
-  vm_name        = "test-instance"
-  description    = "Terraform-managed Ubuntu 24.04 VM for testing, use ubuntu@<ip-address> to login"
-  tags           = ["terraform", "ubuntu", "testing"]
+  vm_name        = "monitoring-docker-compose-01"
+  description    = "Terraform-managed Ubuntu 24.04 VM for monitoring, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "monitoring"]
   target_node    = var.target_node
   template_vm_id = 9000
   cores          = 2
   memory         = 4092
-  disk_size      = "50"
+  disk_size      = "250"
 
   # Shared configuration
   disk_storage   = var.disk_storage
