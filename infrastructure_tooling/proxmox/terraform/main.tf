@@ -79,6 +79,28 @@ module "monitoring_docker_compose_01" {
   vm_password    = var.vm_password
 }
 
+# Monitoring Docker Compose VM
+module "monitoring_docker_compose_02" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "monitoring-docker-compose-02"
+  description    = "Terraform-managed Ubuntu 24.04 VM for monitoring, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "monitoring"]
+  target_node    = var.target_node
+  template_vm_id = 9000
+  cores          = 2
+  memory         = 4092
+  disk_size      = "250"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
+}
+
 # output "vm_ip_addresses" {
 #   description = "IP addresses of the created VMs"
 #   value = {
