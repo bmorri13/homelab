@@ -81,7 +81,7 @@ jobs:
           proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
-          iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+          iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
           ssh_username = "ubuntu"
           EOF
 
@@ -237,7 +237,7 @@ jobs:
           proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
-          iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+          iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
           ssh_username = "ubuntu"
           EOF
 
