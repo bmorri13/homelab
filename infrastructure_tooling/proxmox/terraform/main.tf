@@ -83,14 +83,14 @@ module "monitoring_docker_compose_01" {
 module "monitoring_docker_compose_02" {
   source = "./modules/proxmox-vm"
 
-  vm_name        = "monitoring-docker-compose-02"
-  description    = "Terraform-managed Ubuntu 24.04 VM for monitoring, use ubuntu@<ip-address> to login"
-  tags           = ["terraform", "ubuntu", "monitoring"]
+  vm_name        = "docker-compose-02"
+  description    = "Terraform-managed Ubuntu 24.04 VM for docker-compose, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "docker-compose"]
   target_node    = var.target_node
   template_vm_id = 9000
   cores          = 2
   memory         = 4092
-  disk_size      = "250"
+  disk_size      = "500"
 
   # Shared configuration
   disk_storage   = var.disk_storage

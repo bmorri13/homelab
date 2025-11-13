@@ -6,7 +6,8 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: bmosan-cert
     kubernetes.io/ingress.class: traefik
-    traefik.ingress.kubernetes.io/router.entrypoints: web, websecure
+    traefik.ingress.kubernetes.io/redirect-entry-point: websecure
+    traefik.ingress.kubernetes.io/redirect-permanent: "true"
 spec:
   ingressClassName: traefik
   rules:
@@ -19,7 +20,7 @@ spec:
           service:
             name: n8n
             port:
-              number: 80
+              number: 5678
   tls:
   - hosts:
     - n8n.bmosan.com
