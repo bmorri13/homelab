@@ -64,10 +64,12 @@ resource "proxmox_virtual_environment_vm" "vm" {
     datastore_id = var.disk_storage
   }
 
-  # Ensure VM starts and regenerates cloud-init on first boot
+  # Ensure VM starts on creation
   started = true
   on_boot = true
-  reboot  = true
+  
+  # Set timeout for operations
+  timeout_create = "30m"
 
   # Ignore changes to MAC addresses and IPv6 addresses as they are managed by Proxmox/Docker
   lifecycle {
