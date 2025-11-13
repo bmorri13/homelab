@@ -13,7 +13,7 @@ vm_id        = "9000"  # VM template ID (should be unique)
 proxmox_node = "your-proxmox-node-name"  # Name of your Proxmox node
 
 # ISO and installation settings
-iso_file     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"  # Path to Ubuntu ISO in Proxmox
+iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"  # Path to Ubuntu ISO in Proxmox
 ssh_username = "ubuntu"  # Default username for the VM template
 
 # Additional configuration options (uncomment and modify as needed):
