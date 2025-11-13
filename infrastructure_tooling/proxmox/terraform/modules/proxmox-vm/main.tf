@@ -68,4 +68,12 @@ resource "proxmox_virtual_environment_vm" "vm" {
   started = true
   on_boot = true
   reboot  = true
+
+  # Ignore changes to MAC addresses and IPv6 addresses as they are managed by Proxmox/Docker
+  lifecycle {
+    ignore_changes = [
+      mac_addresses,
+      ipv6_addresses,
+    ]
+  }
 }
