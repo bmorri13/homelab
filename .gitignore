@@ -22,3 +22,7 @@ vault-keys.json
 .env
 .env.local
 *.local
+
+# Claude Code files
+.claude/
+CLAUDE.md

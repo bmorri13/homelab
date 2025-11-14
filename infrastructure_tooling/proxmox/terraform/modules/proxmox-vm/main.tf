@@ -67,7 +67,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
   # Ensure VM starts on creation
   started = true
   on_boot = true
-  
+
   # Set timeout for operations
   timeout_create = "30m"
 
