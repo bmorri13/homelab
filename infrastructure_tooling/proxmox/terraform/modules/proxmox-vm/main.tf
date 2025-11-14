@@ -68,8 +68,8 @@ resource "proxmox_virtual_environment_vm" "vm" {
   started = true
   on_boot = true
 
-  # Set timeout for operations
-  timeout_create = "30m"
+  # Set timeout for operations (in seconds)
+  timeout_create = 1800
 
   # Ignore changes to MAC addresses and IPv6 addresses as they are managed by Proxmox/Docker
   lifecycle {
