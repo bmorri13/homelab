@@ -39,7 +39,7 @@ jobs:
       template_valid: ${{ steps.validate.outputs.valid }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
@@ -104,7 +104,7 @@ jobs:
     environment: prod
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Packer
         uses: hashicorp/setup-packer@main
