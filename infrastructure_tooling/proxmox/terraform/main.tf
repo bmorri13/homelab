@@ -23,7 +23,7 @@ module "splunk_docker_compose_mcp" {
   target_node    = var.target_node
   template_vm_id = 9002
   cores          = 8
-  memory         = 4092
+  memory         = 8184
   disk_size      = "300"
 
   # Shared configuration
