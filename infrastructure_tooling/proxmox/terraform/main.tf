@@ -68,7 +68,7 @@ module "monitoring_docker_compose_01" {
   template_vm_id = 9000
   cores          = 2
   memory         = 4092
-  disk_size      = "50"
+  disk_size      = "250"
 
   # Shared configuration
   disk_storage   = var.disk_storage
@@ -90,7 +90,7 @@ module "monitoring_docker_compose_02" {
   template_vm_id = 9000
   cores          = 2
   memory         = 4092
-  disk_size      = "200"
+  disk_size      = "500"
 
   # Shared configuration
   disk_storage   = var.disk_storage
