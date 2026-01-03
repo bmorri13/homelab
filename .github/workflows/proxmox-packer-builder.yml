@@ -100,10 +100,7 @@ jobs:
     name: Build Template (${{ matrix.node }})
     runs-on: [self-hosted, Linux, X64]
     needs: validate
-    if: |
-      needs.validate.outputs.template_valid == 'true' &&
-      (github.event_name != 'workflow_dispatch' ||
-       contains(github.event.inputs.nodes || 'proxmox,proxmox2', matrix.node))
+    if: needs.validate.outputs.template_valid == 'true'
     environment: prod
     strategy:
       fail-fast: false
@@ -114,15 +111,30 @@ jobs:
           - node: proxmox2
             vm_id: "9001"
     steps:
+      - name: Check if node is selected
+        id: check_node
+        run: |
+          NODES="${{ github.event.inputs.nodes || 'proxmox,proxmox2' }}"
+          if [[ "$NODES" == *"${{ matrix.node }}"* ]]; then
+            echo "Node ${{ matrix.node }} is selected for build"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "Node ${{ matrix.node }} is not selected, skipping"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout Repository
+        if: steps.check_node.outputs.should_run == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Packer
+        if: steps.check_node.outputs.should_run == 'true'
         uses: hashicorp/setup-packer@main
         with:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Check and Delete Existing Template
+        if: steps.check_node.outputs.should_run == 'true'
         id: check_template
         run: |
           VM_ID="${{ matrix.vm_id }}"
@@ -206,6 +218,7 @@ jobs:
           echo "Proceeding with build..."
 
       - name: Install Dependencies
+        if: steps.check_node.outputs.should_run == 'true'
         run: |
           if ! command -v xorriso &> /dev/null; then
             sudo apt-get update
@@ -213,10 +226,12 @@ jobs:
           fi
 
       - name: Initialize Packer
+        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
 
       - name: Generate Password Hash
+        if: steps.check_node.outputs.should_run == 'true'
         id: gen_hash_build
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
@@ -224,6 +239,7 @@ jobs:
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
+        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}/http
         run: |
           cp user-data user-data.backup
@@ -235,6 +251,7 @@ jobs:
           grep "password:" user-data
 
       - name: Create Variables File
+        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           cat > variables.pkrvars.hcl << EOF
@@ -252,6 +269,7 @@ jobs:
           EOF
 
       - name: Build Packer Template
+        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         env:
           PACKER_LOG: 1
@@ -264,7 +282,7 @@ jobs:
             ubuntu-2404.pkr.hcl
 
       - name: Cleanup Temporary Files
-        if: always()
+        if: always() && steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           rm -f variables.pkrvars.hcl
@@ -273,7 +291,7 @@ jobs:
           fi
 
       - name: Upload Packer Logs
-        if: always()
+        if: always() && steps.check_node.outputs.should_run == 'true'
         uses: actions/upload-artifact@v6
         with:
           name: packer-logs-${{ matrix.node }}-${{ github.run_number }}
@@ -281,7 +299,7 @@ jobs:
           retention-days: 7
 
       - name: Template Build Summary
-        if: success()
+        if: success() && steps.check_node.outputs.should_run == 'true'
         run: |
           echo "## Packer Build Summary - ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
