@@ -1,5 +1,8 @@
 # Packer Variables Configuration
 # Copy this file to 'variables.pkrvars.hcl' and update with your actual values
+#
+# Note: When running via GitHub Actions, these values are set dynamically
+# based on the matrix strategy for multi-node builds.
 
 # Proxmox connection details
 proxmox_url      = "https://your-proxmox-server.example.com:8006/api2/json"
@@ -9,8 +12,11 @@ proxmox_username = "root@pam!packer"  # Proxmox API user for Packer operations
 # proxmox_token = ""  # This should be set in secrets.pkrvars.hcl
 
 # VM template configuration
-vm_id        = "9000"  # VM template ID (should be unique)
-proxmox_node = "your-proxmox-node-name"  # Name of your Proxmox node
+# GitHub Actions uses matrix strategy for multi-node builds:
+#   - proxmox  -> vm_id 9000
+#   - proxmox2 -> vm_id 9001
+vm_id        = "9000"  # VM template ID (must be unique across cluster)
+proxmox_node = "proxmox"  # Name of your Proxmox node
 
 # ISO and installation settings
 iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"  # Path to Ubuntu ISO in Proxmox

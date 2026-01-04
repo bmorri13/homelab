@@ -49,27 +49,41 @@ This repository includes automated workflows for building Packer templates and d
 #### 1. Proxmox Packer Builder
 **File:** `.github/workflows/proxmox-packer-builder.yml`
 
-Builds Ubuntu 24.04 VM templates with automatic deletion of existing templates.
+Builds Ubuntu 24.04 VM templates on multiple Proxmox cluster nodes in parallel.
 
 **Features:**
 - Validates Packer templates on PR/push
-- Builds VM templates with VM ID 9000 (default)
+- Builds VM templates on multiple nodes in parallel
+- Node-specific VM IDs: proxmox (9000), proxmox2 (9001)
 - Automatically deletes existing VM/template before building
 - Dynamic VM naming with build date: `ubuntu-2404-YYYYMMDD`
 - Dynamically generates password hash from GitHub secrets
 - Installs Docker 27.5.1 in the template
-- Uploads Packer logs as artifacts
+- Uploads Packer logs as artifacts (per-node)
+
+**Multi-Node Configuration:**
+
+| Node | VM ID |
+|------|-------|
+| proxmox | 9000 |
+| proxmox2 | 9001 |
 
 **Triggers:**
 - Manual (workflow_dispatch)
+- Scheduled (Every Monday at 12:00 UTC)
 - Push to main (when packer files change)
 - Pull requests to main (when packer files change)
+
+**Workflow Inputs (workflow_dispatch):**
+- `nodes` - Comma-separated list of nodes to build on (default: `proxmox,proxmox2`)
+  - Single node example: `proxmox`
+  - Both nodes: `proxmox,proxmox2`
+- `force_build` - Force build even if template exists (default: false)
 
 **Required GitHub Secrets (prod environment):**
 - `PROXMOX_URL` - Proxmox API URL (e.g., `https://proxmox.example.com:8006`)
 - `PROXMOX_USERNAME` - Proxmox API token ID (e.g., `root@pam!packer`)
 - `PROXMOX_TOKEN` - Proxmox API token secret
-- `PROXMOX_NODE` - Proxmox node name (e.g., `proxmox`)
 - `SSH_PASSWORD` - Password for ubuntu user
 
 #### 2. Terraform Validate and Plan
@@ -90,7 +104,8 @@ Validates and plans Terraform changes before applying.
 - Pull requests to main (when terraform files change)
 
 **Required GitHub Secrets (prod environment):**
-- `PROXMOX_URL`, `PROXMOX_USERNAME`, `PROXMOX_TOKEN`, `PROXMOX_NODE`
+- `PROXMOX_URL`, `PROXMOX_USERNAME`, `PROXMOX_TOKEN`
+- `PROXMOX_NODE` - Target Proxmox node for Terraform deployments
 - `SSH_PASSWORD` - VM password
 - `SSH_PUBLIC_KEYS` - SSH public keys for VM access
 - `CONSUL_HTTP_TOKEN` - Token for Consul backend access
@@ -121,13 +136,13 @@ Navigate to your repository settings and add the following secrets to the `prod`
 
 1. Go to Settings → Environments → prod → Environment secrets
 2. Add the following secrets:
-   - `PROXMOX_URL`
-   - `PROXMOX_USERNAME`
-   - `PROXMOX_TOKEN`
-   - `PROXMOX_NODE`
-   - `SSH_PASSWORD`
-   - `SSH_PUBLIC_KEYS`
-   - `CONSUL_HTTP_TOKEN`
+   - `PROXMOX_URL` - Proxmox API URL
+   - `PROXMOX_USERNAME` - Proxmox API token ID
+   - `PROXMOX_TOKEN` - Proxmox API token secret
+   - `PROXMOX_NODE` - Target node for Terraform deployments (Packer uses matrix strategy)
+   - `SSH_PASSWORD` - Password for VM users
+   - `SSH_PUBLIC_KEYS` - SSH public keys for VM access
+   - `CONSUL_HTTP_TOKEN` - Token for Consul backend access
 
 ## Running Locally
 
