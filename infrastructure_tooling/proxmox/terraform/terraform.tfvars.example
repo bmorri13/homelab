@@ -5,7 +5,14 @@
 proxmox_api_url = "https://your-proxmox-server.example.com:8006/api2/json"
 
 # Proxmox node settings
-target_node = "your-proxmox-node-name" # Replace with your Proxmox node name
+target_node = "proxmox" # Default node (used if per-VM node not specified)
+
+# Per-VM node overrides (optional - comment out to use default target_node)
+# Available nodes: proxmox (Intel NUC), proxmox2 (Beelink Mini PC)
+# target_node_splunk            = "proxmox"
+# target_node_github_runner     = "proxmox2"
+# target_node_monitoring_01     = "proxmox"
+# target_node_docker_compose_02 = "proxmox2"
 
 # Storage settings
 disk_storage = "local-lvm" # Your Proxmox storage pool name

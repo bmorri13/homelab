@@ -61,3 +61,28 @@ variable "vm_password" {
   sensitive   = true
   default     = null # If null, keeps the password from the template
 }
+
+# Per-VM node overrides (optional - falls back to target_node if not set)
+variable "target_node_splunk" {
+  description = "Proxmox node for Splunk VM (overrides target_node)"
+  type        = string
+  default     = null
+}
+
+variable "target_node_github_runner" {
+  description = "Proxmox node for GitHub runner VM (overrides target_node)"
+  type        = string
+  default     = null
+}
+
+variable "target_node_monitoring_01" {
+  description = "Proxmox node for monitoring VM (overrides target_node)"
+  type        = string
+  default     = null
+}
+
+variable "target_node_docker_compose_02" {
+  description = "Proxmox node for docker-compose-02 VM (overrides target_node)"
+  type        = string
+  default     = null
+}

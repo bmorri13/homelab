@@ -3,11 +3,19 @@ name: Build Proxmox Packer Template
 on:
   workflow_dispatch:
     inputs:
-      nodes:
-        description: 'Nodes to build on (comma-separated: proxmox,proxmox2)'
+      vm_id:
+        description: 'VM Template ID'
         required: false
-        default: 'proxmox,proxmox2'
+        default: '9000'
         type: string
+      proxmox_node:
+        description: 'Target Proxmox node'
+        required: false
+        default: 'proxmox'
+        type: choice
+        options:
+          - proxmox
+          - proxmox2
       force_build:
         description: 'Force build even if template exists'
         required: false
@@ -78,7 +86,7 @@ jobs:
 
           # VM template configuration
           vm_id        = "9000"
-          proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
@@ -97,50 +105,27 @@ jobs:
           echo "valid=true" >> $GITHUB_OUTPUT
 
   build:
-    name: Build Template (${{ matrix.node }})
+    name: Build Proxmox Template
     runs-on: [self-hosted, Linux, X64]
     needs: validate
     if: needs.validate.outputs.template_valid == 'true'
     environment: prod
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - node: proxmox
-            vm_id: "9000"
-          - node: proxmox2
-            vm_id: "9001"
     steps:
-      - name: Check if node is selected
-        id: check_node
-        run: |
-          NODES="${{ github.event.inputs.nodes || 'proxmox,proxmox2' }}"
-          if [[ "$NODES" == *"${{ matrix.node }}"* ]]; then
-            echo "Node ${{ matrix.node }} is selected for build"
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          else
-            echo "Node ${{ matrix.node }} is not selected, skipping"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Checkout Repository
-        if: steps.check_node.outputs.should_run == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Packer
-        if: steps.check_node.outputs.should_run == 'true'
         uses: hashicorp/setup-packer@main
         with:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Check and Delete Existing Template
-        if: steps.check_node.outputs.should_run == 'true'
         id: check_template
         run: |
-          VM_ID="${{ matrix.vm_id }}"
-          NODE="${{ matrix.node }}"
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
+          NODE="${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
-          echo "Checking if VM/template with ID $VM_ID exists on node $NODE..."
+          echo "Checking if VM/template with ID $VM_ID exists..."
 
           # Query cluster resources for all VMs and templates
           CLUSTER_RESOURCES=$(curl -k -s \
@@ -218,7 +203,6 @@ jobs:
           echo "Proceeding with build..."
 
       - name: Install Dependencies
-        if: steps.check_node.outputs.should_run == 'true'
         run: |
           if ! command -v xorriso &> /dev/null; then
             sudo apt-get update
@@ -226,12 +210,10 @@ jobs:
           fi
 
       - name: Initialize Packer
-        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
 
       - name: Generate Password Hash
-        if: steps.check_node.outputs.should_run == 'true'
         id: gen_hash_build
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
@@ -239,7 +221,6 @@ jobs:
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
-        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}/http
         run: |
           cp user-data user-data.backup
@@ -251,17 +232,17 @@ jobs:
           grep "password:" user-data
 
       - name: Create Variables File
-        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
           cat > variables.pkrvars.hcl << EOF
           # Proxmox connection details
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
 
           # VM template configuration
-          vm_id        = "${{ matrix.vm_id }}"
-          proxmox_node = "${{ matrix.node }}"
+          vm_id        = "$VM_ID"
+          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
@@ -269,11 +250,10 @@ jobs:
           EOF
 
       - name: Build Packer Template
-        if: steps.check_node.outputs.should_run == 'true'
         working-directory: ${{ env.WORKING_DIR }}
         env:
           PACKER_LOG: 1
-          PACKER_LOG_PATH: "/tmp/packer-${{ matrix.node }}.log"
+          PACKER_LOG_PATH: "/tmp/packer.log"
         run: |
           packer build \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
@@ -282,7 +262,7 @@ jobs:
             ubuntu-2404.pkr.hcl
 
       - name: Cleanup Temporary Files
-        if: always() && steps.check_node.outputs.should_run == 'true'
+        if: always()
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           rm -f variables.pkrvars.hcl
@@ -291,21 +271,21 @@ jobs:
           fi
 
       - name: Upload Packer Logs
-        if: always() && steps.check_node.outputs.should_run == 'true'
+        if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: packer-logs-${{ matrix.node }}-${{ github.run_number }}
-          path: /tmp/packer-${{ matrix.node }}.log
+          name: packer-logs-${{ github.run_number }}
+          path: /tmp/packer.log
           retention-days: 7
 
       - name: Template Build Summary
-        if: success() && steps.check_node.outputs.should_run == 'true'
+        if: success()
         run: |
-          echo "## Packer Build Summary - ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template ID:** ${{ matrix.vm_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template Name:** ubuntu-2404-$(date +%Y%m%d)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
+          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
+          echo "## 🎉 Packer Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template ID:** $VM_ID" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template Name:** ubuntu-2404-template" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The Ubuntu 24.04 template is now available on ${{ matrix.node }} and ready for use!" >> $GITHUB_STEP_SUMMARY
+          echo "The Ubuntu 24.04 template is now available in Proxmox and ready for use!" >> $GITHUB_STEP_SUMMARY
