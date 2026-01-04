@@ -41,8 +41,27 @@ jobs:
           proxmox_api_token_id     = "${{ secrets.PROXMOX_USERNAME }}"
           proxmox_api_token_secret = "${{ secrets.PROXMOX_TOKEN }}"
 
-          # Proxmox node settings
+          # Proxmox node settings (default node for all VMs)
           target_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+
+          # Per-VM node overrides (optional - uses target_node if not set)
+          EOF
+
+          # Add per-VM node overrides if secrets are set
+          if [ -n "${{ secrets.TARGET_NODE_SPLUNK }}" ]; then
+            echo 'target_node_splunk = "${{ secrets.TARGET_NODE_SPLUNK }}"' >> terraform.tfvars
+          fi
+          if [ -n "${{ secrets.TARGET_NODE_GITHUB_RUNNER }}" ]; then
+            echo 'target_node_github_runner = "${{ secrets.TARGET_NODE_GITHUB_RUNNER }}"' >> terraform.tfvars
+          fi
+          if [ -n "${{ secrets.TARGET_NODE_MONITORING_01 }}" ]; then
+            echo 'target_node_monitoring_01 = "${{ secrets.TARGET_NODE_MONITORING_01 }}"' >> terraform.tfvars
+          fi
+          if [ -n "${{ secrets.TARGET_NODE_DOCKER_COMPOSE_02 }}" ]; then
+            echo 'target_node_docker_compose_02 = "${{ secrets.TARGET_NODE_DOCKER_COMPOSE_02 }}"' >> terraform.tfvars
+          fi
+
+          cat >> terraform.tfvars << EOF
 
           # Storage settings
           disk_storage = "local-lvm"

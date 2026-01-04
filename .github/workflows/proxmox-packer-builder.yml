@@ -8,6 +8,14 @@ on:
         required: false
         default: '9000'
         type: string
+      proxmox_node:
+        description: 'Target Proxmox node'
+        required: false
+        default: 'proxmox'
+        type: choice
+        options:
+          - proxmox
+          - proxmox2
       force_build:
         description: 'Force build even if template exists'
         required: false
@@ -78,7 +86,7 @@ jobs:
 
           # VM template configuration
           vm_id        = "9000"
-          proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
@@ -115,7 +123,7 @@ jobs:
         id: check_template
         run: |
           VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
-          NODE="${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          NODE="${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
           echo "Checking if VM/template with ID $VM_ID exists..."
 
@@ -234,7 +242,7 @@ jobs:
 
           # VM template configuration
           vm_id        = "$VM_ID"
-          proxmox_node = "${{ secrets.PROXMOX_NODE || 'proxmox' }}"
+          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
