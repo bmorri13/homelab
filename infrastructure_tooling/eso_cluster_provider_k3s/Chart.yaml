@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-secrets-clusterstore-k3s
+version: 0.1.0
+description: ClusterSecretStore for K3s cluster

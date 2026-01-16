@@ -1,0 +1,15 @@
+tailscale-operator:
+  operatorConfig:
+    hostname: "k8s-operator-docker-compose-03"
+  oauth:
+    clientId: ""
+    clientSecret: ""
+    existingSecret: tailscale-operator-oauth
+    clientIdKey: client_id
+    clientSecretKey: client_secret
+
+externalSecret:
+  enabled: true
+  refreshInterval: "15s"
+  secretStoreName: vault-backend
+  vaultPath: kv/tailscale-operator
