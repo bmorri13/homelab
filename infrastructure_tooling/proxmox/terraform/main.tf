@@ -102,10 +102,10 @@ module "monitoring_docker_compose_02" {
 }
 
 # Monitoring Docker Compose VM on proxmox2
-module "monitoring_docker_compose_03" {
+module "docker_compose_03" {
   source = "./modules/proxmox-vm"
 
-  vm_name        = "monitoring-docker-compose-03"
+  vm_name        = "docker-compose-03"
   description    = "Terraform-managed Ubuntu 24.04 VM for monitoring on proxmox2, use ubuntu@<ip-address> to login"
   tags           = ["terraform", "ubuntu", "monitoring"]
   target_node    = "proxmox2"
