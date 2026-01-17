@@ -35,6 +35,11 @@ jobs:
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
     steps:
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y unzip curl jq git
+
       - name: Checkout Repository
         uses: actions/checkout@v6
 
@@ -110,6 +115,11 @@ jobs:
           - node: proxmox2
             vm_id: "9001"
     steps:
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y unzip curl jq git openssl xorriso
+
       - name: Checkout Repository
         uses: actions/checkout@v6
 
@@ -200,13 +210,6 @@ jobs:
           fi
 
           echo "Proceeding with build..."
-
-      - name: Install Dependencies
-        run: |
-          if ! command -v xorriso &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y xorriso
-          fi
 
       - name: Initialize Packer
         working-directory: ${{ env.WORKING_DIR }}
