@@ -1,5 +1,12 @@
 # homelab
-- This repo contains the configurations and setup information for my homelab k3s cluster and promox environment. Currnetly I am running an Intel NUC and [Beelink Mini PC](https://www.amazon.com/dp/B0DF7FFN22?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1) running Proxmox.
+- This repo contains the configurations and setup information for my homelab K3s clusters and Proxmox environment. Currently I am running an Intel NUC and [Beelink Mini PC](https://www.amazon.com/dp/B0DF7FFN22?ref=ppx_yo2ov_dt_b_fed_asin_title&th=1) running Proxmox.
+
+## Clusters
+
+| Cluster | Purpose | Key Components |
+|---------|---------|----------------|
+| Primary K3s | Main workloads | ArgoCD, Vault, Cert Manager, MetalLB |
+| docker-compose-03-k3s | ARC Runners | Tailscale Operator, ARC, Vault |
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -17,6 +24,9 @@
       - [Setup](#setup-4)
     - [Core Infrastructure Ingress](#core-infrstructure-ingress)
       - [Setup](#setup-5)
+- [Secondary K3s Cluster (docker-compose-03-k3s)](#secondary-k3s-cluster-docker-compose-03-k3s)
+  - [Tailscale Kubernetes Operator](#tailscale-kubernetes-operator)
+  - [GitHub Actions Runner Controller (ARC)](#github-actions-runner-controller-arc)
 - [Applications](#applications)
   - [Alex Printer tracker](#alex-printer-tracker)
     - [Setup](#setup-6)
@@ -347,6 +357,152 @@ kubectl apply -f stirling-pdf.yaml
 
 
 
+## Secondary K3s Cluster (docker-compose-03-k3s)
+
+This cluster runs on a VM provisioned via Terraform and hosts GitHub Actions runners accessible via Tailscale.
+
+### Components Deployed
+
+| Component | Namespace | Purpose |
+|-----------|-----------|---------|
+| Vault | `vault` | Secrets management |
+| External Secrets Operator | `external-secrets` | Kubernetes secrets from Vault |
+| Tailscale Operator | `tailscale` | Secure network access via Tailnet |
+| ARC Controller | `arc-systems` | GitHub Actions runner management |
+| ARC Runner Scale Set | `arc-runners` | Ephemeral runner pods |
+
+### Tailscale Kubernetes Operator
+
+The [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) provides secure access to cluster services via the Tailnet.
+
+#### Prerequisites
+- Tailscale account with OAuth client credentials
+- Vault running with `kv/tailscale` secret containing `client_id` and `client_secret`
+
+#### Setup
+1. Store Tailscale OAuth credentials in Vault:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl exec vault-k3s-0 -n vault -- \
+  vault kv put kv/tailscale \
+    client_id="your-client-id" \
+    client_secret="your-client-secret"
+```
+
+2. Deploy via Helm:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml helm upgrade --install tailscale-operator \
+  infrastructure_tooling/tailscale_operator \
+  --namespace tailscale \
+  --create-namespace
+```
+
+3. Verify the operator is running:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl get pods -n tailscale
+```
+
+### GitHub Actions Runner Controller (ARC)
+
+[ARC](https://github.com/actions/actions-runner-controller) provides Kubernetes-native GitHub Actions runners that scale to zero when idle.
+
+#### Architecture
+```
+GitHub Actions Workflow
+        ↓
+    GitHub API
+        ↓
+ARC Controller (arc-systems namespace)
+        ↓
+Runner Scale Set (arc-runners namespace)
+        ↓
+Ephemeral Runner Pods
+```
+
+#### Prerequisites
+- GitHub Personal Access Token (Classic) with `repo` scope
+- Token stored in Vault at `kv/github-arc`
+
+#### Setup
+1. Create GitHub PAT at https://github.com/settings/tokens with `repo` scope
+
+2. Store token in Vault:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl exec vault-k3s-0 -n vault -- \
+  vault kv put kv/github-arc \
+    github_token="ghp_xxxxxxxxxxxxxxxxxxxx"
+```
+
+3. Deploy ARC Controller:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml helm upgrade --install arc-controller \
+  oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
+  --namespace arc-systems \
+  --create-namespace \
+  --version 0.10.1
+```
+
+4. Create the ExternalSecret for the runner:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl create namespace arc-runners
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl apply -f - <<EOF
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: arc-github-token
+  namespace: arc-runners
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: arc-github-token
+    creationPolicy: Owner
+  data:
+    - secretKey: github_token
+      remoteRef:
+        key: kv/github-arc
+        property: github_token
+EOF
+```
+
+5. Deploy Runner Scale Set:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml helm upgrade --install arc-runner-scaleset \
+  infrastructure_tooling/arc_runner_scaleset \
+  --namespace arc-runners
+```
+
+6. Verify deployment:
+```bash
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl get pods -n arc-systems
+KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl get autoscalingrunnersets -n arc-runners
+```
+
+#### Using ARC Runners
+
+The ARC runner uses Kubernetes container mode. Workflows must specify a container:
+
+```yaml
+jobs:
+  build:
+    runs-on: arc-k3s-runner
+    container:
+      image: ubuntu:24.04
+    steps:
+      - name: Install Dependencies
+        run: apt-get update && apt-get install -y <packages>
+      - uses: actions/checkout@v4
+      # ... rest of your steps
+```
+
+#### Available Runners
+
+| Runner | Label | Type |
+|--------|-------|------|
+| VM Runner | `[self-hosted, Linux, X64]` | Persistent VM |
+| ARC Runner | `arc-k3s-runner` | Ephemeral K8s pods |
+
 ## Applications
 ### Alex Printer tracker
 - This is a sample app that I have created to track how long it is taking a buddy to build his printer with a nextjs app and as well test out Cloudflare Tunnels
@@ -537,16 +693,28 @@ The `infrastructure_tooling/proxmox/` directory contains comprehensive automatio
 
 **Key Features:**
 - Automated Ubuntu 24.04 template creation with Packer
+- **Parallel template builds** on both Proxmox nodes via GitHub Actions (using ARC runners)
 - Multi-VM provisioning with Terraform
 - Remote state storage in Consul for team collaboration
 - Complete Infrastructure as Code workflow
 - Secure credential management with example templates
 
+**GitHub Actions Workflows:**
+
+| Workflow | Trigger | Runner | Description |
+|----------|---------|--------|-------------|
+| `proxmox-packer-builder.yml` | Manual, Schedule, Push | `arc-k3s-runner` | Builds templates on both nodes in parallel |
+| `terraform-validate-and-plan.yml` | Manual, Push/PR | `self-hosted` | Validates and plans Terraform changes |
+| `terraform-apply.yml` | Manual | `self-hosted` | Applies Terraform configuration |
+
 **Quick Start:**
 ```bash
-# Build VM template with Packer
+# Build VM template with Packer (local)
 cd infrastructure_tooling/proxmox/packer/ubuntu-server-noble
 packer build -var-file="secrets.pkrvars.hcl" ubuntu-2404.pkr.hcl
+
+# Or trigger parallel builds via GitHub Actions
+# Go to Actions > Build Proxmox Packer Template > Run workflow
 
 # Deploy VMs with Terraform
 cd ../terraform
