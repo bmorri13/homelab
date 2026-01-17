@@ -1,12 +1,8 @@
 gha-runner-scale-set:
   githubConfigUrl: "https://github.com/bmorri13/homelab"
 
-  # Use existing secret created by ExternalSecret
-  githubConfigSecret:
-    github_token: ""  # Left empty - using existingSecretName instead
-
-  # Reference the secret created by ExternalSecret
-  existingSecretName: "arc-github-token"
+  # Reference the secret created by ExternalSecret (pre-created)
+  githubConfigSecret: arc-github-token
 
   # Runner configuration - use this as runs-on value
   runnerScaleSetName: "arc-k3s-runner"
@@ -22,7 +18,7 @@ gha-runner-scale-set:
           storage: 10Gi
 
 externalSecret:
-  enabled: true
+  enabled: false  # Secret already created manually
   refreshInterval: "1h"
   secretStoreName: vault-backend
   vaultPath: kv/github-arc
