@@ -29,6 +29,8 @@ jobs:
   validate:
     name: Validate Packer Template
     runs-on: arc-k3s-runner
+    container:
+      image: ubuntu:24.04
     environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
@@ -94,6 +96,8 @@ jobs:
   build:
     name: Build Template (${{ matrix.node }})
     runs-on: arc-k3s-runner
+    container:
+      image: ubuntu:24.04
     needs: validate
     if: needs.validate.outputs.template_valid == 'true'
     environment: prod
