@@ -3,19 +3,6 @@ name: Build Proxmox Packer Template
 on:
   workflow_dispatch:
     inputs:
-      vm_id:
-        description: 'VM Template ID'
-        required: false
-        default: '9000'
-        type: string
-      proxmox_node:
-        description: 'Target Proxmox node'
-        required: false
-        default: 'proxmox'
-        type: choice
-        options:
-          - proxmox
-          - proxmox2
       force_build:
         description: 'Force build even if template exists'
         required: false
@@ -41,7 +28,7 @@ env:
 jobs:
   validate:
     name: Validate Packer Template
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: arc-k3s-runner
     environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
@@ -84,9 +71,9 @@ jobs:
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
 
-          # VM template configuration
+          # VM template configuration (validation only, actual values set per-node in build)
           vm_id        = "9000"
-          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
+          proxmox_node = "proxmox"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
@@ -105,11 +92,19 @@ jobs:
           echo "valid=true" >> $GITHUB_OUTPUT
 
   build:
-    name: Build Proxmox Template
-    runs-on: [self-hosted, Linux, X64]
+    name: Build Template (${{ matrix.node }})
+    runs-on: arc-k3s-runner
     needs: validate
     if: needs.validate.outputs.template_valid == 'true'
     environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: proxmox
+            vm_id: "9000"
+          - node: proxmox2
+            vm_id: "9001"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
@@ -122,8 +117,8 @@ jobs:
       - name: Check and Delete Existing Template
         id: check_template
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
-          NODE="${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
+          VM_ID="${{ matrix.vm_id }}"
+          NODE="${{ matrix.node }}"
 
           echo "Checking if VM/template with ID $VM_ID exists..."
 
@@ -234,15 +229,14 @@ jobs:
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
           cat > variables.pkrvars.hcl << EOF
           # Proxmox connection details
           proxmox_url      = "${{ secrets.PROXMOX_URL }}"
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
 
           # VM template configuration
-          vm_id        = "$VM_ID"
-          proxmox_node = "${{ github.event.inputs.proxmox_node || secrets.PROXMOX_NODE || 'proxmox' }}"
+          vm_id        = "${{ matrix.vm_id }}"
+          proxmox_node = "${{ matrix.node }}"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
@@ -274,18 +268,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: packer-logs-${{ github.run_number }}
+          name: packer-logs-${{ matrix.node }}-${{ github.run_number }}
           path: /tmp/packer.log
           retention-days: 7
 
       - name: Template Build Summary
         if: success()
         run: |
-          VM_ID="${{ github.event.inputs.vm_id || '9000' }}"
-          echo "## 🎉 Packer Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template ID:** $VM_ID" >> $GITHUB_STEP_SUMMARY
+          echo "## Packer Build Summary (${{ matrix.node }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template ID:** ${{ matrix.vm_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Proxmox Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Template Name:** ubuntu-2404-template" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The Ubuntu 24.04 template is now available in Proxmox and ready for use!" >> $GITHUB_STEP_SUMMARY
+          echo "The Ubuntu 24.04 template is now available on ${{ matrix.node }} and ready for use!" >> $GITHUB_STEP_SUMMARY
