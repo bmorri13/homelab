@@ -1,0 +1,28 @@
+gha-runner-scale-set:
+  githubConfigUrl: "https://github.com/bmorri13/homelab"
+
+  # Use existing secret created by ExternalSecret
+  githubConfigSecret:
+    github_token: ""  # Left empty - using existingSecretName instead
+
+  # Reference the secret created by ExternalSecret
+  existingSecretName: "arc-github-token"
+
+  # Runner configuration - use this as runs-on value
+  runnerScaleSetName: "arc-k3s-runner"
+
+  # Container mode (recommended for K8s)
+  containerMode:
+    type: "kubernetes"
+    kubernetesModeWorkVolumeClaim:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "local-path"
+      resources:
+        requests:
+          storage: 10Gi
+
+externalSecret:
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreName: vault-backend
+  vaultPath: kv/github-arc
