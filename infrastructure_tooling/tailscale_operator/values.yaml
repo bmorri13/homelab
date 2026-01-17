@@ -4,7 +4,7 @@ tailscale-operator:
   oauth:
     clientId: ""
     clientSecret: ""
-    existingSecret: tailscale-operator-oauth
+    existingSecret: operator-oauth
     clientIdKey: client_id
     clientSecretKey: client_secret
 
