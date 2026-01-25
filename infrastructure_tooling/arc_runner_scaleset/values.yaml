@@ -1,5 +1,5 @@
 gha-runner-scale-set:
-  githubConfigUrl: "https://github.com/bmorri13/homelab"
+  githubConfigUrl: "https://github.com/bmorri13"
 
   # Reference the secret created by ExternalSecret (pre-created)
   githubConfigSecret: arc-github-token
