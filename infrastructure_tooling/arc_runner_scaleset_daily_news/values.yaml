@@ -1,5 +1,5 @@
 gha-runner-scale-set:
-  githubConfigUrl: "https://github.com/bmorri13/homelab"
+  githubConfigUrl: "https://github.com/bmorri13/daily_news_app"
 
   # Reference the secret created by ExternalSecret (pre-created)
   githubConfigSecret: arc-github-token
@@ -10,7 +10,7 @@ gha-runner-scale-set:
     namespace: arc-systems
 
   # Runner configuration - use this as runs-on value
-  runnerScaleSetName: "arc-k3s-homelab"
+  runnerScaleSetName: "arc-k3s-daily-news"
 
   # Container mode (recommended for K8s)
   containerMode:
