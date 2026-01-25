@@ -4,6 +4,11 @@ gha-runner-scale-set:
   # Reference the secret created by ExternalSecret (pre-created)
   githubConfigSecret: arc-github-token
 
+  # Controller service account (required for ArgoCD deployment)
+  controllerServiceAccount:
+    name: arc-controller-k3s-gha-rs-controller
+    namespace: arc-systems
+
   # Runner configuration - use this as runs-on value
   runnerScaleSetName: "arc-k3s-runner"
 
