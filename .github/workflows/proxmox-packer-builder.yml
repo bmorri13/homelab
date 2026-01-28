@@ -28,7 +28,7 @@ env:
 jobs:
   validate:
     name: Validate Packer Template
-    runs-on: arc-k3s-runner
+    runs-on: arc-k3s-homelab
     container:
       image: ubuntu:24.04
     environment: prod
@@ -100,7 +100,7 @@ jobs:
 
   build:
     name: Build Template (${{ matrix.node }})
-    runs-on: arc-k3s-runner
+    runs-on: arc-k3s-homelab
     container:
       image: ubuntu:24.04
     needs: validate
