@@ -123,6 +123,28 @@ module "docker_compose_03" {
   vm_password    = var.vm_password
 }
 
+# Splunk Edge Processor Test VM on proxmox2
+module "splunk_edge_processor_test" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "splunk-edge-processor-test"
+  description    = "Terraform-managed Ubuntu 24.04 VM for Splunk Edge Processor testing, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "splunk"]
+  target_node    = "proxmox2"
+  template_vm_id = 9001
+  cores          = 2
+  memory         = 4092
+  disk_size      = "250"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
+}
+
 # output "vm_ip_addresses" {
 #   description = "IP addresses of the created VMs"
 #   value = {
