@@ -123,13 +123,13 @@ module "docker_compose_03" {
   vm_password    = var.vm_password
 }
 
-# Splunk Edge Processor Test VM on proxmox2
-module "splunk_edge_processor_test" {
+# Claude OpenClaw VM on proxmox2
+module "claude_openclaw" {
   source = "./modules/proxmox-vm"
 
-  vm_name        = "splunk-edge-processor-test"
-  description    = "Terraform-managed Ubuntu 24.04 VM for Splunk Edge Processor testing, use ubuntu@<ip-address> to login"
-  tags           = ["terraform", "ubuntu", "splunk"]
+  vm_name        = "claude-openclaw"
+  description    = "Terraform-managed Ubuntu 24.04 VM for Claude OpenClaw"
+  tags           = ["terraform", "ubuntu", "claude-openclaw"]
   target_node    = "proxmox2"
   template_vm_id = 9001
   cores          = 2
