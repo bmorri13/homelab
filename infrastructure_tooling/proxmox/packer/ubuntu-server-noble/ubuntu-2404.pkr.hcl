@@ -70,6 +70,12 @@ variable "ssh_password" {
   default     = "ubuntu"
 }
 
+variable "tailscale_auth_key" {
+  type        = string
+  description = "Tailscale auth key for automatic connection"
+  sensitive   = true
+}
+
 ##################################################################################
 # LOCALS
 ##################################################################################
@@ -222,6 +228,40 @@ build {
       "docker compose version",
 
       "echo 'Docker installation complete!'"
+    ]
+  }
+
+  # Install Tailscale
+  provisioner "shell" {
+    inline = [
+      "echo 'Installing Tailscale...'",
+      "curl -fsSL https://tailscale.com/install.sh | sh",
+      "# Enable tailscaled service to start on boot",
+      "sudo systemctl enable tailscaled",
+      "# Store auth key for auto-connect on first boot",
+      "sudo mkdir -p /etc/tailscale",
+      "echo '${var.tailscale_auth_key}' | sudo tee /etc/tailscale/auth.key > /dev/null",
+      "sudo chmod 0600 /etc/tailscale/auth.key",
+      "# Create systemd service for auto-connect with SSH",
+      "sudo tee /etc/systemd/system/tailscale-autoconnect.service > /dev/null << 'SYSTEMD_EOF'",
+      "[Unit]",
+      "Description=Tailscale Autoconnect",
+      "After=tailscaled.service",
+      "Wants=tailscaled.service",
+      "",
+      "[Service]",
+      "Type=oneshot",
+      "ExecStart=/bin/bash -c '/usr/bin/tailscale up --ssh --authkey=$(cat /etc/tailscale/auth.key)'",
+      "RemainAfterExit=yes",
+      "",
+      "[Install]",
+      "WantedBy=multi-user.target",
+      "SYSTEMD_EOF",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable tailscale-autoconnect.service",
+      "# Verify installation",
+      "tailscale version",
+      "echo 'Tailscale installation complete!'"
     ]
   }
 
