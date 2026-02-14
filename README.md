@@ -8,7 +8,26 @@
 | Primary K3s | Main workloads | ArgoCD, Vault, Cert Manager, MetalLB |
 | docker-compose-03-k3s | ARC Runners | Tailscale Operator, ARC, Vault |
 
+## Architecture Diagrams
+
+### Infrastructure Overview
+![Infrastructure Overview](docs/images/infrastructure_overview.png)
+
+### Data & Logging Flow
+![Data & Logging Flow](docs/images/data_logging_flow.png)
+
+### GitOps & CI/CD Pipeline
+![GitOps & CI Pipeline](docs/images/gitops_ci_pipeline.png)
+
+> Diagrams generated with [Python Diagrams](https://diagrams.mingrammer.com/).
+> Regenerate:
+> ```bash
+> docker build -t homelab-diagrams docs/diagrams/
+> docker run --rm -e OUTPUT_DIR=/output -v "$(pwd)/docs/images:/output" homelab-diagrams
+> ```
+
 ## Table of Contents
+- [Architecture Diagrams](#architecture-diagrams)
 - [Prerequisites](#prerequisites)
 - [Tooling](#tooling)
   - [Continuous Deployment](#continuous-deployment)
