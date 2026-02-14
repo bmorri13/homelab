@@ -123,13 +123,13 @@ module "docker_compose_03" {
   vm_password    = var.vm_password
 }
 
-# Claude OpenClaw VM on proxmox2
-module "claude_openclaw" {
+# OpenClaw Claude 01 VM on proxmox2
+module "openclaw_claude_01" {
   source = "./modules/proxmox-vm"
 
-  vm_name        = "claude-openclaw"
-  description    = "Terraform-managed Ubuntu 24.04 VM for Claude OpenClaw"
-  tags           = ["terraform", "ubuntu", "claude-openclaw"]
+  vm_name        = "openclaw-claude-01"
+  description    = "Terraform-managed Ubuntu 24.04 VM for OpenClaw Claude on proxmox2"
+  tags           = ["terraform", "ubuntu", "openclaw-claude"]
   target_node    = "proxmox2"
   template_vm_id = 9001
   cores          = 2
