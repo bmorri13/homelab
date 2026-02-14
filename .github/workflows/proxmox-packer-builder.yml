@@ -94,6 +94,7 @@ jobs:
           packer validate \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
+            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
           echo "valid=true" >> $GITHUB_OUTPUT
@@ -259,6 +260,7 @@ jobs:
           packer build \
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
+            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
 
