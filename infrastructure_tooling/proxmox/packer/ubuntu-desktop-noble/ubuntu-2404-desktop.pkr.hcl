@@ -47,13 +47,13 @@ variable "vm_id" {
 variable "iso_file" {
   type        = string
   description = "The ISO file to use for installation"
-  default     = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+  default     = "local:iso/ubuntu-24.04.3-desktop-amd64.iso"
 }
 
 variable "iso_checksum" {
   type        = string
   description = "The checksum for the ISO file"
-  default     = "sha256:45f9ddf5b54cb51a0badcd27d633e587e6f176762d7cda49862095d92dfd2055"
+  default     = "none"
 }
 
 # VM Credentials
@@ -237,22 +237,14 @@ build {
     ]
   }
 
-  # Install Ubuntu Desktop (GNOME)
-  # expect_disconnect required: the systemd upgrade during ubuntu-desktop
-  # install restarts sshd, dropping the Packer SSH connection
+  # Configure Desktop environment (GNOME included from Desktop ISO)
   provisioner "shell" {
     inline = [
-      "echo 'Installing Ubuntu Desktop...'",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get update",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-desktop",
-      "# Set graphical target as default boot",
+      "echo 'Configuring desktop environment...'",
       "sudo systemctl set-default graphical.target",
-      "# Enable GDM display manager",
       "sudo systemctl enable gdm3",
-      "echo 'Ubuntu Desktop installation complete!'"
+      "echo 'Desktop configuration complete!'"
     ]
-    expect_disconnect = true
-    timeout           = "30m"
   }
 
   # Install Tailscale
