@@ -154,7 +154,7 @@ module "ubuntu_desktop_01" {
   tags           = ["terraform", "ubuntu", "desktop"]
   target_node    = "proxmox2"
   template_vm_id = 9004
-  cores          = 4
+  cores          = 2
   memory         = 8192
   disk_size      = "50"
 
