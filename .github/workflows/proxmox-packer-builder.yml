@@ -347,8 +347,8 @@ jobs:
           proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
 
           # VM template configuration (validation only, actual values set per-node in build)
-          vm_id        = "9003"
-          proxmox_node = "proxmox"
+          vm_id        = "9004"
+          proxmox_node = "proxmox2"
 
           # ISO and installation settings
           iso_file     = "local:iso/ubuntu-24.04.3-desktop-amd64.iso"
@@ -379,8 +379,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node: proxmox
-            vm_id: "9003"
           - node: proxmox2
             vm_id: "9004"
     steps:
