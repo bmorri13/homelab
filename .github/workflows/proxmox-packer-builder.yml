@@ -24,6 +24,7 @@ on:
 env:
   PACKER_VERSION: "1.10.0"
   WORKING_DIR: "infrastructure_tooling/proxmox/packer/ubuntu-server-noble"
+  DESKTOP_WORKING_DIR: "infrastructure_tooling/proxmox/packer/ubuntu-desktop-noble"
 
 jobs:
   validate:
@@ -292,3 +293,270 @@ jobs:
           echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The Ubuntu 24.04 template is now available on ${{ matrix.node }} and ready for use!" >> $GITHUB_STEP_SUMMARY
+
+  validate-desktop:
+    name: Validate Desktop Packer Template
+    runs-on: arc-k3s-homelab
+    container:
+      image: ubuntu:24.04
+    environment: prod
+    outputs:
+      template_valid: ${{ steps.validate.outputs.valid }}
+    steps:
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y unzip curl jq git
+
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Initialize Packer
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: packer init ubuntu-2404-desktop.pkr.hcl
+
+      - name: Generate Password Hash
+        id: gen_hash
+        run: |
+          PASSWORD="${{ secrets.SSH_PASSWORD }}"
+          HASH=$(openssl passwd -6 "$PASSWORD")
+          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Create Dynamic User-Data
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}/http
+        run: |
+          cp user-data user-data.backup
+          HASH='${{ steps.gen_hash.outputs.password_hash }}'
+          # Escape special characters for sed
+          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
+          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
+          echo "Updated user-data password hash"
+          grep "password:" user-data
+
+      - name: Create Variables File
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: |
+          cat > variables.pkrvars.hcl << EOF
+          # Proxmox connection details
+          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
+          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
+
+          # VM template configuration (validation only, actual values set per-node in build)
+          vm_id        = "9003"
+          proxmox_node = "proxmox"
+
+          # ISO and installation settings
+          iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
+          ssh_username = "ubuntu"
+          EOF
+
+      - name: Validate Packer Template
+        id: validate
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: |
+          packer validate \
+            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
+            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
+            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var-file="variables.pkrvars.hcl" \
+            ubuntu-2404-desktop.pkr.hcl
+          echo "valid=true" >> $GITHUB_OUTPUT
+
+  build-desktop:
+    name: Build Desktop Template (${{ matrix.node }})
+    runs-on: arc-k3s-homelab
+    container:
+      image: ubuntu:24.04
+    needs: validate-desktop
+    if: needs.validate-desktop.outputs.template_valid == 'true'
+    environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: proxmox
+            vm_id: "9003"
+          - node: proxmox2
+            vm_id: "9004"
+    steps:
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y unzip curl jq git openssl xorriso
+
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Check and Delete Existing Template
+        id: check_template
+        run: |
+          VM_ID="${{ matrix.vm_id }}"
+          NODE="${{ matrix.node }}"
+
+          echo "Checking if VM/template with ID $VM_ID exists..."
+
+          # Query cluster resources for all VMs and templates
+          CLUSTER_RESOURCES=$(curl -k -s \
+            -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+            "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
+
+          echo "API Response (first 500 chars):"
+          echo "$CLUSTER_RESOURCES" | head -c 500
+
+          # Validate JSON response
+          if ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
+            echo "ERROR: Invalid JSON response from Proxmox API"
+            echo "Full response: $CLUSTER_RESOURCES"
+            exit 1
+          fi
+
+          echo "Searching for VM ID $VM_ID in cluster resources..."
+
+          # Check if VM/template exists with this ID
+          VM_INFO=$(echo "$CLUSTER_RESOURCES" | jq -r "if .data then .data[] else .[] end | select(.vmid == $VM_ID)" 2>/dev/null || echo "")
+
+          if [ -n "$VM_INFO" ]; then
+            echo "Found VM/template with ID $VM_ID"
+            echo "VM Info: $VM_INFO"
+
+            # Check if it's a template
+            IS_TEMPLATE=$(echo "$VM_INFO" | jq -r '.template // 0')
+            VM_STATUS=$(echo "$VM_INFO" | jq -r '.status // "unknown"')
+            VM_NODE=$(echo "$VM_INFO" | jq -r '.node')
+
+            echo "Template: $IS_TEMPLATE"
+            echo "Status: $VM_STATUS"
+            echo "Node: $VM_NODE"
+
+            # Stop VM if running
+            if [ "$VM_STATUS" = "running" ]; then
+              echo "VM is running, stopping it first..."
+              curl -k -X POST \
+                -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+                "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID/status/stop"
+
+              echo "Waiting for VM to stop..."
+              sleep 15
+            fi
+
+            # Delete the VM/template (works for both)
+            echo "Deleting VM/template $VM_ID from node $VM_NODE..."
+            DELETE_RESPONSE=$(curl -k -s -X DELETE \
+              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+              "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID?purge=1")
+
+            echo "Delete response: $DELETE_RESPONSE"
+
+            # Wait for deletion to complete
+            echo "Waiting for deletion to complete..."
+            sleep 15
+
+            # Verify deletion
+            VERIFY_RESOURCES=$(curl -k -s \
+              -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
+              "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
+
+            VM_STILL_EXISTS=$(echo "$VERIFY_RESOURCES" | jq -r "if .data then .data[] else .[] end | select(.vmid == $VM_ID)" 2>/dev/null || echo "")
+
+            if [ -n "$VM_STILL_EXISTS" ]; then
+              echo "ERROR: VM $VM_ID still exists after deletion attempt!"
+              exit 1
+            else
+              echo "VM/template $VM_ID deleted successfully"
+            fi
+          else
+            echo "VM/template with ID $VM_ID does not exist"
+          fi
+
+          echo "Proceeding with build..."
+
+      - name: Initialize Packer
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: packer init ubuntu-2404-desktop.pkr.hcl
+
+      - name: Generate Password Hash
+        id: gen_hash_build
+        run: |
+          PASSWORD="${{ secrets.SSH_PASSWORD }}"
+          HASH=$(openssl passwd -6 "$PASSWORD")
+          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
+
+      - name: Create Dynamic User-Data
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}/http
+        run: |
+          cp user-data user-data.backup
+          HASH='${{ steps.gen_hash_build.outputs.password_hash }}'
+          # Escape special characters for sed
+          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
+          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
+          echo "Updated user-data password hash"
+          grep "password:" user-data
+
+      - name: Create Variables File
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: |
+          cat > variables.pkrvars.hcl << EOF
+          # Proxmox connection details
+          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
+          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
+
+          # VM template configuration
+          vm_id        = "${{ matrix.vm_id }}"
+          proxmox_node = "${{ matrix.node }}"
+
+          # ISO and installation settings
+          iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
+          ssh_username = "ubuntu"
+          EOF
+
+      - name: Build Packer Template
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        env:
+          PACKER_LOG: 1
+          PACKER_LOG_PATH: "/tmp/packer.log"
+        run: |
+          packer build \
+            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
+            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
+            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var-file="variables.pkrvars.hcl" \
+            ubuntu-2404-desktop.pkr.hcl
+
+      - name: Cleanup Temporary Files
+        if: always()
+        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
+        run: |
+          rm -f variables.pkrvars.hcl
+          if [ -f http/user-data.backup ]; then
+            mv http/user-data.backup http/user-data
+          fi
+
+      - name: Upload Packer Logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: packer-desktop-logs-${{ matrix.node }}-${{ github.run_number }}
+          path: /tmp/packer.log
+          retention-days: 7
+
+      - name: Template Build Summary
+        if: success()
+        run: |
+          echo "## Packer Desktop Build Summary (${{ matrix.node }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template ID:** ${{ matrix.vm_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Proxmox Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template Name:** ubuntu-2404-desktop-template" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Ubuntu 24.04 Desktop template is now available on ${{ matrix.node }} and ready for use!" >> $GITHUB_STEP_SUMMARY
