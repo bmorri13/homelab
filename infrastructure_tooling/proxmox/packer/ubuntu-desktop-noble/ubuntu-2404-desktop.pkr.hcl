@@ -238,6 +238,8 @@ build {
   }
 
   # Install Ubuntu Desktop (GNOME)
+  # expect_disconnect required: the systemd upgrade during ubuntu-desktop
+  # install restarts sshd, dropping the Packer SSH connection
   provisioner "shell" {
     inline = [
       "echo 'Installing Ubuntu Desktop...'",
@@ -249,7 +251,8 @@ build {
       "sudo systemctl enable gdm3",
       "echo 'Ubuntu Desktop installation complete!'"
     ]
-    timeout = "30m"
+    expect_disconnect = true
+    timeout           = "30m"
   }
 
   # Install Tailscale

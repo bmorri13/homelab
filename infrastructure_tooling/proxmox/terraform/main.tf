@@ -145,6 +145,28 @@ module "openclaw_claude_01" {
   vm_password    = var.vm_password
 }
 
+# Ubuntu Desktop 01 VM on proxmox2
+module "ubuntu_desktop_01" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "ubuntu-desktop-01"
+  description    = "Terraform-managed Ubuntu 24.04 Desktop VM on proxmox2"
+  tags           = ["terraform", "ubuntu", "desktop"]
+  target_node    = "proxmox2"
+  template_vm_id = 9004
+  cores          = 4
+  memory         = 8192
+  disk_size      = "50"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
+}
+
 # output "vm_ip_addresses" {
 #   description = "IP addresses of the created VMs"
 #   value = {
