@@ -75,12 +75,6 @@ variable "target_node_github_runner" {
   default     = null
 }
 
-variable "target_node_monitoring_01" {
-  description = "Proxmox node for monitoring VM (overrides target_node)"
-  type        = string
-  default     = null
-}
-
 variable "target_node_docker_compose_02" {
   description = "Proxmox node for docker-compose-02 VM (overrides target_node)"
   type        = string
