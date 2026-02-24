@@ -133,7 +133,7 @@ module "ubuntu_desktop_01" {
   target_node    = "proxmox2"
   template_vm_id = 9004
   cores          = 2
-  memory         = 8192
+  memory         = 6144
   disk_size      = "50"
 
   # Shared configuration
