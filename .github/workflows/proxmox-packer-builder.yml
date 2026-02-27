@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload Packer Logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: packer-logs-${{ matrix.node }}-${{ github.run_number }}
           path: /tmp/packer.log
@@ -541,7 +541,7 @@ jobs:
 
       - name: Upload Packer Logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: packer-desktop-logs-${{ matrix.node }}-${{ github.run_number }}
           path: /tmp/packer.log

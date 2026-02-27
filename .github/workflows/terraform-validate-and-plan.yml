@@ -104,7 +104,7 @@ jobs:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
       - name: Upload Plan Artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: terraform-plan-${{ github.run_number }}
           path: ${{ env.WORKING_DIR }}/tfplan
