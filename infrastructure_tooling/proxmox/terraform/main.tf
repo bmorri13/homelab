@@ -145,6 +145,28 @@ module "ubuntu_desktop_01" {
   vm_password    = var.vm_password
 }
 
+# Timesketch Tester VM
+module "timesketch_tester" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "timesketch-tester"
+  description    = "Terraform-managed Ubuntu 24.04 VM for Timesketch testing, use ubuntu@<ip-address> to login"
+  tags           = ["terraform", "ubuntu", "timesketch"]
+  target_node    = coalesce(var.target_node_timesketch_tester, var.target_node)
+  template_vm_id = 9002
+  cores          = 2
+  memory         = 8192
+  disk_size      = "100"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
+}
+
 # output "vm_ip_addresses" {
 #   description = "IP addresses of the created VMs"
 #   value = {
