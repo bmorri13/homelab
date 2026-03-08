@@ -153,7 +153,7 @@ module "timesketch_tester" {
   description    = "Terraform-managed Ubuntu 24.04 VM for Timesketch testing, use ubuntu@<ip-address> to login"
   tags           = ["terraform", "ubuntu", "timesketch"]
   target_node    = coalesce(var.target_node_timesketch_tester, var.target_node)
-  template_vm_id = 9002
+  template_vm_id = 9000
   cores          = 2
   memory         = 8192
   disk_size      = "100"
