@@ -80,9 +80,3 @@ variable "target_node_docker_compose_02" {
   type        = string
   default     = null
 }
-
-variable "target_node_timesketch_tester" {
-  description = "Proxmox node for Timesketch tester VM (overrides target_node)"
-  type        = string
-  default     = null
-}
