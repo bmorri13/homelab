@@ -116,6 +116,8 @@ jobs:
             vm_id: "9000"
           - node: proxmox2
             vm_id: "9001"
+          - node: proxmox3
+            vm_id: "9005"
     steps:
       - name: Install Dependencies
         run: |
@@ -381,6 +383,8 @@ jobs:
         include:
           - node: proxmox2
             vm_id: "9004"
+          - node: proxmox3
+            vm_id: "9006"
     steps:
       - name: Install Dependencies
         run: |

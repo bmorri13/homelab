@@ -15,6 +15,7 @@ proxmox_username = "root@pam!packer"  # Proxmox API user for Packer operations
 # GitHub Actions uses matrix strategy for multi-node builds:
 #   - proxmox  -> vm_id 9000
 #   - proxmox2 -> vm_id 9001
+#   - proxmox3 -> vm_id 9005
 vm_id        = "9000"  # VM template ID (must be unique across cluster)
 proxmox_node = "proxmox"  # Name of your Proxmox node
 
