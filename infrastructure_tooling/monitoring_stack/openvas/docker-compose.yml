@@ -56,16 +56,6 @@ services:
       - psql_data_vol:/var/lib/postgresql
       - psql_socket_vol:/var/run/postgresql
 
-  pg-gvm-migrator:
-    image: registry.community.greenbone.net/community/pg-gvm
-    restart: on-failure
-    volumes:
-      - psql_data_vol:/var/lib/postgresql
-      - psql_socket_vol:/var/run/postgresql
-    depends_on:
-      pg-gvm:
-        condition: service_started
-
   # ---------- Scanning Services ----------
   gvmd:
     image: registry.community.greenbone.net/community/gvmd
@@ -81,8 +71,8 @@ services:
       - ospd_openvas_socket_vol:/run/ospd
       - gpg_data_vol:/etc/openvas/gnupg
     depends_on:
-      pg-gvm-migrator:
-        condition: service_completed_successfully
+      pg-gvm:
+        condition: service_started
 
   ospd-openvas:
     image: registry.community.greenbone.net/community/ospd-openvas
@@ -138,12 +128,13 @@ services:
         condition: service_completed_successfully
 
   configure-openvas:
-    image: registry.community.greenbone.net/community/openvas-scanner
+    image: alpine:3
     volumes:
       - openvasd_vol:/etc/openvasd
     command: >
       /bin/sh -c "test -f /etc/openvasd/tls/server.pem && exit 0;
-      mkdir -p /etc/openvasd/tls;
+      apk add --no-cache openssl &&
+      mkdir -p /etc/openvasd/tls &&
       openssl req -x509 -newkey rsa:4096 -keyout /etc/openvasd/tls/key.pem
       -out /etc/openvasd/tls/server.pem -nodes -days 3650
       -subj '/CN=openvasd'"
