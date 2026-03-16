@@ -31,6 +31,7 @@ EDGE_ATTR = {
 COLORS = {
     "proxmox1": "#E8F5E9",
     "proxmox2": "#E3F2FD",
+    "proxmox3": "#FFF8E1",
     "k8s": "#FFF3E0",
     "monitoring": "#F3E5F5",
     "cicd": "#E0F7FA",
@@ -44,12 +45,15 @@ VMS = {
     "proxmox": [
         {"name": "splunk-docker-compose-mcp", "cores": 8, "mem_gb": 4, "disk_gb": 300, "template": 9002, "tags": ["splunk"]},
         {"name": "github-action-runner", "cores": 2, "mem_gb": 4, "disk_gb": 50, "template": 9002, "tags": ["github-runner"]},
-        {"name": "monitoring-docker-compose-01", "cores": 2, "mem_gb": 4, "disk_gb": 250, "template": 9000, "tags": ["monitoring"]},
         {"name": "docker-compose-02", "cores": 2, "mem_gb": 4, "disk_gb": 500, "template": 9000, "tags": ["docker-compose"]},
     ],
     "proxmox2": [
         {"name": "docker-compose-03", "cores": 2, "mem_gb": 4, "disk_gb": 250, "template": 9001, "tags": ["monitoring"]},
         {"name": "openclaw-claude-01", "cores": 2, "mem_gb": 4, "disk_gb": 250, "template": 9001, "tags": ["openclaw-claude"]},
+        {"name": "ubuntu-desktop-01", "cores": 2, "mem_gb": 6, "disk_gb": 50, "template": 9004, "tags": ["desktop"]},
+    ],
+    "proxmox3": [
+        {"name": "security-tooling-01", "cores": 4, "mem_gb": 16, "disk_gb": 300, "template": 9005, "tags": ["security"]},
     ],
 }
 
