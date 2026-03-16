@@ -76,6 +76,12 @@ variable "tailscale_auth_key" {
   sensitive   = true
 }
 
+variable "tailscale_tags" {
+  type        = string
+  description = "Comma-separated Tailscale ACL tags to advertise (e.g. tag:proxmox-bmo)"
+  default     = "tag:proxmox-bmo"
+}
+
 ##################################################################################
 # LOCALS
 ##################################################################################
@@ -251,7 +257,7 @@ build {
       "",
       "[Service]",
       "Type=oneshot",
-      "ExecStart=/bin/bash -c '/usr/bin/tailscale up --ssh --authkey=$(cat /etc/tailscale/auth.key)'",
+      "ExecStart=/bin/bash -c '/usr/bin/tailscale up --ssh --advertise-tags=${var.tailscale_tags} --authkey=$(cat /etc/tailscale/auth.key)'",
       "RemainAfterExit=yes",
       "",
       "[Install]",

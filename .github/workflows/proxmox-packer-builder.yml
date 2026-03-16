@@ -96,6 +96,7 @@ jobs:
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
           echo "valid=true" >> $GITHUB_OUTPUT
@@ -264,6 +265,7 @@ jobs:
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404.pkr.hcl
 
@@ -365,6 +367,7 @@ jobs:
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404-desktop.pkr.hcl
           echo "valid=true" >> $GITHUB_OUTPUT
@@ -531,6 +534,7 @@ jobs:
             -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
             -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
             -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
+            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
             -var-file="variables.pkrvars.hcl" \
             ubuntu-2404-desktop.pkr.hcl
 
