@@ -31,7 +31,7 @@ jobs:
     name: Validate Packer Template
     runs-on: arc-k3s-homelab
     container:
-      image: ubuntu:24.04
+      image: ubuntu:26.04
     environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
@@ -105,7 +105,7 @@ jobs:
     name: Build Template (${{ matrix.node }})
     runs-on: arc-k3s-homelab
     container:
-      image: ubuntu:24.04
+      image: ubuntu:26.04
     needs: validate
     if: needs.validate.outputs.template_valid == 'true'
     environment: prod
@@ -302,7 +302,7 @@ jobs:
     name: Validate Desktop Packer Template
     runs-on: arc-k3s-homelab
     container:
-      image: ubuntu:24.04
+      image: ubuntu:26.04
     environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
@@ -376,7 +376,7 @@ jobs:
     name: Build Desktop Template (${{ matrix.node }})
     runs-on: arc-k3s-homelab
     container:
-      image: ubuntu:24.04
+      image: ubuntu:26.04
     needs: validate-desktop
     if: needs.validate-desktop.outputs.template_valid == 'true'
     environment: prod
