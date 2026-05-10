@@ -54,6 +54,7 @@ VMS = {
     ],
     "proxmox3": [
         {"name": "security-tooling-01", "cores": 4, "mem_gb": 16, "disk_gb": 300, "template": 9005, "tags": ["security"]},
+        {"name": "k3s-01", "cores": 4, "mem_gb": 16, "disk_gb": 300, "template": 9005, "tags": ["k3s"]},
     ],
 }
 
