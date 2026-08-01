@@ -189,6 +189,28 @@ module "k3s_01" {
   vm_password    = var.vm_password
 }
 
+# SIEM Agent Test VM on proxmox3
+module "siem_agent_test_vm" {
+  source = "./modules/proxmox-vm"
+
+  vm_name        = "siem-agent-test-vm"
+  description    = "Terraform-managed Ubuntu 24.04 VM for SIEM agent testing on proxmox3"
+  tags           = ["terraform", "ubuntu", "siem"]
+  target_node    = "proxmox3"
+  template_vm_id = 9005
+  cores          = 8
+  memory         = 24576
+  disk_size      = "250"
+
+  # Shared configuration
+  disk_storage   = var.disk_storage
+  network_bridge = var.network_bridge
+  dns_servers    = var.dns_servers
+  dns_domain     = var.dns_domain
+  vm_username    = "ubuntu"
+  vm_password    = var.vm_password
+}
+
 # output "vm_ip_addresses" {
 #   description = "IP addresses of the created VMs"
 #   value = {
