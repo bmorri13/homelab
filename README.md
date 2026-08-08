@@ -154,6 +154,8 @@ That chart is the source of truth for `argocd-cm`. Settings added through the Ar
 | `resource.exclusions` for `AutoscalingListener`, `EphemeralRunner`, `EphemeralRunnerSet` | The ARC controller stamps `app.kubernetes.io/instance` onto the runtime objects it creates. ArgoCD reads that as its own tracking label, sees resources absent from Git, and prunes them; the controller recreates them, looping every reconcile. `AutoscalingRunnerSet` is deliberately **not** excluded — that one does come from Git. |
 | Ingress health override | Traefik runs hostNetwork with its Service disabled and there is no MetalLB, so `status.loadBalancer` never populates and ArgoCD's built-in check would leave every Ingress-owning app stuck at `Progressing`. |
 
+> **The two ARC apps must keep `prune: false`.** The exclusions above stop ArgoCD tracking the `actions.github.com` kinds, but the ARC controller also creates a **Role and RoleBinding** per listener — core RBAC kinds, so no `apiGroups`-based exclusion can cover them without excluding all RBAC cluster-wide. Those still carry the `app.kubernetes.io/instance` label, so re-enabling prune would resume deleting them and restart the loop. Expect `arc-runner-scaleset-k3s` and `arc-runner-daily-news-k3s` to sit permanently `OutOfSync / Healthy` — that is the intended steady state, not drift to fix.
+
 ### Vault 
 - In order to manage kubernetes secrets, we will deploy [Vault](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)
 >NOTE: This is just one example of a password manager, you can use local secrets, or other soultions such as AWS Secrets manager, GCP Secrets Manager, etc.
