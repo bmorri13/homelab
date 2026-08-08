@@ -23,7 +23,13 @@ gha-runner-scale-set:
           storage: 10Gi
 
 externalSecret:
-  enabled: false  # Secret already created manually
+  # Owns the shared arc-github-token secret for BOTH scale sets in arc-runners.
+  # Deliberately enabled here only -- arc_runner_scaleset_daily_news renders a
+  # secret of the same name in the same namespace, so enabling both would make
+  # two ArgoCD apps claim one resource.
+  # Was previously created by hand; that manual step was lost in the bmo-nuc ->
+  # k3s-01 migration and left every ARC runner dead from 2026-04-20.
+  enabled: true
   refreshInterval: "1h"
   secretStoreName: vault-backend
   vaultPath: kv/github-arc

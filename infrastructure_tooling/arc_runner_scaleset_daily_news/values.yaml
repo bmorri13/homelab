@@ -23,7 +23,13 @@ gha-runner-scale-set:
           storage: 10Gi
 
 externalSecret:
-  enabled: false  # Secret already created manually
+  # Intentionally disabled -- do not flip this to true.
+  # The arc_runner_scaleset chart creates the shared arc-github-token secret in
+  # this same namespace (arc-runners). Enabling it here too would make the
+  # arc-runner-scaleset-k3s and arc-runner-daily-news-k3s ArgoCD apps both own
+  # the same resource. This scale set consumes the secret that chart creates,
+  # so the PAT/App in Vault kv/github-arc must cover daily_news_app as well.
+  enabled: false
   refreshInterval: "1h"
   secretStoreName: vault-backend
   vaultPath: kv/github-arc
