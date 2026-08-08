@@ -600,8 +600,9 @@ kubectl create ns stirling-pdf
         - Cluster URL: `https://kubernetes.default.svc`
         - Namespace: `stirling-pdf`
 
-3. Once deployed, you can access Stirling PDF via the ingress configuration. Ensure you have deployed the [stirling-pdf-ingress.yaml](infrastructure_tooling/ingress_configs/stirling-pdf.yaml) configuration.
+3. The Ingress is part of the chart ([templates/ingress.yaml](infrastructure_tooling/stirling_pdf/templates/ingress.yaml)), so ArgoCD deploys it with the app — no separate manifest to apply by hand.
     - You should be able to access it at `https://stirling-pdf.bmosan.com`
+    - The Cloudflare record is an A record pointing at the k3s-01 node IP (DNS-only, not proxied), so this resolves from the home network only. The TLS cert is issued over DNS-01, which does not require public reachability.
 
 ## Proxmox Setup
 

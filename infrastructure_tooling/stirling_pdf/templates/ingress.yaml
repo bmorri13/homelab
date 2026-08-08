@@ -1,0 +1,38 @@
+{{- if .Values.ingress.enabled }}
+---
+# Exposes Stirling-PDF via Traefik at {{ .Values.ingress.host }}.
+#
+# Traefik on this cluster runs hostNetwork with hostPorts 80/443 bound directly to
+# the k3s-01 node IP, and its Service is disabled (service.enabled: false in the
+# traefik HelmChartConfig). There is no MetalLB here, so Ingress objects show a
+# blank ADDRESS -- that is cosmetic, routing still works. The Cloudflare A record
+# for this host points at the node IP directly (DNS-only, LAN-reachable).
+#
+# The certificate is issued by cert-manager over DNS-01 via Cloudflare, so it does
+# not require this host to be reachable from the public internet.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stirling-pdf-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypoints }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-stirling-pdf-chart
+                port:
+                  number: {{ .Values.ingress.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+{{- end }}
