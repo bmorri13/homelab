@@ -58,6 +58,9 @@ jobs:
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
           HASH=$(openssl passwd -6 "$PASSWORD")
+          # GitHub masks registered secrets, but NOT values derived from them.
+          # Without this, the crypt hash appears verbatim in the (public) run log.
+          echo "::add-mask::$HASH"
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
@@ -68,8 +71,15 @@ jobs:
           # Escape special characters for sed
           ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
           sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          echo "Updated user-data password hash"
-          grep "password:" user-data
+          # Assert the substitution worked WITHOUT printing the matched line. The
+          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
+          # echoing it would publish a crackable credential to the run log.
+          if grep -q 'password: "[$]6[$]' user-data; then
+            echo "user-data password hash substituted OK"
+          else
+            echo "::error::password hash substitution failed in user-data"
+            exit 1
+          fi
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
@@ -225,6 +235,9 @@ jobs:
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
           HASH=$(openssl passwd -6 "$PASSWORD")
+          # GitHub masks registered secrets, but NOT values derived from them.
+          # Without this, the crypt hash appears verbatim in the (public) run log.
+          echo "::add-mask::$HASH"
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
@@ -235,8 +248,15 @@ jobs:
           # Escape special characters for sed
           ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
           sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          echo "Updated user-data password hash"
-          grep "password:" user-data
+          # Assert the substitution worked WITHOUT printing the matched line. The
+          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
+          # echoing it would publish a crackable credential to the run log.
+          if grep -q 'password: "[$]6[$]' user-data; then
+            echo "user-data password hash substituted OK"
+          else
+            echo "::error::password hash substitution failed in user-data"
+            exit 1
+          fi
 
       - name: Create Variables File
         working-directory: ${{ env.WORKING_DIR }}
@@ -329,6 +349,9 @@ jobs:
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
           HASH=$(openssl passwd -6 "$PASSWORD")
+          # GitHub masks registered secrets, but NOT values derived from them.
+          # Without this, the crypt hash appears verbatim in the (public) run log.
+          echo "::add-mask::$HASH"
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
@@ -339,8 +362,15 @@ jobs:
           # Escape special characters for sed
           ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
           sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          echo "Updated user-data password hash"
-          grep "password:" user-data
+          # Assert the substitution worked WITHOUT printing the matched line. The
+          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
+          # echoing it would publish a crackable credential to the run log.
+          if grep -q 'password: "[$]6[$]' user-data; then
+            echo "user-data password hash substituted OK"
+          else
+            echo "::error::password hash substitution failed in user-data"
+            exit 1
+          fi
 
       - name: Create Variables File
         working-directory: ${{ env.DESKTOP_WORKING_DIR }}
@@ -494,6 +524,9 @@ jobs:
         run: |
           PASSWORD="${{ secrets.SSH_PASSWORD }}"
           HASH=$(openssl passwd -6 "$PASSWORD")
+          # GitHub masks registered secrets, but NOT values derived from them.
+          # Without this, the crypt hash appears verbatim in the (public) run log.
+          echo "::add-mask::$HASH"
           echo "password_hash=$HASH" >> $GITHUB_OUTPUT
 
       - name: Create Dynamic User-Data
@@ -504,8 +537,15 @@ jobs:
           # Escape special characters for sed
           ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
           sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          echo "Updated user-data password hash"
-          grep "password:" user-data
+          # Assert the substitution worked WITHOUT printing the matched line. The
+          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
+          # echoing it would publish a crackable credential to the run log.
+          if grep -q 'password: "[$]6[$]' user-data; then
+            echo "user-data password hash substituted OK"
+          else
+            echo "::error::password hash substitution failed in user-data"
+            exit 1
+          fi
 
       - name: Create Variables File
         working-directory: ${{ env.DESKTOP_WORKING_DIR }}
