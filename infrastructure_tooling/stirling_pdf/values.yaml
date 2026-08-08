@@ -1,0 +1,18 @@
+---
+# values.yaml
+## Wrapper-chart values for Stirling-PDF.
+## Values for the upstream chart itself would nest under a `stirling-pdf-chart:` key;
+## everything below configures only the resources in this chart's templates/.
+
+ingress:
+  enabled: true
+  host: stirling-pdf.bmosan.com
+  className: traefik
+  clusterIssuer: bmosan-cert
+  # Traefik entrypoint. Must be comma-separated with NO spaces -- Traefik does not
+  # trim the values, so "web, websecure" fails to match the websecure entrypoint.
+  # Port 80 has no redirect middleware configured on this cluster, so websecure only.
+  entrypoints: websecure
+  tlsSecretName: stirling-pdf-bmosan-com
+  # Upstream chart names its service <release>-stirling-pdf-chart.
+  servicePort: 8080
