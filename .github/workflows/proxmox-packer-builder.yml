@@ -42,7 +42,7 @@ jobs:
           apt-get install -y unzip curl jq git
 
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -130,7 +130,7 @@ jobs:
           apt-get install -y unzip curl jq git openssl xorriso
 
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -288,7 +288,7 @@ jobs:
 
       - name: Upload Packer Logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packer-logs-${{ matrix.node }}-${{ github.run_number }}
           path: /tmp/packer.log
@@ -321,7 +321,7 @@ jobs:
           apt-get install -y unzip curl jq git
 
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -407,7 +407,7 @@ jobs:
           apt-get install -y unzip curl jq git openssl xorriso
 
       - name: Checkout Repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -565,7 +565,7 @@ jobs:
 
       - name: Upload Packer Logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packer-desktop-logs-${{ matrix.node }}-${{ github.run_number }}
           path: /tmp/packer.log
