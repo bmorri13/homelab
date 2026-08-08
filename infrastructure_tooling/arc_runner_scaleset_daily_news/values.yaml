@@ -12,6 +12,19 @@ gha-runner-scale-set:
   # Runner configuration - use this as runs-on value
   runnerScaleSetName: "arc-k3s-daily-news"
 
+  # Keep one runner registered at all times so an ARC outage is visible from
+  # `kubectl -n arc-runners get pods` instead of going unnoticed. This scale set
+  # shares the arc-github-token secret with arc_runner_scaleset, so it was dead
+  # for the same four months (2026-04-20 to 2026-08-08) and for the same reason
+  # -- and nobody noticed, because with minRunners at the default 0 a dead
+  # listener and an idle scale set look identical.
+  #
+  # Note this does NOT bound the 24h queue ceiling, which is a GitHub-side limit
+  # on self-hosted jobs and is not configurable.
+  #
+  # maxRunners is deliberately left unset (unbounded), matching arc_runner_scaleset.
+  minRunners: 1
+
   # Container mode (recommended for K8s)
   containerMode:
     type: "kubernetes"
