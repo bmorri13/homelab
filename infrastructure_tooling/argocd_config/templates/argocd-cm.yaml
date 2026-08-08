@@ -1,0 +1,57 @@
+---
+# ArgoCD server configuration.
+#
+# IMPORTANT: this ConfigMap is the source of truth for ArgoCD's own settings on
+# k3s-01. ArgoCD adopts the existing (empty) argocd-cm on first sync. Any setting
+# added through the ArgoCD UI that is not represented here will be reverted on the
+# next sync -- add it to this file instead.
+#
+# The app.kubernetes.io/part-of: argocd label is REQUIRED; ArgoCD locates its own
+# config by that label and ignores a ConfigMap without it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+{{- if .Values.resourceExclusions.arc.enabled }}
+  # The ARC controller copies the AutoscalingRunnerSet's Helm labels -- including
+  # app.kubernetes.io/instance -- onto the AutoscalingListener, EphemeralRunnerSet
+  # and EphemeralRunner objects it creates at runtime. ArgoCD reads that label as
+  # its own tracking label, concludes it owns resources that do not exist in Git,
+  # and with prune enabled deletes them. The controller immediately recreates them,
+  # producing a delete/recreate loop every reconcile (~3 min) that churns the
+  # listener pods and intermittently delays job pickup.
+  #
+  # Excluding these three controller-managed kinds stops ArgoCD from tracking them
+  # at all. They will not appear in the ArgoCD UI -- that is intended; their
+  # lifecycle belongs to the ARC controller, not to Git.
+  #
+  # Do NOT exclude AutoscalingRunnerSet: that one IS rendered from Git by the
+  # arc_runner_scaleset charts and must stay under ArgoCD's control.
+  resource.exclusions: |
+    - apiGroups:
+        - actions.github.com
+      kinds:
+        - AutoscalingListener
+        - EphemeralRunner
+        - EphemeralRunnerSet
+      clusters:
+        - "*"
+{{- end }}
+{{- if .Values.resourceCustomizations.ingressHealth.enabled }}
+  # Traefik on this cluster runs hostNetwork with its Service disabled
+  # (service.enabled: false in the traefik HelmChartConfig) and there is no
+  # MetalLB, so Ingress objects never get status.loadBalancer.ingress populated.
+  # ArgoCD's built-in Ingress health check waits for exactly that field, so every
+  # app owning an Ingress would sit at "Progressing" forever. Treat a synced
+  # Ingress as Healthy instead.
+  resource.customizations.health.networking.k8s.io_Ingress: |
+    hs = {}
+    hs.status = "Healthy"
+    hs.message = "Ingress is served by hostNetwork Traefik; no loadBalancer status expected on this cluster"
+    return hs
+{{- end }}

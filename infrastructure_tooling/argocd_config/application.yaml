@@ -1,0 +1,31 @@
+---
+# Bootstrap manifest for the argocd-config app.
+#
+# There is no app-of-apps in this repo, so ArgoCD Applications are normally
+# created through the UI and exist nowhere in Git. This one is committed because
+# it configures ArgoCD itself -- losing it would silently reintroduce the ARC
+# prune loop it exists to prevent.
+#
+# Apply once:
+#   kubectl apply -f infrastructure_tooling/argocd_config/application.yaml
+#
+# prune is deliberately false: this app manages ArgoCD's own ConfigMap, and a
+# mis-render that pruned argocd-cm would take ArgoCD's configuration with it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-config
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab
+    targetRevision: HEAD
+    path: infrastructure_tooling/argocd_config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
