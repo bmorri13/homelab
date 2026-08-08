@@ -13,3 +13,14 @@ persistence:
   storageClass: ""  # leave empty to use default
   accessMode: ReadWriteOnce
   size: 1Gi
+
+ingress:
+  enabled: true
+  host: uptime-kuma.bmosan.com
+  className: traefik
+  clusterIssuer: bmosan-cert
+  # Traefik entrypoint. Must be comma-separated with NO spaces -- Traefik does not
+  # trim the values, so "web, websecure" fails to match the websecure entrypoint.
+  # Port 80 has no redirect middleware configured on this cluster, so websecure only.
+  entrypoints: websecure
+  tlsSecretName: uptime-kuma-bmosan-com
