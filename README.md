@@ -139,6 +139,21 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 - You are now ready to install your first apps!
 
+#### ArgoCD server configuration (`argocd-cm`)
+
+ArgoCD's own settings live in [`infrastructure_tooling/argocd_config`](infrastructure_tooling/argocd_config), deployed as the `argocd-config` app. Unlike every other app here, its Application manifest **is** committed — losing it would silently reintroduce the problems it prevents. Bootstrap it once:
+
+```bash
+kubectl apply -f infrastructure_tooling/argocd_config/application.yaml
+```
+
+That chart is the source of truth for `argocd-cm`. Settings added through the ArgoCD UI that are not in the chart get reverted on the next sync — put them in the chart instead. It currently configures two things:
+
+| Setting | Why |
+|---------|-----|
+| `resource.exclusions` for `AutoscalingListener`, `EphemeralRunner`, `EphemeralRunnerSet` | The ARC controller stamps `app.kubernetes.io/instance` onto the runtime objects it creates. ArgoCD reads that as its own tracking label, sees resources absent from Git, and prunes them; the controller recreates them, looping every reconcile. `AutoscalingRunnerSet` is deliberately **not** excluded — that one does come from Git. |
+| Ingress health override | Traefik runs hostNetwork with its Service disabled and there is no MetalLB, so `status.loadBalancer` never populates and ArgoCD's built-in check would leave every Ingress-owning app stuck at `Progressing`. |
+
 ### Vault 
 - In order to manage kubernetes secrets, we will deploy [Vault](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)
 >NOTE: This is just one example of a password manager, you can use local secrets, or other soultions such as AWS Secrets manager, GCP Secrets Manager, etc.

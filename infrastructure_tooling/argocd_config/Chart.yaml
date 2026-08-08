@@ -1,0 +1,6 @@
+apiVersion: v2
+name: argocd-config
+description: ArgoCD server configuration (argocd-cm) for the k3s-01 cluster
+type: application
+version: 0.1.0
+appVersion: "1"

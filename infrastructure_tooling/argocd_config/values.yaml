@@ -1,0 +1,15 @@
+---
+# values.yaml
+## Configuration for ArgoCD's own argocd-cm ConfigMap on k3s-01.
+
+resourceExclusions:
+  arc:
+    # Stop ArgoCD tracking (and pruning) the runtime objects the ARC controller
+    # creates. See templates/argocd-cm.yaml for the full explanation.
+    enabled: true
+
+resourceCustomizations:
+  ingressHealth:
+    # Report Ingress resources as Healthy despite an empty status.loadBalancer,
+    # which never populates on this cluster's hostNetwork Traefik setup.
+    enabled: true
