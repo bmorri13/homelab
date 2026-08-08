@@ -12,6 +12,20 @@ gha-runner-scale-set:
   # Runner configuration - use this as runs-on value
   runnerScaleSetName: "arc-k3s-homelab"
 
+  # Keep one runner registered at all times so an ARC outage is visible from
+  # `kubectl -n arc-runners get pods` instead of only surfacing 24h later as a
+  # queue-timeout cancellation. With minRunners at the default 0, a dead listener
+  # is indistinguishable from an idle one -- that is how the missing
+  # arc-github-token secret went unnoticed from 2026-04-20 to 2026-08-08.
+  #
+  # Note this does NOT bound the 24h queue ceiling, which is a GitHub-side limit
+  # on self-hosted jobs and is not configurable; timeout-minutes only starts
+  # counting once a runner picks the job up.
+  #
+  # maxRunners is deliberately left unset (unbounded). The packer workflow fans
+  # out to 5 concurrent build jobs and the node has ample headroom.
+  minRunners: 1
+
   # Container mode (recommended for K8s)
   containerMode:
     type: "kubernetes"
