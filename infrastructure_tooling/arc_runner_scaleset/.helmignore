@@ -1,0 +1,7 @@
+# claude-mem writes CLAUDE.md context stubs into chart dirs (including templates/).
+# They are gitignored so ArgoCD never sees them, but Helm tries to render any file
+# under templates/ and fails with:
+#   Error: YAML parse error on arc-runner-scaleset/templates/CLAUDE.md
+# Excluding them keeps `helm template` / `helm lint` usable locally.
+CLAUDE.md
+.claude/

@@ -505,7 +505,7 @@ The ARC runner uses Kubernetes container mode. Workflows must specify a containe
 ```yaml
 jobs:
   build:
-    runs-on: arc-k3s-runner
+    runs-on: arc-k3s-homelab
     container:
       image: ubuntu:24.04
     steps:
@@ -520,7 +520,7 @@ jobs:
 | Runner | Label | Type |
 |--------|-------|------|
 | VM Runner | `[self-hosted, Linux, X64]` | Persistent VM |
-| ARC Runner | `arc-k3s-runner` | Ephemeral K8s pods |
+| ARC Runner | `arc-k3s-homelab` | Ephemeral K8s pods |
 
 ## Applications
 ### Alex Printer tracker
@@ -722,7 +722,7 @@ The `infrastructure_tooling/proxmox/` directory contains comprehensive automatio
 
 | Workflow | Trigger | Runner | Description |
 |----------|---------|--------|-------------|
-| `proxmox-packer-builder.yml` | Manual, Schedule, Push | `arc-k3s-runner` | Builds templates on both nodes in parallel |
+| `proxmox-packer-builder.yml` | Manual, Schedule, Push | `arc-k3s-homelab` | Builds templates on both nodes in parallel |
 | `terraform-validate-and-plan.yml` | Manual, Push/PR | `self-hosted` | Validates and plans Terraform changes |
 | `terraform-apply.yml` | Manual | `self-hosted` | Applies Terraform configuration |
 
