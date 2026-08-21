@@ -1,6 +1,6 @@
 services:
   leader:
-    image: cribl/cribl@sha256:d60bfd6abb56451a261a68593236cf8b0355c0742c89f49ad2fcc817c40e5361
+    image: cribl/cribl@sha256:044f9a5fac9aa8b68aa3aefd0ab7fd7f99401af0d5ebddcf5b85916ed7675172
     container_name: cribl-leader
     environment:
       - CRIBL_DIST_MODE=master
@@ -13,7 +13,7 @@ services:
       - ./cribl-config:/opt/cribl/config-volume
 
   worker:
-    image: cribl/cribl@sha256:d60bfd6abb56451a261a68593236cf8b0355c0742c89f49ad2fcc817c40e5361
+    image: cribl/cribl@sha256:044f9a5fac9aa8b68aa3aefd0ab7fd7f99401af0d5ebddcf5b85916ed7675172
     container_name: cribl-worker
     depends_on:
       - leader
