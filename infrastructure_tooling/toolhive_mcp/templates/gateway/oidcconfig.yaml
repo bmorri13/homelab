@@ -31,3 +31,6 @@ spec:
     # (which reaches the API server over TLS), so nothing crosses the network
     # in plaintext. The operator's validator rejects http even for 127.0.0.1.
     insecureAllowHTTP: true
+    # The vMCP's HTTP client refuses private/loopback JWKS targets by default
+    # (SSRF guard); 127.0.0.1 is the sidecar.
+    jwksAllowPrivateIP: true
