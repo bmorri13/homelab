@@ -63,11 +63,11 @@ VMS = {
 K8S_CLUSTERS = {
     "Primary K3s": {
         "node": "Intel NUC (proxmox)",
-        "components": ["ArgoCD", "Vault", "Cert Manager", "MetalLB", "ESO", "Traefik"],
+        "components": ["ArgoCD", "Vault", "Cert Manager", "MetalLB", "ESO", "Traefik", "ARC Controller", "ARC Runners"],
     },
     "Secondary K3s": {
         "node": "docker-compose-03 VM (proxmox2)",
-        "components": ["Vault", "ESO", "Tailscale Operator", "ARC Controller", "ARC Runners"],
+        "components": ["Vault", "ESO", "Tailscale Operator"],
     },
 }
 
