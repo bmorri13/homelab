@@ -94,4 +94,32 @@ spec:
       ports:
         - {protocol: TCP, port: 4483}
 {{- end }}
+{{- range $name, $server := .Values.mcpServers }}
+{{- if and $server.enabled $server.egress }}
+---
+# Egress for MCP server {{ $name }}: only the destinations listed under
+# mcpServers.{{ $name }}.egress. Applies to both its proxy runner and server pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-{{ $name }}
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      toolhive-name: {{ $name }}
+  policyTypes: [Egress]
+  egress:
+    {{- range $server.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- range .ports }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
