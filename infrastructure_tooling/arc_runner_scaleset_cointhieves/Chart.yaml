@@ -1,0 +1,8 @@
+apiVersion: v2
+name: arc-runner-scaleset-cointhieves
+description: GitHub Actions Runner Scale Set for the cointhieves org
+version: 0.1.0
+dependencies:
+  - name: gha-runner-scale-set
+    version: "0.13.1"
+    repository: oci://ghcr.io/actions/actions-runner-controller-charts

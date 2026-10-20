@@ -8,5 +8,15 @@
       "/\\.yaml$/",
       "/\\.yml$/"
     ]
-  }
+  },
+  "packageRules": [
+    {
+      "description": "gha-runner-scale-set must match the ARC controller version (arc-controller-k3s, pinned in its ArgoCD app, which Renovate can't see), and the chart tgz is vendored under charts/, so a bare Chart.yaml bump is a no-op that only desyncs Chart.lock. Upgrade controller and scale sets together by hand.",
+      "matchPackageNames": [
+        "gha-runner-scale-set",
+        "gha-runner-scale-set-controller"
+      ],
+      "enabled": false
+    }
+  ]
 }
