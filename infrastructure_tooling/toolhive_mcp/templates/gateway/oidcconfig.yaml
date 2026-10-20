@@ -26,3 +26,8 @@ spec:
   inline:
     issuer: {{ .Values.auth.issuer }}
     jwksUrl: http://127.0.0.1:{{ .Values.auth.jwksProxy.port }}/openid/v1/jwks
+    # Only relaxes the https-scheme check on issuer/JWKS URLs. The issuer above
+    # is still https, and the JWKS hop is pod-local loopback to the sidecar
+    # (which reaches the API server over TLS), so nothing crosses the network
+    # in plaintext. The operator's validator rejects http even for 127.0.0.1.
+    insecureAllowHTTP: true
