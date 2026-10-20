@@ -21,6 +21,23 @@ toolhive-operator:
       # Disable the periodic update check and the usage metrics sent with it.
       - name: TOOLHIVE_SKIP_UPDATE_CHECK
         value: "true"
+    # Upstream rules plus core-group events: client-go's leader-election
+    # recorder writes v1 Events, which the upstream Role (events.k8s.io only)
+    # doesn't allow, so the operator logs "events is forbidden" at startup.
+    leaderElectionRole:
+      rules:
+        - apiGroups: [""]
+          resources: [configmaps]
+          verbs: [get, list, watch, create, update, patch, delete]
+        - apiGroups: [coordination.k8s.io]
+          resources: [leases]
+          verbs: [get, list, watch, create, update, patch, delete]
+        - apiGroups: [events.k8s.io]
+          resources: [events]
+          verbs: [create, patch]
+        - apiGroups: [""]
+          resources: [events]
+          verbs: [create, patch]
     # Upstream defaults, restated so the footprint is visible in this repo.
     resources:
       requests:

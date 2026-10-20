@@ -49,7 +49,12 @@ metadata:
   labels:
     {{- include "toolhive-mcp.labels" . | nindent 4 }}
 spec:
-  podSelector: {}
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          {{- toYaml .Values.networkPolicy.apiServerPodLabels | nindent 10 }}
   policyTypes: [Egress]
   egress:
     - to:
@@ -61,4 +66,32 @@ spec:
         {{- range .Values.networkPolicy.apiServer.ports }}
         - {protocol: TCP, port: {{ . }}}
         {{- end }}
+{{- with .Values.networkPolicy.healthCheckFromNamespaces }}
+---
+# Health probes from monitoring namespaces to the vMCP only.
+#
+# Traefik needs no rule here: it is hostNetwork, and kube-router always admits
+# traffic sourced from the pod's own node, so on this single-node cluster the
+# ingress path to the vMCP is "from the node" rather than a selectable peer.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-health-checks
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: virtualmcpserver
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: 4483}
+{{- end }}
 {{- end }}

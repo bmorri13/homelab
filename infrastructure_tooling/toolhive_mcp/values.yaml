@@ -41,6 +41,8 @@ mcpServers:
           memory: 768Mi
       podTemplateSpec:
         spec:
+          # Static docs search; it never talks to the Kubernetes API.
+          automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
             # Image USER is the name "app"; kubelet needs a numeric UID to
@@ -91,6 +93,13 @@ vmcp:
       memory: 256Mi
   # Tool name collisions across servers are resolved by prefixing with the
   # server name, e.g. toolhive-docs_query_docs.
+  # Audit events (who called which tool, outcome) as JSON on the vmcp
+  # container's stdout: kubectl -n toolhive-mcp logs deploy/homelab -c vmcp.
+  # Request/response bodies are left out; tool arguments can carry secrets.
+  audit:
+    enabled: true
+    includeRequestData: false
+    includeResponseData: false
   conflictResolution: prefix
   prefixFormat: "{workload}_"
   # The CRD only accepts logLevel "debug"; info is the implicit default.
@@ -170,3 +179,15 @@ networkPolicy:
       - 192.168.4.98/32
       - 10.43.0.1/32
     ports: [6443, 443]
+  # Pods that need the API: the vMCP (backend discovery, JWKS sidecar) and the
+  # proxy runners (they manage their MCP server's StatefulSet). MCP server
+  # pods themselves get no API egress unless added here.
+  apiServerPodLabels:
+    - virtualmcpserver
+    - mcpserver
+  # Namespaces allowed to reach the vMCP's unauthenticated /health on 4483
+  # (e.g. an uptime-kuma HTTP monitor on
+  # http://vmcp-homelab.toolhive-mcp.svc:4483/health). /mcp on the same port
+  # still requires a token.
+  healthCheckFromNamespaces:
+    - uptime-kuma

@@ -71,6 +71,10 @@ spec:
           resources:
             {{- toYaml .Values.auth.jwksProxy.resources | nindent 12 }}
   config:
+    {{- with .Values.vmcp.audit }}
+    audit:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     aggregation:
       conflictResolution: {{ .Values.vmcp.conflictResolution }}
       conflictResolutionConfig:
