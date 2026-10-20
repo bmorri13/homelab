@@ -1,0 +1,29 @@
+---
+# ArgoCD Application for the cointhieves org runner scale set.
+#
+# Committed (unlike the bmorri13 runner apps, which were created in the UI) so
+# the app can be recreated from Git. Apply once:
+#   kubectl apply -f infrastructure_tooling/arc_runner_scaleset_cointhieves/application.yaml
+#
+# prune stays off, matching the other runner apps: the ARC controller creates
+# objects in arc-runners that ArgoCD must never delete.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runner-cointhieves-k3s
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/arc_runner_scaleset_cointhieves
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

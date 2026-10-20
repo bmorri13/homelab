@@ -1,0 +1,67 @@
+gha-runner-scale-set:
+  # Org-level scale set: any cointhieves repo the runner group allows can target it.
+  # Public repos are blocked by the org runner group's default
+  # ("Allow public repositories" off), and should stay that way -- six
+  # cointhieves repos are public and a fork PR would otherwise run on this cluster.
+  githubConfigUrl: "https://github.com/cointhieves"
+
+  # GitHub App credentials (github_app_id, github_app_installation_id,
+  # github_app_private_key) synced from Vault kv/github-arc-cointhieves by the
+  # ExternalSecret in templates/. Org runners need the App's
+  # organization "Self-hosted runners: write" permission; the repo-scoped PAT in
+  # kv/github-arc can't register them.
+  githubConfigSecret: arc-github-app-cointhieves
+
+  # Controller service account (required for ArgoCD deployment)
+  controllerServiceAccount:
+    name: arc-controller-k3s-gha-rs-controller
+    namespace: arc-systems
+
+  # Runner configuration - use this as runs-on value
+  runnerScaleSetName: "arc-k3s-cointhieves"
+
+  # One warm runner so a dead listener is visible (see arc_runner_scaleset_daily_news).
+  # Bounded, unlike the bmorri13 scale sets: k3s-01 is a single 4-core node that
+  # also runs Vault and ArgoCD, and org repos can queue many jobs at once.
+  minRunners: 1
+  maxRunners: 3
+
+  # Container mode (recommended for K8s)
+  containerMode:
+    type: "kubernetes"
+    kubernetesModeWorkVolumeClaim:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "local-path"
+      resources:
+        requests:
+          storage: 10Gi
+
+  template:
+    spec:
+      containers:
+        - name: runner
+          image: ghcr.io/actions/actions-runner:latest
+          command: ["/home/runner/run.sh"]
+          env:
+            # Kubernetes mode defaults this to true, which fails any job without
+            # a `container:` key. Org workflows are mostly written for
+            # GitHub-hosted runners, so let plain jobs run in the runner pod.
+            # Jobs that do set `container:` still get their own workflow pod
+            # (those pods are not covered by the limits below).
+            - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+
+externalSecret:
+  # Owns arc-github-app-cointhieves only. Separate from the shared
+  # arc-github-token secret that arc_runner_scaleset creates.
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreName: vault-backend
+  vaultPath: kv/github-arc-cointhieves
