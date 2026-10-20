@@ -103,18 +103,6 @@ jobs:
         env:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
-      - name: Upload Plan Artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: terraform-plan-${{ github.run_number }}
-          path: ${{ env.WORKING_DIR }}/tfplan
-          retention-days: 7
-
-      - name: Cleanup Temporary Files
-        if: always()
-        working-directory: ${{ env.WORKING_DIR }}
-        run: rm -f terraform.tfvars
-
       - name: Plan Summary
         working-directory: ${{ env.WORKING_DIR }}
         run: |
@@ -123,3 +111,13 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           terraform show -no-color tfplan | head -n 100 >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      # The plan file embeds every input variable unredacted (Proxmox token
+      # secret, VM password), so it is never uploaded -- this repo is public
+      # and anyone signed in can download its artifacts. Review the plan in
+      # the job summary above (sensitive values are masked there). The runner
+      # is a persistent VM, so remove both files from the workspace.
+      - name: Cleanup Temporary Files
+        if: always()
+        working-directory: ${{ env.WORKING_DIR }}
+        run: rm -f terraform.tfvars tfplan
