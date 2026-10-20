@@ -1,13 +1,19 @@
 {{- /*
-Validates client bearer tokens as Kubernetes ServiceAccount JWTs. The operator
-resolves type kubernetesServiceAccount to: issuer + jwksUrl below, the pod's
-in-cluster CA bundle, and the pod's own SA token to authenticate the JWKS fetch
-(system:service-account-issuer-discovery allows any SA).
+Validates client bearer tokens as Kubernetes ServiceAccount JWTs signed by the
+k3s-01 API server.
 
-This accepts ANY ServiceAccount token in the cluster whose audience matches the
-vMCP's oidcConfigRef.audience; the serviceAccount/namespace fields of this CRD
-are not used for validation. Restricting callers to auth.clientNamespace is the
-Cedar policy's job (gateway/vmcp.yaml).
+Why inline + a localhost JWKS URL instead of type kubernetesServiceAccount:
+k3s only serves /openid/v1/jwks to authenticated callers, and at ToolHive
+v0.55.2 the vMCP's OIDC config has no field for a JWKS bearer token (that
+useClusterAuth plumbing only reaches MCPServer proxies). The vMCP pod therefore
+runs a jwks-proxy sidecar (gateway/vmcp.yaml): `kubectl proxy` on 127.0.0.1,
+authenticated with the pod's own ServiceAccount, accepting only GET on the
+JWKS path. The alternative, letting system:unauthenticated read the JWKS
+cluster-wide, would widen anonymous API access for every client of 6443.
+
+Any ServiceAccount token whose audience equals the vMCP's oidcConfigRef
+audience validates here; restricting callers to auth.clientNamespace is the
+Cedar policy's job.
 */}}
 apiVersion: toolhive.stacklok.dev/v1beta1
 kind: MCPOIDCConfig
@@ -16,8 +22,7 @@ metadata:
   labels:
     {{- include "toolhive-mcp.labels" . | nindent 4 }}
 spec:
-  type: kubernetesServiceAccount
-  kubernetesServiceAccount:
+  type: inline
+  inline:
     issuer: {{ .Values.auth.issuer }}
-    jwksUrl: {{ .Values.auth.jwksUrl }}
-    useClusterAuth: true
+    jwksUrl: http://127.0.0.1:{{ .Values.auth.jwksProxy.port }}/openid/v1/jwks

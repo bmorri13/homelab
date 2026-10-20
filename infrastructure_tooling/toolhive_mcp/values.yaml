@@ -105,9 +105,18 @@ auth:
   audience: https://mcp.bmosan.com
   # k3s's service-account issuer (kubectl get --raw /.well-known/openid-configuration).
   issuer: https://kubernetes.default.svc.cluster.local
-  # In-cluster JWKS endpoint, fetched with the vMCP pod's own token. Set
-  # explicitly because discovery advertises the node's DHCP-assigned IP.
-  jwksUrl: https://kubernetes.default.svc.cluster.local/openid/v1/jwks
+  # Sidecar in the vMCP pod that exposes the API server's JWKS on localhost
+  # (see templates/gateway/oidcconfig.yaml for why it exists).
+  jwksProxy:
+    image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+    port: 8001
+    resources:
+      requests:
+        cpu: 5m
+        memory: 24Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
   clientNamespace: toolhive-clients
   # One ServiceAccount per client machine. Removing one here stops new tokens
   # being minted for it; already-issued tokens stay valid until they expire.

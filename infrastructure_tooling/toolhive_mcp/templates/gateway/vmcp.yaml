@@ -46,6 +46,30 @@ spec:
         - name: vmcp
           resources:
             {{- toYaml .Values.vmcp.resources | nindent 12 }}
+        # Serves the API server's JWKS on localhost for token validation; see
+        # gateway/oidcconfig.yaml for why. Only GET /openid/v1/jwks is proxied.
+        - name: jwks-proxy
+          image: {{ .Values.auth.jwksProxy.image }}
+          args:
+            - proxy
+            - --address=127.0.0.1
+            - --port={{ .Values.auth.jwksProxy.port }}
+            - --accept-hosts=^(localhost|127\.0\.0\.1)$
+            - --accept-paths=^/openid/v1/jwks$
+            - --reject-methods=^(POST|PUT|PATCH|DELETE|CONNECT|OPTIONS)$
+          securityContext:
+            runAsNonRoot: true
+            # Image default user is root.
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            {{- toYaml .Values.auth.jwksProxy.resources | nindent 12 }}
   config:
     aggregation:
       conflictResolution: {{ .Values.vmcp.conflictResolution }}
