@@ -17,7 +17,9 @@ vMCP "homelab"  (VirtualMCPServer, Service vmcp-homelab:4483, path /mcp)
   ├─ audit: one JSON event per request on stdout
   └─ aggregates every MCPServer in MCPGroup "homelab", tools prefixed "<server>_"
         ▼
-MCPServer toolhive-docs (proxy runner → server pod), more added via values.yaml
+MCPServer toolhive-docs (proxy runner → server pod)
+MCPRemoteProxy excalidraw (proxy pod → https://mcp.excalidraw.com/mcp)
+more added via values.yaml
 ```
 
 ## Layout
@@ -34,7 +36,7 @@ Three ArgoCD Applications, one chart directory each (the repo's usual
 
 `toolhive_mcp/templates/` is split by concern:
 
-- `mcp-servers/` — MCPGroup, one MCPServer per `values.mcpServers` entry, Vault ExternalSecrets
+- `mcp-servers/` — MCPGroup, one MCPServer per `values.mcpServers` entry, one MCPRemoteProxy (+ its egress policy) per `values.remoteServers` entry, Vault ExternalSecrets
 - `gateway/` — VirtualMCPServer (aggregation, Cedar policies, audit, JWKS sidecar) and MCPOIDCConfig
 - `ingress/` — Traefik Ingress + tailnet-only Middleware
 - `security/` — client ServiceAccounts (namespace `toolhive-clients`) and NetworkPolicies
@@ -297,6 +299,36 @@ Checklist for each new server:
 5. Remote (SaaS) MCP servers join the same group via `MCPRemoteProxy` or
    `MCPServerEntry` (both take a `groupRef`).
 
+## Adding a remote (hosted) MCP server
+
+For servers someone else hosts (ToolHive registry entries of type `remote`,
+e.g. `thv registry info <name>` shows a URL), add an entry under
+`remoteServers` instead. It becomes an `MCPRemoteProxy`: a small proxy pod
+that makes the outbound HTTPS call, so only that pod gets internet egress
+(public addresses on 443; LAN, tailnet and cluster ranges are excluded).
+
+```yaml
+remoteServers:
+  excalidraw:
+    enabled: true
+    spec:
+      remoteUrl: https://mcp.excalidraw.com/mcp
+      transport: streamable-http
+      proxyPort: 8080
+```
+
+Credentials for a remote server go in `spec.headerForward.addHeadersFromSecret`
+(from an `externalSecrets` entry), never `addPlaintextHeaders`. Check the
+remote's tool annotations (`tools/list`) and allowlist accordingly.
+
+**Excalidraw** (added from the ToolHive registry entry
+`io.github.stacklok/excalidraw-remote`): `read_me` and `create_view` are
+annotated read-only; `read_checkpoint` and `save_checkpoint` are allowlisted
+(diagram edit state). `export_to_excalidraw` is **blocked**, because it
+uploads the diagram to a public excalidraw.com link; add
+`excalidraw_export_to_excalidraw` to `authz.readOnlyTools` to enable it.
+Diagram content is sent to Excalidraw's hosted service either way.
+
 ## Removing / updating / stopping a server
 
 - **Remove:** delete its `mcpServers` entry (and any `externalSecrets` entry)
@@ -371,6 +403,7 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 | vMCP (`homelab`) incl. jwks-proxy | 55m / 600m | 88Mi / 320Mi | ~2m, ~30Mi |
 | toolhive-docs proxy runner | operator default | operator default | ~2m, ~14Mi |
 | toolhive-docs server | 50m / 500m | 256Mi / 768Mi | ~5m idle, ~290Mi (embedded vector DB) |
+| excalidraw remote proxy | 10m / 200m | 32Mi / 128Mi | ~1m, ~15Mi |
 
 ## Upgrading ToolHive
 
