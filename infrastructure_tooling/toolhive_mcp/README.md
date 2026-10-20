@@ -100,7 +100,7 @@ synced dotfile.
 
 All examples assume `TOOLHIVE_MCP_TOKEN` is set in the environment the agent
 starts from. **Tested** means connected, tools listed and a tool called from
-that client against this gateway. **Example** means taken from the client's
+that client against `https://mcp.bmosan.com/mcp` over the tailnet. **Example** means taken from the client's
 official docs or source but not run here.
 
 ### Claude Code — tested (v2.1.303)
@@ -127,7 +127,13 @@ To keep only a variable reference on disk, use `.mcp.json` (project) instead:
 }
 ```
 
-### OpenAI Codex CLI — tested (0.163.0)
+### OpenAI Codex CLI — connection tested (0.163.0)
+
+Verified against the gateway: authenticates via `bearer_token_env_var`,
+initializes, and lists tools (audit log shows `codex-mcp-client/0.163.0`).
+A tool *call* couldn't be completed on the test Mac because Codex's local
+code-mode host timed out for every tool, including plain shell commands, with
+no MCP configured. That is a local Codex fault, not the gateway.
 
 ```bash
 codex mcp add toolhive --url https://mcp.bmosan.com/mcp --bearer-token-env-var TOOLHIVE_MCP_TOKEN
