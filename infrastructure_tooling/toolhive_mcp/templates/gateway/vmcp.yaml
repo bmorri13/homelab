@@ -51,5 +51,7 @@ spec:
       conflictResolution: {{ .Values.vmcp.conflictResolution }}
       conflictResolutionConfig:
         prefixFormat: {{ .Values.vmcp.prefixFormat | quote }}
+    {{- if .Values.vmcp.debugLogging }}
     operational:
-      logLevel: {{ .Values.vmcp.logLevel }}
+      logLevel: debug
+    {{- end }}

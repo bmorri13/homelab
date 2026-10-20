@@ -93,7 +93,8 @@ vmcp:
   # server name, e.g. toolhive-docs_query_docs.
   conflictResolution: prefix
   prefixFormat: "{workload}_"
-  logLevel: info
+  # The CRD only accepts logLevel "debug"; info is the implicit default.
+  debugLogging: false
 
 # ---------------------------------------------------------------------------
 # Authentication: clients present a Kubernetes ServiceAccount token (a JWT
