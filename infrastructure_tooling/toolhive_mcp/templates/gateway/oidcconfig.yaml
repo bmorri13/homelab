@@ -1,0 +1,23 @@
+{{- /*
+Validates client bearer tokens as Kubernetes ServiceAccount JWTs. The operator
+resolves type kubernetesServiceAccount to: issuer + jwksUrl below, the pod's
+in-cluster CA bundle, and the pod's own SA token to authenticate the JWKS fetch
+(system:service-account-issuer-discovery allows any SA).
+
+This accepts ANY ServiceAccount token in the cluster whose audience matches the
+vMCP's oidcConfigRef.audience; the serviceAccount/namespace fields of this CRD
+are not used for validation. Restricting callers to auth.clientNamespace is the
+Cedar policy's job (gateway/vmcp.yaml).
+*/}}
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPOIDCConfig
+metadata:
+  name: k3s-serviceaccounts
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+spec:
+  type: kubernetesServiceAccount
+  kubernetesServiceAccount:
+    issuer: {{ .Values.auth.issuer }}
+    jwksUrl: {{ .Values.auth.jwksUrl }}
+    useClusterAuth: true

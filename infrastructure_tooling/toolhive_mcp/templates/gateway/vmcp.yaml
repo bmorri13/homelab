@@ -1,0 +1,55 @@
+{{- $clientPrefix := printf "system:serviceaccount:%s:" .Values.auth.clientNamespace }}
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: VirtualMCPServer
+metadata:
+  name: {{ .Values.vmcp.name }}
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+spec:
+  groupRef:
+    name: {{ .Values.group.name }}
+  replicas: {{ .Values.vmcp.replicas }}
+  serviceType: ClusterIP
+  incomingAuth:
+    type: oidc
+    oidcConfigRef:
+      name: k3s-serviceaccounts
+      audience: {{ .Values.auth.audience }}
+      resourceUrl: https://{{ .Values.ingress.host }}/mcp
+    authzConfig:
+      type: inline
+      inline:
+        policies:
+          # Only machine ServiceAccounts in {{ .Values.auth.clientNamespace }}.
+          # Every other identity (including valid tokens from other namespaces)
+          # matches no permit and is denied by Cedar's default-deny.
+          - |-
+            permit(principal, action in [Action::"list_tools", Action::"list_prompts", Action::"list_resources"], resource)
+            when { principal.claim_sub like "{{ $clientPrefix }}*" };
+          # Read-only tools: annotated by the server, or vouched for in values.
+          - |-
+            permit(principal, action == Action::"call_tool", resource)
+            when { principal.claim_sub like "{{ $clientPrefix }}*" && resource has readOnlyHint && resource.readOnlyHint == true };
+          {{- range .Values.authz.readOnlyTools }}
+          - |-
+            permit(principal, action == Action::"call_tool", resource == Tool::{{ . | quote }})
+            when { principal.claim_sub like "{{ $clientPrefix }}*" };
+          {{- end }}
+          {{- range .Values.authz.extraPolicies }}
+          - {{ . | quote }}
+          {{- end }}
+  outgoingAuth:
+    source: discovered
+  podTemplateSpec:
+    spec:
+      containers:
+        - name: vmcp
+          resources:
+            {{- toYaml .Values.vmcp.resources | nindent 12 }}
+  config:
+    aggregation:
+      conflictResolution: {{ .Values.vmcp.conflictResolution }}
+      conflictResolutionConfig:
+        prefixFormat: {{ .Values.vmcp.prefixFormat | quote }}
+    operational:
+      logLevel: {{ .Values.vmcp.logLevel }}

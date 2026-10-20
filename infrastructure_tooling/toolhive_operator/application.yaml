@@ -1,0 +1,29 @@
+---
+# ArgoCD Application for the ToolHive operator. Apply once, after toolhive-crds
+# is Healthy:
+#   kubectl apply -f infrastructure_tooling/toolhive_operator/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toolhive-operator
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/toolhive_operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest

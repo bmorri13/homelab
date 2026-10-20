@@ -1,0 +1,162 @@
+# values.yaml
+## ToolHive MCP servers + the vMCP gateway at https://mcp.bmosan.com/mcp.
+## Installed into namespace toolhive-mcp (created by toolhive_operator).
+## See README.md for adding/removing servers and minting client tokens.
+
+# MCPGroup every server below joins. The vMCP aggregates everything in it.
+group:
+  name: homelab
+  description: Homelab MCP servers aggregated behind mcp.bmosan.com
+
+# ---------------------------------------------------------------------------
+# MCP servers. Each key becomes an MCPServer named <key> joined to the group;
+# `spec` is passed through verbatim (toolhive.stacklok.dev/v1beta1 MCPServer),
+# so any field from the CRD works. groupRef is added automatically.
+#
+# Credentials: never put them in `env`. Create an ExternalSecret under
+# `externalSecrets` below and reference it from `spec.secrets`.
+# ---------------------------------------------------------------------------
+mcpServers:
+  toolhive-docs:
+    enabled: true
+    # Searches the ToolHive documentation. No credentials, no egress needed
+    # (its vector DB is baked into the image), so it is a safe first backend.
+    spec:
+      image: ghcr.io/stackloklabs/toolhive-doc-mcp:v0.0.21@sha256:4158e98cd76d58a068ab6cf0629e1261f05331cf61d51cafdaf20b59352ad9af
+      transport: streamable-http
+      proxyPort: 8080
+      mcpPort: 8080
+      env:
+        # Don't re-crawl docs.stacklok.com at runtime; use the prebuilt DB.
+        - name: REFRESH_ENABLED
+          value: "false"
+        - name: OTEL_ENABLED
+          value: "false"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 768Mi
+      podTemplateSpec:
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            # Image USER is the name "app"; kubelet needs a numeric UID to
+            # verify runAsNonRoot. 1000 is the uid from the image's Dockerfile.
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mcp
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+
+# ExternalSecrets pulled from Vault (ClusterSecretStore vault-backend) into
+# toolhive-mcp, for MCP servers to reference via spec.secrets. Example:
+#   github-mcp:
+#     vaultPath: kv/toolhive-github-mcp
+#     keys: [token]
+externalSecrets:
+  secretStoreName: vault-backend
+  refreshInterval: 1h
+  secrets: {}
+
+# ---------------------------------------------------------------------------
+# vMCP gateway
+# ---------------------------------------------------------------------------
+vmcp:
+  name: homelab
+  # Single replica: >1 requires Redis session storage (MCP sessions are
+  # pinned to the pod that created them).
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Tool name collisions across servers are resolved by prefixing with the
+  # server name, e.g. toolhive-docs_query_docs.
+  conflictResolution: prefix
+  prefixFormat: "{workload}_"
+  logLevel: info
+
+# ---------------------------------------------------------------------------
+# Authentication: clients present a Kubernetes ServiceAccount token (a JWT
+# signed by the k3s-01 API server) minted for one ServiceAccount per machine
+# in clientNamespace, with `audience` below. See README "Client tokens".
+# ---------------------------------------------------------------------------
+auth:
+  audience: https://mcp.bmosan.com
+  # k3s's service-account issuer (kubectl get --raw /.well-known/openid-configuration).
+  issuer: https://kubernetes.default.svc.cluster.local
+  # In-cluster JWKS endpoint, fetched with the vMCP pod's own token. Set
+  # explicitly because discovery advertises the node's DHCP-assigned IP.
+  jwksUrl: https://kubernetes.default.svc.cluster.local/openid/v1/jwks
+  clientNamespace: toolhive-clients
+  # One ServiceAccount per client machine. Removing one here stops new tokens
+  # being minted for it; already-issued tokens stay valid until they expire.
+  clients:
+    - macbook-air
+    - windows-desktop
+    - linux-vm
+
+# ---------------------------------------------------------------------------
+# Authorization (Cedar, enforced by the vMCP on every list/call).
+# Principal is Client::"<token sub>", resource is Tool::"<aggregated tool name>".
+# Default stance: only ServiceAccounts in auth.clientNamespace, and only tools
+# that declare readOnlyHint=true or are explicitly listed in readOnlyTools.
+# ---------------------------------------------------------------------------
+authz:
+  # Tools that don't carry an MCP readOnlyHint annotation but are known to be
+  # read-only. Use the aggregated (prefixed) name.
+  readOnlyTools:
+    - toolhive-docs_query_docs
+    - toolhive-docs_get_chunk
+  # Extra raw Cedar policies, appended verbatim. Use these to grant write
+  # tools to specific clients, e.g.:
+  #   - 'permit(principal == Client::"system:serviceaccount:toolhive-clients:macbook-air", action == Action::"call_tool", resource == Tool::"github_create_issue");'
+  extraPolicies: []
+
+# ---------------------------------------------------------------------------
+# Ingress: Traefik (hostNetwork on k3s-01), tailnet-only.
+# ---------------------------------------------------------------------------
+ingress:
+  host: mcp.bmosan.com
+  className: traefik
+  entrypoints: websecure
+  clusterIssuer: bmosan-cert
+  tlsSecretName: mcp-bmosan-com-tls
+  # Only Tailscale (CGNAT + ULA) source addresses. Traefik is hostNetwork so it
+  # sees the real client IP; LAN clients hitting the node IP get 403.
+  sourceRanges:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy (enforced by k3s's embedded kube-router).
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  # The vMCP and proxy runners talk to the API server (JWKS, MCPGroup
+  # discovery). After kube-proxy DNAT the ClusterIP 10.43.0.1:443 becomes the
+  # node's own address on 6443, so that is what egress has to allow.
+  apiServer:
+    cidrs:
+      - 192.168.4.98/32
+      - 10.43.0.1/32
+    ports: [6443, 443]

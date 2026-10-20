@@ -1,0 +1,8 @@
+apiVersion: v2
+name: toolhive-operator
+description: ToolHive Kubernetes operator, namespace-scoped to toolhive-mcp. Must stay in lockstep with toolhive_crds.
+version: 0.1.0
+dependencies:
+  - name: toolhive-operator
+    version: "0.55.2"
+    repository: oci://ghcr.io/stacklok/toolhive

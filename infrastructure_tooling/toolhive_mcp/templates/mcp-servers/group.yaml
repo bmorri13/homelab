@@ -1,0 +1,8 @@
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPGroup
+metadata:
+  name: {{ .Values.group.name }}
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+spec:
+  description: {{ .Values.group.description | quote }}

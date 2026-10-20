@@ -1,0 +1,8 @@
+apiVersion: v2
+name: toolhive-crds
+description: ToolHive operator CRDs (toolhive.stacklok.dev). Must stay in lockstep with toolhive_operator.
+version: 0.1.0
+dependencies:
+  - name: toolhive-operator-crds
+    version: "0.55.2"
+    repository: oci://ghcr.io/stacklok/toolhive
