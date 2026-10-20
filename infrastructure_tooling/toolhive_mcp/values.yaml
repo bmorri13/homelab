@@ -66,6 +66,29 @@ mcpServers:
               emptyDir:
                 sizeLimit: 256Mi
 
+# ---------------------------------------------------------------------------
+# Remote (hosted) MCP servers. Each key becomes an MCPRemoteProxy named <key>
+# in the group; `spec` is passed through verbatim (v1beta1 MCPRemoteProxy).
+# The proxy pod gets HTTPS egress to public addresses only.
+# ---------------------------------------------------------------------------
+remoteServers:
+  excalidraw:
+    enabled: true
+    # Excalidraw's official hosted server (ToolHive registry entry
+    # io.github.stacklok/excalidraw-remote). No credentials. Diagram content
+    # is sent to Excalidraw's servers, as with any hosted MCP.
+    spec:
+      remoteUrl: https://mcp.excalidraw.com/mcp
+      transport: streamable-http
+      proxyPort: 8080
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
 # ExternalSecrets pulled from Vault (ClusterSecretStore vault-backend) into
 # toolhive-mcp, for MCP servers to reference via spec.secrets. Example:
 #   github-mcp:
@@ -146,6 +169,13 @@ authz:
   readOnlyTools:
     - toolhive-docs_query_docs
     - toolhive-docs_get_chunk
+    # excalidraw_read_me and excalidraw_create_view carry readOnlyHint and
+    # are allowed automatically. Checkpoints hold a diagram's edit state on
+    # Excalidraw's side and are part of normal create/edit/restore use.
+    - excalidraw_read_checkpoint
+    - excalidraw_save_checkpoint
+    # Deliberately NOT allowed: excalidraw_export_to_excalidraw uploads the
+    # diagram to a public excalidraw.com share link. Add it here to enable.
   # Extra raw Cedar policies, appended verbatim. Use these to grant write
   # tools to specific clients, e.g.:
   #   - 'permit(principal == Client::"system:serviceaccount:toolhive-clients:macbook-air", action == Action::"call_tool", resource == Tool::"github_create_issue");'
