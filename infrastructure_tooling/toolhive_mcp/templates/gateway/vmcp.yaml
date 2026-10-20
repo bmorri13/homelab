@@ -1,4 +1,15 @@
-{{- $clientPrefix := printf "system:serviceaccount:%s:" .Values.auth.clientNamespace }}
+{{- /*
+Cedar "allowed clients" condition: the token's sub must be one of the
+ServiceAccounts listed in auth.clients. Matching the exact list (rather than a
+namespace prefix) is what makes removal a revocation: JWKS validation can't see
+that a ServiceAccount was deleted, but the next sync drops it from this set and
+every token minted for it is denied from then on.
+*/}}
+{{- $subs := list }}
+{{- range .Values.auth.clients }}
+{{- $subs = append $subs (printf "system:serviceaccount:%s:%s" $.Values.auth.clientNamespace .) }}
+{{- end }}
+{{- $allowed := printf "%s.contains(principal.claim_sub)" ($subs | toJson) }}
 apiVersion: toolhive.stacklok.dev/v1beta1
 kind: VirtualMCPServer
 metadata:
@@ -20,20 +31,21 @@ spec:
       type: inline
       inline:
         policies:
-          # Only machine ServiceAccounts in {{ .Values.auth.clientNamespace }}.
-          # Every other identity (including valid tokens from other namespaces)
-          # matches no permit and is denied by Cedar's default-deny.
+          # Only the machine ServiceAccounts in auth.clients. Every other
+          # identity (including valid tokens from other namespaces or from
+          # removed clients) matches no permit and is denied by Cedar's
+          # default-deny.
           - |-
             permit(principal, action in [Action::"list_tools", Action::"list_prompts", Action::"list_resources"], resource)
-            when { principal.claim_sub like "{{ $clientPrefix }}*" };
+            when { principal has claim_sub && {{ $allowed }} };
           # Read-only tools: annotated by the server, or vouched for in values.
           - |-
             permit(principal, action == Action::"call_tool", resource)
-            when { principal.claim_sub like "{{ $clientPrefix }}*" && resource has readOnlyHint && resource.readOnlyHint == true };
+            when { principal has claim_sub && {{ $allowed }} && resource has readOnlyHint && resource.readOnlyHint == true };
           {{- range .Values.authz.readOnlyTools }}
           - |-
             permit(principal, action == Action::"call_tool", resource == Tool::{{ . | quote }})
-            when { principal.claim_sub like "{{ $clientPrefix }}*" };
+            when { principal has claim_sub && {{ $allowed }} };
           {{- end }}
           {{- range .Values.authz.extraPolicies }}
           - {{ . | quote }}
