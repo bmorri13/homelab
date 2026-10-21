@@ -1,0 +1,59 @@
+# Splunk Enterprise (developer license) - homelab logging box on security-tooling-01.
+# Data and config live on the host under ${SPLUNK_DATA_DIR} and survive container
+# recreation and image upgrades. Use scripts/deploy.sh rather than a bare `up`.
+services:
+  splunk:
+    image: splunk/splunk:10.6.1@sha256:2a7cf9d2e8a2226773a9fac95b5e0e2cc8752496abfb134a21bdf8f67c9ee44d
+    container_name: splunk
+    hostname: splunk-homelab
+    restart: unless-stopped
+    environment:
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_START_ARGS=--accept-license
+      # Only applied on first start; change it in the UI afterwards.
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD:?set SPLUNK_PASSWORD in .env}
+      - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN:?set SPLUNK_HEC_TOKEN in .env}
+      - SPLUNK_HTTP_ENABLESSL=true
+    ports:
+      - "8000:8000"   # Splunk Web (HTTPS, self-signed)
+      - "8088:8088"   # HTTP Event Collector (HTTPS)
+      - "8089:8089"   # Management / REST API
+      - "9997:9997"   # Universal Forwarder receiving
+    volumes:
+      - splunk-etc:/opt/splunk/etc
+      - splunk-var:/opt/splunk/var
+      # Parent of the Unraid NFS mount. rslave lets an NFS mount that comes up
+      # after the container started still propagate in; archive_bucket.sh only
+      # archives when the share's marker file is visible.
+      - type: bind
+        source: ${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}
+        target: /opt/splunk/archive
+        bind:
+          propagation: rslave
+          create_host_path: true
+    mem_limit: ${SPLUNK_MEM_LIMIT:-10g}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  # Bind-backed named volumes: fixed host paths, plus Docker's copy-up of the
+  # image's /opt/splunk/etc defaults on first start.
+  splunk-etc:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SPLUNK_DATA_DIR:-/srv/splunk}/etc
+  splunk-var:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SPLUNK_DATA_DIR:-/srv/splunk}/var
