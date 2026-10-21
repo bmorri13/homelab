@@ -765,6 +765,8 @@ terraform apply -var-file="secrets.tfvars"
 📖 **Full Documentation:** See the complete setup guide, configuration examples, and security practices in [`infrastructure_tooling/proxmox/README.md`](infrastructure_tooling/proxmox/README.md)
 
 ## Monitoring Stack Setup - Elastic & Cribl
+> **Update:** the homelab logging box is now Splunk Enterprise on a developer license, running on `security-tooling-01`. See [`infrastructure_tooling/monitoring_stack/splunk/README.md`](infrastructure_tooling/monitoring_stack/splunk/README.md). The Elastic and Cribl write-up below is kept for reference.
+
 - Using Docker Compose on a VM within Proxmox, I have configured a basic monitoring stack leveraging Elastic and Cribl for my logging infastructure
     - In order to avoid requring a license (e.g. Splunk Developer license) I have chosen Elastic as my logging solution along with Cribl to allow for easy data ingestion
 - In this section I will breakdown setting up both Elastic and Cribl utilizing running both Elastic and Cribl on a single VM with Docker Compose

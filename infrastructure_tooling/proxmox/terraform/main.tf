@@ -150,13 +150,13 @@ module "security_tooling_01" {
   source = "./modules/proxmox-vm"
 
   vm_name        = "security-tooling-01"
-  description    = "Terraform-managed Ubuntu 24.04 VM for security tooling (Elastic, Cribl, OpenVAS) on proxmox3"
-  tags           = ["terraform", "ubuntu", "security"]
+  description    = "Terraform-managed Ubuntu 24.04 VM for security tooling and the Splunk homelab logging stack on proxmox3"
+  tags           = ["terraform", "ubuntu", "security", "splunk"]
   target_node    = "proxmox3"
   template_vm_id = 9005
-  cores          = 4
+  cores          = 8
   memory         = 16384
-  disk_size      = "300"
+  disk_size      = "600" # grow-only; extend the guest fs after apply (see monitoring_stack/splunk/README.md)
 
   # Shared configuration
   disk_storage   = var.disk_storage
