@@ -71,11 +71,14 @@ resource "proxmox_virtual_environment_vm" "vm" {
   # Set timeout for operations (in seconds)
   timeout_create = 1800
 
-  # Ignore changes to MAC addresses and IPv6 addresses as they are managed by Proxmox/Docker
+  # Ignore changes to MAC addresses and IPv6 addresses as they are managed by Proxmox/Docker.
+  # The cloud-init password only matters at first boot, but a diff on it makes the
+  # provider shut down and restart the VM on every apply, so it is ignored too.
   lifecycle {
     ignore_changes = [
       mac_addresses,
       ipv6_addresses,
+      initialization[0].user_account[0].password,
     ]
   }
 }
