@@ -89,7 +89,7 @@ mcpServers:
     spec:
       # Newest published image (0.39.0 is on PyPI only). Runs as root by
       # default (no USER in its Dockerfile); forced non-root below.
-      image: ghcr.io/sirkirby/unifi-network-mcp:0.38.4@sha256:00be21cde7ef7f2ea6b8f46d25f615bf8966ad0424de124355b5208498270263
+      image: ghcr.io/sirkirby/unifi-network-mcp:0.39.3@sha256:46dd60f81049480fdd0238df6bdd8846f9263f5f7f95bbbdd86cc71989428314
       # stdio: the server never opens an HTTP listener (avoids the upstream
       # 0.0.0.0 + Host-header-allowlist exposure); ToolHive's proxy runner
       # speaks streamable-http on its behalf.
