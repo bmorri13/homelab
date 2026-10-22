@@ -20,7 +20,7 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 | Cribl config, state, queue | `/srv/cribl` on the VM | Seeded from `cribl/` on first deploy |
 | Frozen archive | Not enabled yet (issue #165) | Planned: Unraid NFS share at `/mnt/unraid-splunk/frozen` |
 | Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl `local`, 14 nightly archives. Skipped until the share exists. |
-| Repo-managed Splunk settings | `homelab_base/` app | Indexes, retention, the 9997 receiver, and the 50 GB free-space guard |
+| Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
 
 ### Indexes
@@ -66,6 +66,27 @@ Dropped before indexing: the `arc-runners` namespace, `kube-probe` hits, debug-l
 
 Cribl's OpenTelemetry (OTLP) input is not used. In testing (Cribl 4.20.3) it accepted data with a missing or wrong token, so collectors send over HEC, which does enforce its token.
 
+## Splunk apps
+
+Everything Splunk loads from this repo lives in `apps/`, one directory per app, synced to `/srv/splunk/etc/apps/` by `deploy.sh`.
+
+| Prefix | Use | Examples |
+|---|---|---|
+| `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
+| `85_` | Props and transforms for data from apps we build | `85_guardrail_props` (none yet) |
+| none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
+
+In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
+
+Current base apps:
+
+- `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh` for when archiving is turned on.
+- `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
+- `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk.
+- `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
+
+Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
+
 ## Prerequisites
 
 ### 1. Grow the VM disk (one time)
@@ -94,7 +115,7 @@ mkdir -p /mnt/unraid-splunk/frozen /mnt/unraid-splunk/backups
 touch /mnt/unraid-splunk/.splunk-archive
 ```
 
-Until this share exists, nightly config backups are skipped. Archiving frozen data also needs `coldToFrozenScript` added back to each index in `homelab_base/default/indexes.conf` (see the comment there).
+Until this share exists, nightly config backups are skipped. Archiving frozen data also needs `coldToFrozenScript` added back to each index in `apps/00_homelab_indexes/default/indexes.conf` (see the comment there).
 
 The `.splunk-archive` marker matters. `archive_bucket.sh` and `backup-etc.sh` write only when they can see it. If the share is not mounted, they see the empty local directory instead, so they skip the write rather than fill the root disk. Splunk keeps the bucket and retries later.
 
@@ -116,7 +137,7 @@ chmod 600 .env
 
 1. Seeds Cribl's config from `cribl/local/cribl/` if `/srv/cribl` has none yet.
 2. Starts the stack and waits for Splunk to become healthy.
-3. Syncs `homelab_base/` into Splunk, restarting splunkd only if the app changed. Changes made in Splunk Web land in the app's `local/` and are never overwritten.
+3. Syncs every app under `apps/` into Splunk, restarting splunkd only if something changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk.
 4. Runs `cribl-bootstrap.sh`. On first deploy, while Cribl still accepts its default admin/admin login, this sets the Cribl admin password and the HEC token from `.env` and enables the HEC input. Later runs see the default login rejected and change nothing.
 
 ### Changing Cribl config

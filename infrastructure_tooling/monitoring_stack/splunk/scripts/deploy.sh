@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring up Splunk and Cribl, sync the repo-managed homelab_base app into Splunk,
+# Bring up Splunk and Cribl, sync the repo-managed apps under apps/ into Splunk,
 # and seed Cribl's config on first deploy.
 # Safe to re-run: restarts splunkd only when the app actually changed, and never
 # overwrites Cribl config after the first deploy (the Cribl UI owns it from then on).
@@ -43,18 +43,24 @@ wait_healthy
 SPLUNK_UID=$(docker exec splunk id -u splunk)
 SPLUNK_GID=$(docker exec splunk id -g splunk)
 
-# local/ and local.meta hold changes made in Splunk Web; never overwrite them.
-changes=$(rsync -a --delete --checksum --itemize-changes \
-    --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
-    homelab_base/ "$DATA_DIR/etc/apps/homelab_base/")
-chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_DIR/etc/apps/homelab_base"
+# Sync every app under apps/ into Splunk. local/ and local.meta hold changes made
+# in Splunk Web; never overwrite them. Apps removed from the repo are not deleted
+# from Splunk; remove those by hand.
+changes=""
+for app in apps/*/; do
+    name=$(basename "$app")
+    changes+=$(rsync -a --delete --checksum --itemize-changes \
+        --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
+        "$app" "$DATA_DIR/etc/apps/$name/")
+    chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_DIR/etc/apps/$name"
+done
 
 if [[ -n "$changes" ]]; then
-    echo "homelab_base changed:"; echo "$changes"
+    echo "apps changed:"; echo "$changes"
     docker compose restart splunk
     wait_healthy
 else
-    echo "homelab_base unchanged"
+    echo "apps unchanged"
 fi
 
 ./scripts/cribl-bootstrap.sh
