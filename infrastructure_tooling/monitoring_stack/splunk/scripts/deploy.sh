@@ -36,31 +36,41 @@ if [[ ! -f "$CRIBL_DIR/local/cribl/inputs.yml" ]]; then
     echo "seeded Cribl config into $CRIBL_DIR/local/cribl"
 fi
 
-docker compose up -d
-echo "waiting for splunk to become healthy (first start takes several minutes)..."
-wait_healthy
-
-SPLUNK_UID=$(docker exec splunk id -u splunk)
-SPLUNK_GID=$(docker exec splunk id -g splunk)
-
 # Sync every app under apps/ into Splunk. local/ and local.meta hold changes made
 # in Splunk Web; never overwrite them. Apps removed from the repo are not deleted
-# from Splunk; remove those by hand.
-changes=""
-for app in apps/*/; do
-    name=$(basename "$app")
-    changes+=$(rsync -a --delete --checksum --itemize-changes \
-        --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
-        "$app" "$DATA_DIR/etc/apps/$name/")
-    chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_DIR/etc/apps/$name"
-done
+# from Splunk; remove those by hand. Sets $changes.
+sync_apps() {
+    local owner app name
+    owner=$(stat -c '%u:%g' "$DATA_DIR/etc")
+    changes=""
+    for app in apps/*/; do
+        name=$(basename "$app")
+        changes+=$(rsync -a --delete --checksum --itemize-changes \
+            --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
+            "$app" "$DATA_DIR/etc/apps/$name/")
+        chown -R "$owner" "$DATA_DIR/etc/apps/$name"
+    done
+    if [[ -n "$changes" ]]; then echo "apps changed:"; echo "$changes"; else echo "apps unchanged"; fi
+}
 
-if [[ -n "$changes" ]]; then
-    echo "apps changed:"; echo "$changes"
-    docker compose restart splunk
+if [[ -d "$DATA_DIR/etc/system" ]]; then
+    # Splunk has started before: sync first, so a fix to an app that stops splunkd
+    # from starting can still be deployed.
+    sync_apps
+    docker compose up -d
+    if [[ -n "$changes" ]]; then docker compose restart splunk; fi
+    echo "waiting for splunk to become healthy..."
     wait_healthy
 else
-    echo "apps unchanged"
+    # First start: the image populates etc/ on startup, so apps go in afterwards.
+    docker compose up -d
+    echo "waiting for splunk to become healthy (first start takes several minutes)..."
+    wait_healthy
+    sync_apps
+    if [[ -n "$changes" ]]; then
+        docker compose restart splunk
+        wait_healthy
+    fi
 fi
 
 ./scripts/cribl-bootstrap.sh
