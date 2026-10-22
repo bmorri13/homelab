@@ -116,6 +116,7 @@ functions:
             const out = prune(ev);
             __e._raw = JSON.stringify(out);
             __e.sourcetype = 'falco:ocsf';
+            if (d.hostname) __e.host = d.hostname;
             __e.__falco_alert = true;
             __e._time = t / 1000;
           }

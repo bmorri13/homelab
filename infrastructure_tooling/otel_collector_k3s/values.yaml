@@ -77,6 +77,12 @@ opentelemetry-collector:
         spike_limit_percentage: 25
       batch:
         timeout: 5s
+      # Without this every k3s record reaches Splunk with host=unknown.
+      resource/host:
+        attributes:
+          - key: host.name
+            value: ${env:K8S_NODE_NAME}
+            action: upsert
       # Kubernetes events get their own sourcetype; pod logs keep the exporter default.
       transform/events:
         log_statements:
@@ -105,5 +111,5 @@ opentelemetry-collector:
       pipelines:
         logs:
           receivers: [k8s_events]  # the logsCollection preset adds file_log
-          processors: [memory_limiter, transform/events, batch]
+          processors: [memory_limiter, resource/host, transform/events, batch]
           exporters: [splunk_hec]

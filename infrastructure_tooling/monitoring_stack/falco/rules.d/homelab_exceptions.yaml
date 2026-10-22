@@ -25,3 +25,9 @@
   condition: and not (k8s.ns.name = arc-runners and proc.exepath startswith /home/runner/)
   override:
     condition: append
+
+# ArgoCD's controllers and repo server talk to the Kubernetes API by design.
+- rule: Contact K8S API Server From Container
+  condition: and not k8s.ns.name = argocd
+  override:
+    condition: append
