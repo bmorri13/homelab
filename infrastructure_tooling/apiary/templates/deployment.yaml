@@ -55,8 +55,10 @@ spec:
             {{- range .Values.oauth2Proxy.trustedProxyIPs }}
             - --trusted-proxy-ip={{ . }}
             {{- end }}
-            # Login only needs the GitHub username; no org/repo access.
-            - --scope=user:email
+            # oauth2-proxy's GitHub provider lists the user's orgs at login, so
+            # read:org is required (user:email alone fails the callback with a
+            # 403 from GitHub). Both scopes are read-only; no repo access.
+            - --scope=user:email read:org
             - --cookie-name=__Host-apiary
             - --cookie-secure=true
             # Strict would drop the session cookie on the OAuth callback from
