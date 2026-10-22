@@ -35,6 +35,7 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
 | `audit` | Vault, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
+| `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`) | 90 days |
 | `cribl` | Cribl's own warnings and errors | 14 days |
 | `unrouted` | Matched no route or named a missing index. Should stay empty. | 14 days |
 
@@ -55,6 +56,8 @@ Syslog has no authentication. Restrict ports 514 and 5514 to the senders' IPs wi
 Routes match on the input.
 
 `syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
+
+Falco alerts arriving through `hec_in` (journald identifier `falco`, or the `falco` namespace on k3s) are chained to the [`cc-falco-ocsf`](cribl/packs/cc-falco-ocsf) pack and sent to `security`; see [`../falco/`](../falco/README.md).
 
 `hec_in` receives the OTel collectors: the host agents in [`otel-agent/`](otel-agent/README.md) (journald and Docker containers on the VMs and Proxmox nodes) and the k3s-01 DaemonSet in `infrastructure_tooling/otel_collector_k3s`. It picks the index:
 
