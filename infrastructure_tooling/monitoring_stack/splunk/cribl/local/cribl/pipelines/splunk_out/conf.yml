@@ -1,0 +1,30 @@
+functions:
+  - id: mask
+    filter: "true"
+    conf:
+      fields:
+        - _raw
+      depth: 5
+      rules:
+        - matchRegex: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE
+            KEY-----/g
+          replaceExpr: "'[REDACTED PRIVATE KEY]'"
+        - matchRegex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g
+          replaceExpr: "'[REDACTED AWS KEY]'"
+        - matchRegex: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g
+          replaceExpr: "'[REDACTED GITHUB TOKEN]'"
+        - matchRegex: /\bxox[abprs]-[A-Za-z0-9-]{10,}/g
+          replaceExpr: "'[REDACTED SLACK TOKEN]'"
+        - matchRegex: /\bsk-[A-Za-z0-9_-]{20,}/g
+          replaceExpr: "'[REDACTED API KEY]'"
+        - matchRegex: /\bhvs\.[A-Za-z0-9_-]{20,}/g
+          replaceExpr: "'[REDACTED VAULT TOKEN]'"
+        - matchRegex: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g
+          replaceExpr: "'[REDACTED JWT]'"
+        - matchRegex: /(authorization["']?\s*[:=]\s*["']?(?:bearer|basic|splunk)\s+)[A-Za-z0-9._~+\/=-]+/gi
+          replaceExpr: "`${g1}[REDACTED]`"
+        - matchRegex: /((?:password|passwd|secret|token|api[_-]?key)["']?\s*[:=]\s*["']?)[^\s"'&,;]{4,}/gi
+          replaceExpr: "`${g1}[REDACTED]`"
+    description: Redact anything that looks like a credential before it is stored
+asyncFuncTimeout: 1000
+output: default

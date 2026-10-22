@@ -1,0 +1,17 @@
+functions:
+  - id: drop
+    filter: "!['warn', 'error', 'fatal'].includes(level ||
+      (/\"level\":\"(\\w+)\"/.exec(_raw) || [])[1])"
+    conf: {}
+    description: Keep only warnings and errors from Cribl itself
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: "'cribl'"
+        - name: sourcetype
+          value: "'cribl'"
+    description: ""
+asyncFuncTimeout: 1000
+output: default

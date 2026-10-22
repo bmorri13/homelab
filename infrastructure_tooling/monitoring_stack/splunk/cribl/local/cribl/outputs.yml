@@ -1,0 +1,16 @@
+outputs:
+  default:
+    defaultId: splunk
+    type: default
+  splunk:
+    type: splunk
+    host: splunk
+    port: 9997
+    description: Splunk in this compose stack, over the internal network
+    pipeline: splunk_out
+    nestedFields: json
+    enableACK: true
+    onBackpressure: queue
+    pqMaxSize: 10GB
+    pqCompress: none
+    pqMode: error

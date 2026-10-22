@@ -1,0 +1,12 @@
+functions:
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: "'unrouted'"
+        - name: cribl_input
+          value: __inputId
+    description: Matched no route; cribl_input shows which input it came from
+asyncFuncTimeout: 1000
+output: default
