@@ -26,8 +26,14 @@
   override:
     condition: append
 
-# ArgoCD's controllers and repo server talk to the Kubernetes API by design.
+# Cluster infrastructure talks to the Kubernetes API by design: ArgoCD, the OTel
+# collector (k8s_attributes, k8s_events), ESO, cert-manager, the ARC controller,
+# the ToolHive operator, Falco itself, and Vault (Kubernetes auth TokenReview).
+# Application namespaces (apiary, toolhive-mcp's kubectl MCP server, alexprinter,
+# stirling-pdf, uptime-kuma) still alert: there, API access is worth seeing.
 - rule: Contact K8S API Server From Container
-  condition: and not k8s.ns.name = argocd
+  condition: >-
+    and not k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
+    cert-manager, arc-systems, toolhive-system, falco, vault)
   override:
     condition: append
