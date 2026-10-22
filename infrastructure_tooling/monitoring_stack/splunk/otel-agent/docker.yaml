@@ -1,0 +1,54 @@
+# OTel collector, docker role (layered on base.yaml): container logs -> Cribl HEC.
+# One filelog receiver per running container, created from the Docker API, so each
+# record carries container.name, container.image.name and the compose service.
+# include_all_containers + "port == 0" is the documented way to get exactly one
+# receiver per container (without it the observer makes one per exposed port).
+extensions:
+  docker_observer:
+    endpoint: unix:///var/run/docker.sock
+    include_all_containers: true
+    # Splunk and Cribl logs already reach Splunk (_internal, index=cribl).
+    excluded_images: ["splunk/splunk*", "cribl/cribl*"]
+
+receivers:
+  receiver_creator/docker:
+    watch_observers: [docker_observer]
+    receivers:
+      filelog:
+        rule: type == "container" and port == 0
+        config:
+          include: ["/var/lib/docker/containers/`container_id`/`container_id`-json.log"]
+          start_at: end
+          storage: file_storage
+          operators:
+            - type: container
+              format: docker
+              add_metadata_from_filepath: false
+        resource_attributes:
+          container.name: "`name`"
+          container.image.name: "`image`"
+          compose.project: "`labels[\"com.docker.compose.project\"]`"
+          compose.service: "`labels[\"com.docker.compose.service\"]`"
+
+exporters:
+  splunk_hec/docker:
+    token: ${env:CRIBL_HEC_TOKEN}
+    endpoint: http://192.168.4.11:8088/services/collector
+    source: docker
+    sourcetype: docker:container
+    splunk_app_name: homelab-otel-agent
+    sending_queue:
+      enabled: true
+      storage: file_storage
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0
+
+service:
+  # Lists replace rather than merge across config files, so repeat file_storage.
+  extensions: [file_storage, docker_observer]
+  pipelines:
+    logs/docker:
+      receivers: [receiver_creator/docker]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [splunk_hec/docker]

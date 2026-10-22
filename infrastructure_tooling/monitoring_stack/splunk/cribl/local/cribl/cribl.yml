@@ -1,0 +1,18 @@
+# Written by Cribl (Settings > System > General, saved through the API) and kept as a
+# seed. The default is one worker per CPU minus two (6 here) with up to 2 GB of heap
+# each, which overflows the container's 2 GiB limit: the kernel OOM-killed workers in
+# a loop. 2 workers is plenty for homelab volume. 1024 MB is Cribl's minimum heap.
+workers:
+  count: 2
+  minimum: 2
+  memory: 1024
+tls: {}
+upgradeGroupSettings: {}
+rollback: {}
+backups: {}
+sockets: {}
+sni: {}
+pii: {}
+support: {}
+apps:
+  enabled: true

@@ -11,6 +11,23 @@ functions:
     filter: /"level":"debug"|\blevel=debug\b|\bDEBUG\b/i.test(_raw)
     conf: {}
     description: Debug-level lines
+  - id: drop
+    filter: >-
+      /"GET \/(api\/)?(health|healthz|ready|readyz|livez)\b[^"]*" 200/.test(_raw)
+    conf: {}
+    description: "Container health-check hits that succeeded"
+  - id: drop
+    filter: >-
+      __e['container.name'] && /LockRing: /.test(_raw)
+    conf: {}
+    description: SeaweedFS lock-ring updates (several every 30 s)
+  - id: drop
+    filter: >-
+      __e['syslog.identifier'] == '50-motd-news' ||
+      (__e['syslog.identifier'] == 'systemd' && !/fail/i.test(_raw) &&
+      /Deactivated successfully|Consumed .* CPU time|^(Starting|Started|Finished|Stopping|Stopped) .*\.(service|timer|socket|mount|slice|scope)/.test(_raw))
+    conf: {}
+    description: "journald: MOTD news and routine systemd unit start/stop (failures are kept)"
   - id: eval
     filter: "true"
     conf:

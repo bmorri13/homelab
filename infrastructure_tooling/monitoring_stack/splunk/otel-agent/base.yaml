@@ -1,0 +1,64 @@
+# OTel collector, base role: journald from this host -> Cribl HEC on security-tooling-01.
+# Installed to /etc/otelcol-contrib/ by install.sh. CRIBL_HEC_TOKEN comes from
+# /etc/otelcol-contrib/hec.env (root only), never from this file.
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol-contrib/storage
+    create_directory: true
+
+receivers:
+  journald:
+    start_at: end          # first run starts now, no history replay
+    priority: info         # debug and below stay on the host
+    storage: file_storage  # cursor survives restarts: no gaps, no duplicates
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  resourcedetection:
+    detectors: [system]
+    system:
+      hostname_sources: [os]
+  # journald hands over every journal field as a map; keep the message as the body
+  # and the few fields worth searching on as attributes.
+  transform/journald:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["systemd.unit"], body["_SYSTEMD_UNIT"]) where body["_SYSTEMD_UNIT"] != nil
+          - set(attributes["syslog.identifier"], body["SYSLOG_IDENTIFIER"]) where body["SYSLOG_IDENTIFIER"] != nil
+          - set(attributes["syslog.priority"], body["PRIORITY"]) where body["PRIORITY"] != nil
+          - set(attributes["process.pid"], body["_PID"]) where body["_PID"] != nil
+          - set(body, body["MESSAGE"]) where body["MESSAGE"] != nil
+  batch:
+    timeout: 5s
+
+exporters:
+  splunk_hec/journald:
+    token: ${env:CRIBL_HEC_TOKEN}
+    endpoint: http://192.168.4.11:8088/services/collector
+    source: journald
+    sourcetype: linux:journald
+    splunk_app_name: homelab-otel-agent
+    sending_queue:
+      enabled: true
+      storage: file_storage  # buffer on disk while Cribl is unreachable
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0    # keep retrying; the disk queue bounds it
+
+service:
+  extensions: [file_storage]
+  pipelines:
+    logs/journald:
+      receivers: [journald]
+      processors: [memory_limiter, resourcedetection, transform/journald, batch]
+      exporters: [splunk_hec/journald]
+  telemetry:
+    logs:
+      level: warn
+    # The default self-metrics endpoint binds localhost:8888, which other software on
+    # some hosts already uses. Nothing scrapes it, so open no ports at all.
+    metrics:
+      level: none

@@ -1,0 +1,109 @@
+# Pod logs and Kubernetes events from k3s-01 -> Cribl HEC on security-tooling-01
+# (http://192.168.4.11:8088). Cribl picks the Splunk index from k8s.namespace.name
+# (cribl/local/cribl/pipelines/hec_in): k8s, apps, or audit. The HEC token comes
+# from Vault kv/cribl-hec (property "token") through an ExternalSecret.
+
+externalSecret:
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreName: vault-backend
+  vaultPath: kv/cribl-hec
+
+opentelemetry-collector:
+  mode: daemonset
+  image:
+    repository: otel/opentelemetry-collector-contrib   # splunk_hec exporter lives in contrib
+    tag: "0.163.2"
+  command:
+    name: otelcol-contrib
+
+  presets:
+    logsCollection:
+      enabled: true
+      includeCollectorLogs: false
+      storeCheckpoints: true     # survive restarts without re-reading or skipping logs
+    kubernetesAttributes:
+      enabled: true              # k8s.namespace.name, k8s.pod.name, k8s.container.name, ...
+    # The chart only wires this preset's receiver in deployment mode; in daemonset mode
+    # it still adds the RBAC, and k8s_events is configured in alternateConfig below.
+    kubernetesEvents:
+      enabled: true
+      useK8sEventsReceiver: true
+
+  extraEnvs:
+    - name: CRIBL_HEC_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: cribl-hec
+          key: token
+
+  # Nothing needs to reach the collector: no OTLP, Jaeger, or Zipkin listeners and no hostPorts.
+  ports:
+    otlp:
+      enabled: false
+    otlp-http:
+      enabled: false
+    jaeger-compact:
+      enabled: false
+    jaeger-thrift:
+      enabled: false
+    jaeger-grpc:
+      enabled: false
+    zipkin:
+      enabled: false
+    metrics:
+      enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+  # alternateConfig replaces the chart's default config (OTLP, Jaeger, Zipkin and
+  # Prometheus receivers, debug exporter) instead of merging with it. The presets
+  # above still inject file_log, k8s_events, k8s_attributes and their mounts.
+  alternateConfig:
+    extensions:
+      health_check:
+        endpoint: ${env:MY_POD_IP}:13133
+    receivers:
+      k8s_events: {}             # single node, so a DaemonSet does not duplicate events
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch:
+        timeout: 5s
+      # Kubernetes events get their own sourcetype; pod logs keep the exporter default.
+      transform/events:
+        log_statements:
+          - context: log
+            conditions:
+              - resource.attributes["k8s.event.name"] != nil or attributes["k8s.event.name"] != nil
+            statements:
+              - set(attributes["com.splunk.sourcetype"], "kube:events")
+    exporters:
+      splunk_hec:
+        token: ${env:CRIBL_HEC_TOKEN}
+        endpoint: http://192.168.4.11:8088/services/collector
+        source: k3s-01
+        sourcetype: kube:container
+        splunk_app_name: homelab-otel-k3s
+        sending_queue:
+          enabled: true
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+    service:
+      extensions: [health_check]
+      telemetry:
+        metrics:
+          level: none
+      pipelines:
+        logs:
+          receivers: [k8s_events]  # the logsCollection preset adds file_log
+          processors: [memory_limiter, transform/events, batch]
+          exporters: [splunk_hec]
