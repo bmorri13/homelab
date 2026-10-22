@@ -1,0 +1,20 @@
+{{- /*
+One MCPServer per enabled entry in .Values.mcpServers. The operator runs each
+as a proxy-runner Deployment (Service mcp-<name>-proxy) in front of the server
+itself, and the vMCP discovers it through the shared MCPGroup.
+*/}}
+{{- range $name, $server := .Values.mcpServers }}
+{{- if $server.enabled }}
+---
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  groupRef:
+    name: {{ $.Values.group.name }}
+  {{- toYaml $server.spec | nindent 2 }}
+{{- end }}
+{{- end }}

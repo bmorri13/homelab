@@ -1,0 +1,18 @@
+{{- /*
+Namespaces the operator is allowed to manage. The upstream chart writes a
+RoleBinding into each of them, so they must exist before this app syncs; owning
+them here (rather than in toolhive_mcp) keeps the sync order inside one app.
+Pod Security "restricted" is enforced: every operator-created pod (proxy runner,
+MCP server, vMCP) must run non-root with no privilege escalation.
+*/}}
+{{- range (index .Values "toolhive-operator" "operator" "rbac" "allowedNamespaces") }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    app.kubernetes.io/part-of: toolhive
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+{{- end }}

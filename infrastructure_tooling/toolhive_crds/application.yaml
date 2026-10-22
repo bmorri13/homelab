@@ -1,0 +1,32 @@
+---
+# ArgoCD Application for the ToolHive CRDs. Apply once:
+#   kubectl apply -f infrastructure_tooling/toolhive_crds/application.yaml
+#
+# Sync-wave -1 relative to the operator and MCP apps is advisory only (there is
+# no app-of-apps), so on first install apply this one first and wait for it to
+# be Healthy before the others.
+#
+# ServerSideApply: several of these CRDs exceed the 256KiB last-applied
+# annotation limit of client-side apply.
+#
+# prune is off: pruning a CRD deletes every custom resource of that kind.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toolhive-crds
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/toolhive_crds
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

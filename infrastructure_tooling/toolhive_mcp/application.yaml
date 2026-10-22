@@ -1,0 +1,28 @@
+---
+# ArgoCD Application for the ToolHive MCP servers + vMCP gateway. Apply once,
+# after toolhive-operator is Healthy (it creates the toolhive-mcp namespace):
+#   kubectl apply -f infrastructure_tooling/toolhive_mcp/application.yaml
+#
+# Adding, removing or changing an MCP server is a values.yaml edit + merge;
+# prune is on so a removed server's MCPServer (and everything the operator
+# built for it) is deleted.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toolhive-mcp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/toolhive_mcp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-mcp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

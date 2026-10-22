@@ -1,0 +1,12 @@
+{{- /*
+CA certificates MCP servers may mount to verify private endpoints. Each file in
+files/ is a public certificate (no secrets); the ConfigMap key is the file name.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-trusted-cas
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "files/*.crt").AsConfig | nindent 2 }}

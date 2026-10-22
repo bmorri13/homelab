@@ -1,0 +1,315 @@
+# values.yaml
+## ToolHive MCP servers + the vMCP gateway at https://mcp.bmosan.com/mcp.
+## Installed into namespace toolhive-mcp (created by toolhive_operator).
+## See README.md for adding/removing servers and minting client tokens.
+
+# MCPGroup every server below joins. The vMCP aggregates everything in it.
+group:
+  name: homelab
+  description: Homelab MCP servers aggregated behind mcp.bmosan.com
+
+# ---------------------------------------------------------------------------
+# MCP servers. Each key becomes an MCPServer named <key> joined to the group;
+# `spec` is passed through verbatim (toolhive.stacklok.dev/v1beta1 MCPServer),
+# so any field from the CRD works. groupRef is added automatically.
+#
+# Credentials: never put them in `env`. Create an ExternalSecret under
+# `externalSecrets` below and reference it from `spec.secrets`.
+# ---------------------------------------------------------------------------
+mcpServers:
+  toolhive-docs:
+    enabled: true
+    # Searches the ToolHive documentation. No credentials, no egress needed
+    # (its vector DB is baked into the image), so it is a safe first backend.
+    spec:
+      image: ghcr.io/stackloklabs/toolhive-doc-mcp:v0.0.21@sha256:4158e98cd76d58a068ab6cf0629e1261f05331cf61d51cafdaf20b59352ad9af
+      transport: streamable-http
+      proxyPort: 8080
+      mcpPort: 8080
+      env:
+        # Don't re-crawl docs.stacklok.com at runtime; use the prebuilt DB.
+        - name: REFRESH_ENABLED
+          value: "false"
+        - name: OTEL_ENABLED
+          value: "false"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 768Mi
+      podTemplateSpec:
+        spec:
+          # Static docs search; it never talks to the Kubernetes API.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            # Image USER is the name "app"; kubelet needs a numeric UID to
+            # verify runAsNonRoot. 1000 is the uid from the image's Dockerfile.
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mcp
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+
+  unifi-network:
+    # UniFi Network MCP (github.com/sirkirby/unifi-mcp), read-only. Three
+    # independent layers keep it read-only: Cedar only admits readOnlyHint
+    # tools (all 101 reads are annotated; the 106 create/update/delete tools
+    # are not), the server's own policy gates refuse every mutation, and the
+    # UniFi account it uses should have the "View Only" role.
+    # Disabled until its credentials exist in Vault at kv/toolhive-unifi-network.
+    enabled: false
+    # Only the UniFi controller, HTTPS (REST + the events websocket).
+    egress:
+      - cidr: 192.168.1.1/32
+        ports: [443]
+    spec:
+      # Newest published image (0.39.0 is on PyPI only). Runs as root by
+      # default (no USER in its Dockerfile); forced non-root below.
+      image: ghcr.io/sirkirby/unifi-network-mcp:0.38.4@sha256:00be21cde7ef7f2ea6b8f46d25f615bf8966ad0424de124355b5208498270263
+      # stdio: the server never opens an HTTP listener (avoids the upstream
+      # 0.0.0.0 + Host-header-allowlist exposure); ToolHive's proxy runner
+      # speaks streamable-http on its behalf.
+      transport: stdio
+      env:
+        # Hostname matches the controller's self-signed cert (CN/SAN
+        # unifi.local), mapped to 192.168.1.1 via hostAliases below, and
+        # verified against that pinned cert (files/unifi-controller-ca.crt).
+        - {name: UNIFI_HOST, value: unifi.local}
+        - {name: UNIFI_PORT, value: "443"}
+        - {name: UNIFI_SITE, value: default}
+        - {name: UNIFI_VERIFY_SSL, value: "true"}
+        - {name: SSL_CERT_FILE, value: /etc/mcp-trusted-cas/unifi-controller-ca.crt}
+        # UniFi OS gateway. Setting it explicitly skips the auto-detection
+        # probes, which are the only remaining requests made with ssl=False.
+        - {name: UNIFI_CONTROLLER_TYPE, value: proxy}
+        # Register every tool by name and drop the unifi_execute/unifi_batch
+        # meta-tools, so the gateway's Cedar policy sees (and can deny) each
+        # real tool instead of one tool that can run anything.
+        - {name: UNIFI_TOOL_REGISTRATION_MODE, value: eager}
+        - {name: UNIFI_META_TOOLS_ENABLED, value: "false"}
+        # Server-side hard gates: refuse every mutation regardless of caller.
+        - {name: UNIFI_POLICY_NETWORK_CREATE, value: "false"}
+        - {name: UNIFI_POLICY_NETWORK_UPDATE, value: "false"}
+        - {name: UNIFI_POLICY_NETWORK_DELETE, value: "false"}
+        - {name: UNIFI_TOOL_PERMISSION_MODE, value: confirm}
+        - {name: UNIFI_NETWORK_REDACT_SENSITIVE_FIELDS, value: "true"}
+        - {name: HOME, value: /tmp}
+      secrets:
+        - {name: unifi-network-mcp, key: username, targetEnvName: UNIFI_USERNAME}
+        - {name: unifi-network-mcp, key: password, targetEnvName: UNIFI_PASSWORD}
+      resources:
+        requests:
+          cpu: 20m
+          memory: 96Mi
+        limits:
+          cpu: 500m
+          memory: 384Mi
+      podTemplateSpec:
+        spec:
+          automountServiceAccountToken: false
+          hostAliases:
+            - ip: 192.168.1.1
+              hostnames: [unifi.local]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mcp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+                - {name: trusted-cas, mountPath: /etc/mcp-trusted-cas, readOnly: true}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+            - name: trusted-cas
+              configMap:
+                name: mcp-trusted-cas
+
+# ---------------------------------------------------------------------------
+# Remote (hosted) MCP servers. Each key becomes an MCPRemoteProxy named <key>
+# in the group; `spec` is passed through verbatim (v1beta1 MCPRemoteProxy).
+# The proxy pod gets HTTPS egress to public addresses only.
+# ---------------------------------------------------------------------------
+remoteServers:
+  excalidraw:
+    enabled: true
+    # Excalidraw's official hosted server (ToolHive registry entry
+    # io.github.stacklok/excalidraw-remote). No credentials. Diagram content
+    # is sent to Excalidraw's servers, as with any hosted MCP.
+    spec:
+      remoteUrl: https://mcp.excalidraw.com/mcp
+      transport: streamable-http
+      proxyPort: 8080
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+# ExternalSecrets pulled from Vault (ClusterSecretStore vault-backend) into
+# toolhive-mcp, for MCP servers to reference via spec.secrets. Example:
+#   github-mcp:
+#     vaultPath: kv/toolhive-github-mcp
+#     keys: [token]
+externalSecrets:
+  secretStoreName: vault-backend
+  refreshInterval: 1h
+  secrets:
+    # UniFi local account for unifi-network (create it with the "View Only"
+    # role). Keys: username, password.
+    unifi-network-mcp:
+      # Off until the Vault entry exists (an ExternalSecret with no source
+      # turns the ArgoCD app Degraded). Enable together with the server.
+      enabled: false
+      vaultPath: kv/toolhive-unifi-network
+      keys: [username, password]
+
+# ---------------------------------------------------------------------------
+# vMCP gateway
+# ---------------------------------------------------------------------------
+vmcp:
+  name: homelab
+  # Single replica: >1 requires Redis session storage (MCP sessions are
+  # pinned to the pod that created them).
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # Tool name collisions across servers are resolved by prefixing with the
+  # server name, e.g. toolhive-docs_query_docs.
+  # Audit events (who called which tool, outcome) as JSON on the vmcp
+  # container's stdout: kubectl -n toolhive-mcp logs deploy/homelab -c vmcp.
+  # Request/response bodies are left out; tool arguments can carry secrets.
+  audit:
+    enabled: true
+    includeRequestData: false
+    includeResponseData: false
+  conflictResolution: prefix
+  prefixFormat: "{workload}_"
+  # The CRD only accepts logLevel "debug"; info is the implicit default.
+  debugLogging: false
+
+# ---------------------------------------------------------------------------
+# Authentication: clients present a Kubernetes ServiceAccount token (a JWT
+# signed by the k3s-01 API server) minted for one ServiceAccount per machine
+# in clientNamespace, with `audience` below. See README "Client tokens".
+# ---------------------------------------------------------------------------
+auth:
+  audience: https://mcp.bmosan.com
+  # k3s's service-account issuer (kubectl get --raw /.well-known/openid-configuration).
+  issuer: https://kubernetes.default.svc.cluster.local
+  # Sidecar in the vMCP pod that exposes the API server's JWKS on localhost
+  # (see templates/gateway/oidcconfig.yaml for why it exists).
+  jwksProxy:
+    image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+    port: 8001
+    resources:
+      requests:
+        cpu: 5m
+        memory: 24Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+  clientNamespace: toolhive-clients
+  # One ServiceAccount per client machine. Removing one here stops new tokens
+  # being minted for it; already-issued tokens stay valid until they expire.
+  clients:
+    - macbook-air
+    - windows-desktop
+    - linux-vm
+
+# ---------------------------------------------------------------------------
+# Authorization (Cedar, enforced by the vMCP on every list/call).
+# Principal is Client::"<token sub>", resource is Tool::"<aggregated tool name>".
+# Default stance: only ServiceAccounts in auth.clientNamespace, and only tools
+# that declare readOnlyHint=true or are explicitly listed in readOnlyTools.
+# ---------------------------------------------------------------------------
+authz:
+  # Tools that don't carry an MCP readOnlyHint annotation but are known to be
+  # read-only. Use the aggregated (prefixed) name.
+  readOnlyTools:
+    - toolhive-docs_query_docs
+    - toolhive-docs_get_chunk
+    # excalidraw_read_me and excalidraw_create_view carry readOnlyHint and
+    # are allowed automatically. Checkpoints hold a diagram's edit state on
+    # Excalidraw's side and are part of normal create/edit/restore use.
+    - excalidraw_read_checkpoint
+    - excalidraw_save_checkpoint
+    # Deliberately NOT allowed: excalidraw_export_to_excalidraw uploads the
+    # diagram to a public excalidraw.com share link. Add it here to enable.
+  # Extra raw Cedar policies, appended verbatim. Use these to grant write
+  # tools to specific clients, e.g.:
+  #   - 'permit(principal == Client::"system:serviceaccount:toolhive-clients:macbook-air", action == Action::"call_tool", resource == Tool::"github_create_issue");'
+  extraPolicies: []
+
+# ---------------------------------------------------------------------------
+# Ingress: Traefik (hostNetwork on k3s-01), tailnet-only.
+# ---------------------------------------------------------------------------
+ingress:
+  host: mcp.bmosan.com
+  className: traefik
+  entrypoints: websecure
+  clusterIssuer: bmosan-cert
+  tlsSecretName: mcp-bmosan-com-tls
+  # Only Tailscale (CGNAT + ULA) source addresses. Traefik is hostNetwork so it
+  # sees the real client IP; LAN clients hitting the node IP get 403.
+  sourceRanges:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy (enforced by k3s's embedded kube-router).
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  # The vMCP and proxy runners talk to the API server (JWKS, MCPGroup
+  # discovery). After kube-proxy DNAT the ClusterIP 10.43.0.1:443 becomes the
+  # node's own address on 6443, so that is what egress has to allow.
+  apiServer:
+    cidrs:
+      - 192.168.4.98/32
+      - 10.43.0.1/32
+    ports: [6443, 443]
+  # Pods that need the API: the vMCP (backend discovery, JWKS sidecar) and the
+  # proxy runners (they manage their MCP server's StatefulSet). MCP server
+  # pods themselves get no API egress unless added here.
+  apiServerPodLabels:
+    - virtualmcpserver
+    - mcpserver
+  # Namespaces allowed to reach the vMCP's unauthenticated /health on 4483
+  # (e.g. an uptime-kuma HTTP monitor on
+  # http://vmcp-homelab.toolhive-mcp.svc:4483/health). /mcp on the same port
+  # still requires a token.
+  healthCheckFromNamespaces:
+    - uptime-kuma

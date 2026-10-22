@@ -17,6 +17,14 @@
         "gha-runner-scale-set-controller"
       ],
       "enabled": false
+    },
+    {
+      "description": "ToolHive charts are vendored under charts/ (a bare Chart.yaml bump is a no-op that desyncs Chart.lock), and the CRDs chart must move in lockstep with the operator chart. Upgrade both by hand: see infrastructure_tooling/toolhive_mcp/README.md.",
+      "matchPackageNames": [
+        "toolhive-operator",
+        "toolhive-operator-crds"
+      ],
+      "enabled": false
     }
   ]
 }

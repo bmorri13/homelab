@@ -1,0 +1,36 @@
+{{- /*
+Validates client bearer tokens as Kubernetes ServiceAccount JWTs signed by the
+k3s-01 API server.
+
+Why inline + a localhost JWKS URL instead of type kubernetesServiceAccount:
+k3s only serves /openid/v1/jwks to authenticated callers, and at ToolHive
+v0.55.2 the vMCP's OIDC config has no field for a JWKS bearer token (that
+useClusterAuth plumbing only reaches MCPServer proxies). The vMCP pod therefore
+runs a jwks-proxy sidecar (gateway/vmcp.yaml): `kubectl proxy` on 127.0.0.1,
+authenticated with the pod's own ServiceAccount, accepting only GET on the
+JWKS path. The alternative, letting system:unauthenticated read the JWKS
+cluster-wide, would widen anonymous API access for every client of 6443.
+
+Any ServiceAccount token whose audience equals the vMCP's oidcConfigRef
+audience validates here; restricting callers to auth.clientNamespace is the
+Cedar policy's job.
+*/}}
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPOIDCConfig
+metadata:
+  name: k3s-serviceaccounts
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+spec:
+  type: inline
+  inline:
+    issuer: {{ .Values.auth.issuer }}
+    jwksUrl: http://127.0.0.1:{{ .Values.auth.jwksProxy.port }}/openid/v1/jwks
+    # Only relaxes the https-scheme check on issuer/JWKS URLs. The issuer above
+    # is still https, and the JWKS hop is pod-local loopback to the sidecar
+    # (which reaches the API server over TLS), so nothing crosses the network
+    # in plaintext. The operator's validator rejects http even for 127.0.0.1.
+    insecureAllowHTTP: true
+    # The vMCP's HTTP client refuses private/loopback JWKS targets by default
+    # (SSRF guard); 127.0.0.1 is the sidecar.
+    jwksAllowPrivateIP: true

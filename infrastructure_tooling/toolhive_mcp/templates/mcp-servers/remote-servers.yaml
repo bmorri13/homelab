@@ -1,0 +1,52 @@
+{{- /*
+Remote (hosted) MCP servers. Each enabled entry in .Values.remoteServers
+becomes an MCPRemoteProxy in the shared MCPGroup: a small proxy pod in this
+namespace that makes the outbound call, so internet egress is granted to that
+pod alone and never to the vMCP. The proxy itself is unauthenticated and, like
+the MCPServer proxies, reachable only from inside this namespace.
+*/}}
+{{- range $name, $remote := .Values.remoteServers }}
+{{- if $remote.enabled }}
+---
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPRemoteProxy
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  groupRef:
+    name: {{ $.Values.group.name }}
+  {{- toYaml $remote.spec | nindent 2 }}
+{{- if $.Values.networkPolicy.enabled }}
+---
+# Internet egress for the {{ $name }} proxy only: HTTPS to public addresses.
+# Private, CGNAT/tailnet and link-local ranges are excluded so the proxy can't
+# be pointed back at the LAN or the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internet-egress-{{ $name }}
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      toolhive-name: {{ $name }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+      ports:
+        - {protocol: TCP, port: 443}
+{{- end }}
+{{- end }}
+{{- end }}

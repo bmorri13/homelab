@@ -1,0 +1,48 @@
+# values.yaml
+## ToolHive operator on k3s-01. Upstream defaults are kept unless noted; see
+## charts/toolhive-operator-0.55.2.tgz for the full set.
+
+toolhive-operator:
+  operator:
+    rbac:
+      # Namespace scope: the operator's ClusterRole is bound only by RoleBindings
+      # in the namespaces below, so its secrets/deployments/RBAC write access
+      # never reaches the rest of the cluster. Add a namespace here before
+      # creating ToolHive resources anywhere else.
+      scope: namespace
+      allowedNamespaces:
+        - toolhive-mcp
+    features:
+      # Required to be false in namespace scope (the chart refuses to render
+      # otherwise). It only rewrites stored CRD versions; do that by hand if an
+      # upgrade ever drops a served version.
+      storageVersionMigrator: false
+    env:
+      # Disable the periodic update check and the usage metrics sent with it.
+      - name: TOOLHIVE_SKIP_UPDATE_CHECK
+        value: "true"
+    # Upstream rules plus core-group events: client-go's leader-election
+    # recorder writes v1 Events, which the upstream Role (events.k8s.io only)
+    # doesn't allow, so the operator logs "events is forbidden" at startup.
+    leaderElectionRole:
+      rules:
+        - apiGroups: [""]
+          resources: [configmaps]
+          verbs: [get, list, watch, create, update, patch, delete]
+        - apiGroups: [coordination.k8s.io]
+          resources: [leases]
+          verbs: [get, list, watch, create, update, patch, delete]
+        - apiGroups: [events.k8s.io]
+          resources: [events]
+          verbs: [create, patch]
+        - apiGroups: [""]
+          resources: [events]
+          verbs: [create, patch]
+    # Upstream defaults, restated so the footprint is visible in this repo.
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 128Mi

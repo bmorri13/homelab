@@ -1,0 +1,10 @@
+# values.yaml
+## ToolHive CRDs. Rendered as ordinary templates by the upstream chart (not
+## crds/), so Helm/ArgoCD upgrade them along with the chart version.
+
+toolhive-operator-crds:
+  crds:
+    install: true
+    # Adds helm.sh/resource-policy: keep. Deleting the ArgoCD app must never
+    # cascade into deleting every MCPServer/VirtualMCPServer in the cluster.
+    keep: true
