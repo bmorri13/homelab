@@ -52,6 +52,11 @@ spec:
             - --upstream=http://127.0.0.1:8080/
             - --redirect-url=https://{{ .Values.host }}/oauth2/callback
             - --reverse-proxy=true
+            {{- range .Values.oauth2Proxy.trustedProxyIPs }}
+            - --trusted-proxy-ip={{ . }}
+            {{- end }}
+            # Login only needs the GitHub username; no org/repo access.
+            - --scope=user:email
             - --cookie-name=__Host-apiary
             - --cookie-secure=true
             # Strict would drop the session cookie on the OAuth callback from
