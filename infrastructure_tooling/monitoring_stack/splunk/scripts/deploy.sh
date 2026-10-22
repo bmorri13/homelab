@@ -45,10 +45,11 @@ sync_apps() {
     changes=""
     for app in apps/*/; do
         name=$(basename "$app")
-        changes+=$(rsync -a --delete --checksum --itemize-changes \
+        # Compare content only (no -t), and set ownership in the copy itself, so an
+        # unchanged app reports nothing and does not trigger a splunkd restart.
+        changes+=$(rsync -rlp --chown="$owner" --delete --checksum --itemize-changes \
             --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
             "$app" "$DATA_DIR/etc/apps/$name/")
-        chown -R "$owner" "$DATA_DIR/etc/apps/$name"
     done
     if [[ -n "$changes" ]]; then echo "apps changed:"; echo "$changes"; else echo "apps unchanged"; fi
 }
