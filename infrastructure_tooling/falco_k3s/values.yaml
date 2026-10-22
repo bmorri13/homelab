@@ -58,6 +58,14 @@ falco:
           override:
             condition: append
 
+        # dockerd unpacking image layers truncates files like var/log/dpkg.log inside
+        # layer snapshots (seen from the DinD sidecar in arc-runners). Real log clearing,
+        # outside dockerd's own storage, still alerts.
+        - rule: Clear Log Activities
+          condition: and not (proc.name = dockerd and fd.name startswith /var/lib/docker/)
+          override:
+            condition: append
+
   falco:
     priority: notice
     json_output: true
