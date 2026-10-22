@@ -66,6 +66,13 @@ falco:
           override:
             condition: append
 
+        # The Docker-in-Docker sidecar in arc-runners: dockerd opens packet sockets to
+        # set up networking for each CI job's containers.
+        - rule: Packet socket created in container
+          condition: and not (proc.name = dockerd and container.image.repository = docker.io/library/docker)
+          override:
+            condition: append
+
   falco:
     priority: notice
     json_output: true
