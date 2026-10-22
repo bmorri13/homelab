@@ -1,0 +1,36 @@
+# Homelab overrides on top of the packaged /etc/falco/falco.yaml.
+# Alerts go to syslog as one JSON object per message. They land in journald
+# (identifier "falco"), the OTel host agent ships them to Cribl, and the
+# cc-falco-ocsf pack turns them into OCSF Detection Findings in index=security.
+
+# The packaged default is debug, which is far too noisy.
+priority: notice
+
+json_output: true
+json_include_output_property: true
+json_include_tags_property: true
+
+# Under systemd, Falco's stdout is block-buffered: alerts sat in the buffer and
+# never reached journald (they appear immediately in the foreground). syslog()
+# writes each alert straight to journald, so use that and turn stdout off.
+stdout_output:
+  enabled: false
+syslog_output:
+  enabled: true
+
+# The health endpoint listens on 0.0.0.0:8765 by default, which other software on
+# some hosts already uses. Nothing polls it, so open no ports.
+webserver:
+  enabled: false
+
+# OCSF needs process and parent PIDs and an image id, which Falco only emits when a
+# rule's output mentions them. Add them to every syscall alert as JSON fields.
+# Lists in config.d replace the packaged list, so keep suggested_output.
+append_output:
+  - suggested_output: true
+  - match:
+      source: syscall
+    extra_fields:
+      - proc.pid
+      - proc.ppid
+      - container.image.id

@@ -1,0 +1,17 @@
+# Homelab tuning for the default Falco ruleset. Each exception is scoped to a
+# known-good image and process so the rule still fires for anything else.
+# Add new ones here, with the evidence that justified them.
+
+# guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
+# pg_isready (perl) reads /etc/shadow.
+- rule: Read sensitive file untrusted
+  condition: and not (container.image.repository = postgres and proc.name = pg_isready)
+  override:
+    condition: append
+
+# Splunk: splunkd runs its own Python and shell helpers (secure gateway, modular
+# inputs) as a matter of course.
+- rule: Run shell untrusted
+  condition: and not (container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9))
+  override:
+    condition: append

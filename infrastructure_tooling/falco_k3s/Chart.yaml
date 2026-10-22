@@ -1,0 +1,8 @@
+apiVersion: v2
+name: falco-k3s
+description: Falco runtime security DaemonSet on k3s-01 - alerts as JSON on stdout, shipped by the OTel collector to Cribl
+version: 0.1.0
+dependencies:
+  - name: falco
+    version: 9.2.1
+    repository: https://falcosecurity.github.io/charts

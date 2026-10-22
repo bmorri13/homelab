@@ -1,0 +1,14 @@
+id: default
+groups: {}
+comments: []
+routes:
+  - id: falco
+    name: falco
+    final: true
+    disabled: false
+    pipeline: falco_to_ocsf
+    description: Everything sent to the pack
+    clones: []
+    enableOutputExpression: false
+    filter: "true"
+    output: default

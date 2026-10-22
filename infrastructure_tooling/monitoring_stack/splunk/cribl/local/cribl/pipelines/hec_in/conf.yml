@@ -45,13 +45,20 @@ functions:
       (/"GET \/ HTTP\/1\.1" 200/.test(_raw) || /kubernetes cache synced successfully|waiting for Kubernetes cache sync/.test(_raw))
     conf: {}
     description: "ToolHive: gateway health polls of MCP backends and vMCP cache-sync loop (MCP calls are kept)"
+  - id: chain
+    filter: >-
+      (__e['syslog.identifier'] == 'falco' || __e['k8s.namespace.name'] == 'falco') && /^\{"hostname"/.test(_raw)
+    conf:
+      processor: pack:cc-falco-ocsf
+    description: Falco JSON alerts to OCSF Detection Findings (cribl/packs/cc-falco-ocsf)
   - id: eval
     filter: "true"
     conf:
       add:
         - name: index
           value: >-
-            ['network', 'infra', 'k8s', 'apps', 'audit', 'ai_agents', 'cribl', 'unrouted'].includes(index) ? index
+            __falco_alert ? 'security'
+            : ['network', 'infra', 'k8s', 'apps', 'audit', 'ai_agents', 'security', 'cribl', 'unrouted'].includes(index) ? index
             : /claude|codex|agent/i.test(__e['service.name'] || '') ? 'ai_agents'
             : ['vault', 'toolhive-mcp', 'toolhive-system'].includes(__e['k8s.namespace.name']) ? 'audit'
             : ['alexprinter', 'stirling-pdf', 'uptime-kuma'].includes(__e['k8s.namespace.name']) ? 'apps'
