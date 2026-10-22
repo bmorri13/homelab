@@ -74,6 +74,7 @@ else
 fi
 
 ./scripts/cribl-bootstrap.sh
+./scripts/cribl-packs.sh
 
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
     echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2

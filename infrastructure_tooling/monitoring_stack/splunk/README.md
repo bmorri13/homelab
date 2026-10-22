@@ -29,11 +29,11 @@ Cribl picks the index for every event. Data older than the retention below, or p
 
 | Index | Contents | Retention |
 |---|---|---|
-| `network` | UniFi gateway: firewall, IDS/IPS, DHCP | 90 days |
+| `network` | UniFi gateway (OCSF): firewall, IDS/IPS findings, client connects, health events | 90 days |
 | `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
-| `audit` | Vault, ToolHive, admin actions, remote-access logins | 90 days |
+| `audit` | Vault, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
 | `cribl` | Cribl's own warnings and errors | 14 days |
 | `unrouted` | Matched no route or named a missing index. Should stay empty. | 14 days |
@@ -52,7 +52,11 @@ Syslog has no authentication. Restrict ports 514 and 5514 to the senders' IPs wi
 
 ### Cribl routing
 
-Routes match on the input. `hec_in` then picks the index:
+Routes match on the input.
+
+`syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
+
+`hec_in` picks the index:
 
 1. Keep an index the collector set, if it is one of the indexes above.
 2. `service.name` containing claude, codex, or agent → `ai_agents`.
@@ -73,7 +77,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 | Prefix | Use | Examples |
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
-| `85_` | Props and transforms for data from apps we build | `85_guardrail_props` (none yet) |
+| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf` |
 | none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
@@ -84,6 +88,7 @@ Current base apps:
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
 - `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk.
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
+- `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 
@@ -139,10 +144,11 @@ chmod 600 .env
 2. Starts the stack and waits for Splunk to become healthy.
 3. Syncs every app under `apps/` into Splunk, restarting splunkd only if something changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk.
 4. Runs `cribl-bootstrap.sh`. On first deploy, while Cribl still accepts its default admin/admin login, this sets the Cribl admin password and the HEC token from `.env` and enables the HEC input. Later runs see the default login rejected and change nothing.
+5. Runs `cribl-packs.sh`, which installs each pack under `cribl/packs/` through the Cribl API when it is missing or its `package.json` version changed. Packs must go through the API: a pack copied into Cribl's config directory shows up in the list, but `pack:<id>` references to it don't resolve. The repo owns packs, so an upgrade replaces UI edits made to an installed pack.
 
 ### Changing Cribl config
 
-After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. To keep a change, copy the changed files from `/srv/cribl/local/cribl/` back into `cribl/local/cribl/` and commit them. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
+After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. To keep a change, copy the changed files from `/srv/cribl/local/cribl/` back into `cribl/local/cribl/` and commit them. To push a repo change to a running Cribl, copy the file the other way (into `/srv/cribl/local/cribl/`), then `docker compose restart cribl`. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
 
 ### License
 
