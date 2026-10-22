@@ -39,6 +39,12 @@ functions:
       __e['k8s.namespace.name'] == 'arc-systems' && /\tINFO\t/.test(_raw) && !/scaled|Created|Deleted|Failed/.test(_raw)
     conf: {}
     description: "ARC controller/listener INFO reconcile loop (scale events, warnings and errors are kept)"
+  - id: drop
+    filter: >-
+      __e['k8s.namespace.name'] == 'toolhive-mcp' &&
+      (/"GET \/ HTTP\/1\.1" 200/.test(_raw) || /kubernetes cache synced successfully|waiting for Kubernetes cache sync/.test(_raw))
+    conf: {}
+    description: "ToolHive: gateway health polls of MCP backends and vMCP cache-sync loop (MCP calls are kept)"
   - id: eval
     filter: "true"
     conf:
