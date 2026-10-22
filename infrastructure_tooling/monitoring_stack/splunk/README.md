@@ -7,12 +7,12 @@ Splunk Enterprise on a developer license (10 GB/day), running in Docker Compose 
 | What | Where | Notes |
 |---|---|---|
 | Config (`/opt/splunk/etc`) | `/srv/splunk/etc` on the VM | Survives container recreation and upgrades. Backed up nightly to Unraid. |
-| Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes. |
-| Frozen archive | Unraid NFS share at `/mnt/unraid-splunk/frozen` | Raw data only. Thaw to search again. |
+| Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes; the oldest data is deleted at the cap. |
+| Frozen archive | Not enabled yet (issue #165) | Planned: Unraid NFS share at `/mnt/unraid-splunk/frozen` |
 | Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | 14 nightly archives |
 | Repo-managed settings | `homelab_base/` app | Indexes, retention, and the 50 GB free-space guard |
 
-Indexes: `homelab` (1 year), `network` (1 year), `k8s` (180 days). After that, buckets go to the frozen archive.
+Indexes: `homelab`, `network`, and `k8s`, each kept for 90 days. Data older than that, or past the 350 GB cap, is deleted. Archiving to the Unraid share comes later (issue #165).
 
 Ports: `8000` Splunk Web (HTTPS), `8088` HEC (HTTPS), `8089` REST API, `9997` forwarders.
 
@@ -43,6 +43,8 @@ mount /mnt/unraid-splunk
 mkdir -p /mnt/unraid-splunk/frozen /mnt/unraid-splunk/backups
 touch /mnt/unraid-splunk/.splunk-archive
 ```
+
+Until this share exists, nightly config backups are skipped. Archiving frozen data also needs `coldToFrozenScript` added back to each index in `homelab_base/default/indexes.conf` (see the comment there).
 
 The `.splunk-archive` marker matters. `archive_bucket.sh` and `backup-etc.sh` write only when they can see it. If the share is not mounted, they see the empty local directory instead, so they skip the write rather than fill the root disk. Splunk keeps the bucket and retries later.
 

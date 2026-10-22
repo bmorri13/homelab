@@ -47,6 +47,6 @@ else
 fi
 
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
-    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - frozen buckets will stay on local disk until the Unraid share is mounted" >&2
+    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2
 fi
 echo "done: https://$(hostname):8000"
