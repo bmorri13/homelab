@@ -28,6 +28,17 @@ functions:
       /Deactivated successfully|Consumed .* CPU time|^(Starting|Started|Finished|Stopping|Stopped) .*\.(service|timer|socket|mount|slice|scope)/.test(_raw))
     conf: {}
     description: "journald: MOTD news and routine systemd unit start/stop (failures are kept)"
+  - id: drop
+    filter: >-
+      __e['k8s.namespace.name'] == 'argocd' && !/level=(warn|error|fatal)|"level":"(warn|error|fatal)"/.test(_raw) &&
+      /Processing completed|Start processing|finished unary call with code OK|GetRepoObjs stats|Reconciliation completed|manifest cache hit|No status changes|Refreshing app status|Comparing app state|Skipping auto-sync|Update successful/.test(_raw)
+    conf: {}
+    description: "ArgoCD routine reconcile chatter (warnings, errors and sync actions are kept)"
+  - id: drop
+    filter: >-
+      __e['k8s.namespace.name'] == 'arc-systems' && /\tINFO\t/.test(_raw) && !/scaled|Created|Deleted|Failed/.test(_raw)
+    conf: {}
+    description: "ARC controller/listener INFO reconcile loop (scale events, warnings and errors are kept)"
   - id: eval
     filter: "true"
     conf:
