@@ -1,0 +1,22 @@
+{
+  "name": "cc-unifi-ocsf",
+  "version": "0.1.0",
+  "spec": "1.0.0",
+  "displayName": "UniFi to OCSF",
+  "author": "bmorri13",
+  "description": "Converts UniFi Network SIEM syslog (CEF, plus kernel firewall lines) into OCSF 1.9.0 JSON.",
+  "tags": {
+    "dataType": [
+      "logs"
+    ],
+    "domain": [
+      "security",
+      "network"
+    ],
+    "technology": [
+      "ubiquiti",
+      "unifi",
+      "ocsf"
+    ]
+  }
+}

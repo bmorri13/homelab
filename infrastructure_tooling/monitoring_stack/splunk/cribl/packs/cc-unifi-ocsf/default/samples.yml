@@ -1,0 +1,6 @@
+unifi_cef_samples:
+  sampleName: unifi_cef_samples.json
+  description: UniFi Network CEF (real and public examples, sanitized) plus kernel firewall lines
+  created: 1792635000000
+  size: 12677
+  numEvents: 22

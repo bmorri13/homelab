@@ -1,0 +1,21 @@
+functions:
+  - id: drop
+    filter: severity >= 7
+    conf: {}
+    description: Debug-level syslog
+  - id: chain
+    filter: "true"
+    conf:
+      processor: pack:cc-unifi-ocsf
+    description: UniFi CEF and kernel firewall lines to OCSF JSON (cribl/packs/cc-unifi-ocsf)
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: "[3002, 5019].includes(__ocsf_class_uid) ? 'audit' : 'network'"
+        - name: sourcetype
+          value: sourcetype || 'syslog'
+    description: Admin logins and config changes go to audit; everything else to network
+asyncFuncTimeout: 1000
+output: default

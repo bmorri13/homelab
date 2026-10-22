@@ -21,6 +21,9 @@ on:
     paths:
       - 'infrastructure_tooling/proxmox/packer/**'
 
+permissions:
+  contents: read
+
 env:
   PACKER_VERSION: "1.10.0"
   WORKING_DIR: "infrastructure_tooling/proxmox/packer/ubuntu-server-noble"
@@ -43,6 +46,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -141,6 +146,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -164,9 +171,6 @@ jobs:
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
             "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
 
-          echo "API Response (first 500 chars):"
-          echo "$CLUSTER_RESOURCES" | head -c 500
-
           # Validate JSON response
           if ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
             echo "ERROR: Invalid JSON response from Proxmox API"
@@ -181,7 +185,6 @@ jobs:
 
           if [ -n "$VM_INFO" ]; then
             echo "Found VM/template with ID $VM_ID"
-            echo "VM Info: $VM_INFO"
 
             # Check if it's a template
             IS_TEMPLATE=$(echo "$VM_INFO" | jq -r '.template // 0')
@@ -342,6 +345,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -438,6 +443,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
@@ -461,9 +468,6 @@ jobs:
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
             "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
 
-          echo "API Response (first 500 chars):"
-          echo "$CLUSTER_RESOURCES" | head -c 500
-
           # Validate JSON response
           if ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
             echo "ERROR: Invalid JSON response from Proxmox API"
@@ -478,7 +482,6 @@ jobs:
 
           if [ -n "$VM_INFO" ]; then
             echo "Found VM/template with ID $VM_ID"
-            echo "VM Info: $VM_INFO"
 
             # Check if it's a template
             IS_TEMPLATE=$(echo "$VM_INFO" | jq -r '.template // 0')

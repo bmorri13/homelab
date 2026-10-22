@@ -1,0 +1,14 @@
+id: default
+groups: {}
+comments: []
+routes:
+  - id: unifi
+    name: unifi
+    final: true
+    disabled: false
+    pipeline: unifi_to_ocsf
+    description: Everything sent to the pack
+    clones: []
+    enableOutputExpression: false
+    filter: "true"
+    output: default

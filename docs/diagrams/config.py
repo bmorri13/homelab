@@ -53,7 +53,7 @@ VMS = {
         {"name": "ubuntu-desktop-01", "cores": 2, "mem_gb": 6, "disk_gb": 50, "template": 9004, "tags": ["desktop"]},
     ],
     "proxmox3": [
-        {"name": "security-tooling-01", "cores": 4, "mem_gb": 16, "disk_gb": 300, "template": 9005, "tags": ["security"]},
+        {"name": "security-tooling-01", "cores": 8, "mem_gb": 16, "disk_gb": 600, "template": 9005, "tags": ["security", "splunk"]},
         {"name": "k3s-01", "cores": 4, "mem_gb": 16, "disk_gb": 300, "template": 9005, "tags": ["k3s"]},
         {"name": "siem-agent-test-vm", "cores": 8, "mem_gb": 24, "disk_gb": 250, "template": 9005, "tags": ["siem"]},
     ],
@@ -63,11 +63,11 @@ VMS = {
 K8S_CLUSTERS = {
     "Primary K3s": {
         "node": "Intel NUC (proxmox)",
-        "components": ["ArgoCD", "Vault", "Cert Manager", "MetalLB", "ESO", "Traefik"],
+        "components": ["ArgoCD", "Vault", "Cert Manager", "MetalLB", "ESO", "Traefik", "ARC Controller", "ARC Runners"],
     },
     "Secondary K3s": {
         "node": "docker-compose-03 VM (proxmox2)",
-        "components": ["Vault", "ESO", "Tailscale Operator", "ARC Controller", "ARC Runners"],
+        "components": ["Vault", "ESO", "Tailscale Operator"],
     },
 }
 

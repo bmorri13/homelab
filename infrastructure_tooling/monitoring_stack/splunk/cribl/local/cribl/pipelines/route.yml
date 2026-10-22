@@ -1,0 +1,52 @@
+id: default
+routes:
+  - id: cribl_internal
+    name: cribl_internal
+    final: true
+    disabled: false
+    pipeline: cribl_internal
+    description: Cribl's own logs
+    enableOutputExpression: false
+    filter: __inputId.startsWith('cribl:')
+    clones: []
+    output: splunk
+  - id: syslog_network
+    name: syslog_network
+    final: true
+    disabled: false
+    pipeline: syslog_network
+    description: UniFi syslog
+    enableOutputExpression: false
+    filter: __inputId.startsWith('syslog:syslog_network:')
+    clones: []
+    output: splunk
+  - id: syslog_infra
+    name: syslog_infra
+    final: true
+    disabled: false
+    pipeline: syslog_infra
+    description: Proxmox, Unraid, other syslog
+    enableOutputExpression: false
+    filter: __inputId.startsWith('syslog:syslog_infra:')
+    clones: []
+    output: splunk
+  - id: hec
+    name: hec
+    final: true
+    disabled: false
+    pipeline: hec_in
+    description: OTel collectors on VMs and k8s
+    enableOutputExpression: false
+    filter: __inputId.startsWith('splunk_hec:hec')
+    clones: []
+    output: splunk
+  - id: unrouted
+    name: unrouted
+    final: true
+    disabled: false
+    pipeline: unrouted
+    description: Anything else lands in index=unrouted
+    enableOutputExpression: false
+    filter: "true"
+    clones: []
+    output: splunk

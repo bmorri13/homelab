@@ -1,0 +1,312 @@
+output: default
+asyncFuncTimeout: 1000
+description: UniFi Network CEF and kernel firewall syslog to OCSF 1.9.0 JSON
+functions:
+  - id: code
+    filter: "true"
+    description: Parse CEF or a kernel firewall line and build the OCSF event in _raw
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1
+      useUniqueAccumulator: false
+      code: |-
+          // UniFi Network syslog (CEF, or kernel firewall lines) -> OCSF 1.9.0 JSON in _raw.
+          // Sets __ocsf_class_uid so the calling pipeline can pick an index.
+          // Cribl's Code function checker rejects ??, ?., object spread, and anything that leaves an
+          // empty node in the syntax tree (for (;;) without an initializer, array destructuring holes).
+          const OCSF_VERSION = '1.9.0';
+          // Use _raw: Cribl's syslog parser takes "CEF:" as the RFC 3164 tag, so message starts at "0|Ubiquiti".
+          const line = String(__e._raw || __e.message || '');
+
+          const lc = (v) => (v == null ? undefined : String(v).toLowerCase());
+          const num = (v) => {
+            if (v == null || v === '' || v === 'null') return undefined;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : undefined;
+          };
+          const prune = (o) => {
+            if (Array.isArray(o)) {
+              const a = o.map(prune).filter((v) => v !== undefined);
+              return a.length ? a : undefined;
+            }
+            if (o && typeof o === 'object') {
+              const r = {};
+              for (const k of Object.keys(o)) {
+                const v = prune(o[k]);
+                if (v !== undefined) r[k] = v;
+              }
+              return Object.keys(r).length ? r : undefined;
+            }
+            return o === '' || o === null || o === 'null' ? undefined : o;
+          };
+          // CEF severity 0-10 -> OCSF severity_id
+          const sevFromCef = (s) => {
+            const n = num(s);
+            if (n === undefined) return 0;
+            if (n <= 1) return 1;
+            if (n <= 3) return 2;
+            if (n <= 6) return 3;
+            if (n <= 8) return 4;
+            return 5;
+          };
+          const sevFromRisk = (r) => ({ low: 2, medium: 3, high: 4, critical: 5 })[lc(r)];
+          const SEV_NAME = { 0: 'Unknown', 1: 'Informational', 2: 'Low', 3: 'Medium', 4: 'High', 5: 'Critical', 6: 'Fatal' };
+
+          let ev = null;
+          const cefAt = line.indexOf('CEF:');
+          const kern = line.match(/\[([A-Za-z0-9_]+)-([A-Z])-(\d+)\]|\[([A-Za-z0-9_]+)-(\d+)-([A-Z])\]/);
+
+          if (cefAt >= 0) {
+            // ---- CEF header: CEF:Version|Vendor|Product|Version|SignatureID|Name|Severity|Extension
+            const body = line.slice(cefAt + 4);
+            const hdr = [];
+            let cur = '';
+            let i;
+            for (i = 0; i < body.length && hdr.length < 7; i++) {
+              const c = body[i];
+              if (c === '\\' && i + 1 < body.length) { cur += body[++i]; continue; }
+              if (c === '|') { hdr.push(cur); cur = ''; continue; }
+              cur += c;
+            }
+            const vendor = hdr[1];
+            const product = hdr[2];
+            const pversion = hdr[3];
+            const sigId = hdr[4];
+            const name = hdr[5];
+            const cefSev = hdr[6];
+            // ---- Extension: space-separated key=value; a value runs until the next " key="
+            const extStr = body.slice(i);
+            const k = {};
+            const re = /(?:^|\s)([A-Za-z][A-Za-z0-9_.]*)=/g;
+            const hits = [];
+            let m;
+            while ((m = re.exec(extStr)) !== null) hits.push({ key: m[1], start: m.index, vstart: re.lastIndex });
+            for (let h = 0; h < hits.length; h++) {
+              const end = h + 1 < hits.length ? hits[h + 1].start : extStr.length;
+              k[hits[h].key] = extStr.slice(hits[h].vstart, end).trim()
+                .replace(/\\=/g, '=').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+            }
+            const used = new Set();
+            const g = function () {
+              for (const key of arguments) {
+                if (k[key] !== undefined && k[key] !== '' && k[key] !== 'null') { used.add(key); return k[key]; }
+                used.add(key);
+              }
+              return undefined;
+            };
+
+            const category = g('UNIFIcategory');
+            const sub = g('UNIFIsubCategory');
+            const policyType = g('UNIFIpolicyType');
+            const act = lc(g('act'));
+            const blocked = act ? /block|drop|deny|reject/.test(act) : /blocked/i.test(name || '');
+            const t = Date.parse(g('UNIFIutcTime') || '') || Math.round((__e._time || Date.now() / 1000) * 1000);
+
+            const metadata = {
+              version: OCSF_VERSION,
+              product: { name: product, vendor_name: vendor, version: pversion },
+              event_code: sigId,
+              log_name: 'unifi',
+              log_format: 'CEF',
+              original_time: k.UNIFIutcTime,
+            };
+            const device = {
+              type_id: 9, type: 'Firewall',
+              name: g('UNIFIdeviceName') || g('UNIFIhost'),
+              hostname: __e.host,
+              ip: g('UNIFIdeviceIp'),
+              mac: lc(g('UNIFIdeviceMac')),
+              model: g('UNIFIdeviceModel'),
+              vendor_name: 'Ubiquiti',
+              os: k.UNIFIdeviceVersion ? { name: 'UniFi OS', type_id: 99, version: g('UNIFIdeviceVersion') } : undefined,
+            };
+            const dirMap = { incoming: 1, inbound: 1, outgoing: 2, outbound: 2, internal: 3, lateral: 3 };
+            const zoneDir = (s, d) => {
+              if (!s || !d) return 0;
+              const ext = (z) => /external|internet|wan/i.test(z);
+              if (ext(s) && !ext(d)) return 1;
+              if (!ext(s) && ext(d)) return 2;
+              return 3;
+            };
+            const srcZone = g('UNIFIsrcZone');
+            const dstZone = g('UNIFIdstZone');
+            const dirKnown = dirMap[lc(g('UNIFIdirection'))];
+            const direction_id = dirKnown !== undefined ? dirKnown : zoneDir(srcZone, dstZone);
+            const src_endpoint = {
+              ip: g('src', 'UNIFIclientIp'),
+              port: num(g('spt')),
+              mac: lc(g('UNIFIsrcClientMac', 'UNIFIclientMac')),
+              hostname: g('UNIFIsrcClientHostname', 'UNIFIclientHostname'),
+              name: g('UNIFIsrcClientAlias', 'UNIFIclientAlias'),
+              zone: srcZone,
+              interface_name: g('deviceInboundInterface'),
+              vlan_uid: g('UNIFInetworkVlan'),
+            };
+            const dst_endpoint = {
+              ip: g('dst'),
+              port: num(g('dpt')),
+              mac: lc(g('UNIFIdstClientMac')),
+              hostname: g('UNIFIdstClientHostname'),
+              name: g('UNIFIdstClientAlias'),
+              zone: dstZone,
+              interface_name: g('deviceOutboundInterface'),
+              location: k.UNIFIdstRegion ? { country: g('UNIFIdstRegion') } : undefined,
+            };
+            const protocol = lc(g('proto'));
+            const connection_info = { protocol_name: protocol, direction_id };
+            const traffic = {
+              bytes: num(g('UNIFItotalBytes')), packets: num(g('UNIFItotalPackets')),
+              bytes_in: num(g('UNIFIbytesReceived')), bytes_out: num(g('UNIFIbytesSent')),
+              packets_in: num(g('UNIFIpacketsReceived')), packets_out: num(g('UNIFIpacketsSent')),
+            };
+            const action = act || blocked ? {
+              action_id: blocked ? 2 : 1, action: blocked ? 'Denied' : 'Allowed',
+              disposition_id: blocked ? 2 : 1, disposition: blocked ? 'Blocked' : 'Allowed',
+            } : {};
+            const message = g('msg');
+            const isIds = lc(policyType) === 'ids/ips' || k.UNIFIipsSignature !== undefined || /threat detected/i.test(name || '');
+            const isFw = !isIds && (policyType !== undefined || srcZone !== undefined || dstZone !== undefined || /firewall/i.test(sub || ''));
+            const isClient = /client (connected|disconnected|roamed)/i.test(name || '') || (lc(category) === 'monitoring' && /wifi|wired|client/i.test(sub || ''));
+            const admin = g('UNIFIadmin');
+            const isLogin = (admin !== undefined || /admin/i.test(sub || '')) && /logged in|log ?in|accessed|signed in|sign ?in/i.test(`${name} ${message}`);
+            const isConfig = lc(category) === 'audit' || /config|settings? (changed|modified)/i.test(name || '');
+
+            if (!isIds && !isFw) { device.type_id = 99; device.type = 'Network Controller'; }
+
+            if (isIds) {
+              const risk = g('UNIFIrisk');
+              const riskSev = sevFromRisk(risk);
+              const sev = riskSev !== undefined ? riskSev : sevFromCef(cefSev);
+              const sig = g('UNIFIipsSignature');
+              ev = {
+                class_uid: 2004, class_name: 'Detection Finding', category_uid: 2, category_name: 'Findings',
+                activity_id: 1, activity_name: 'Create',
+                severity_id: sev, is_alert: true,
+                finding_info: {
+                  uid: g('UNIFIipsSessionId') || `${sigId}-${t}-${src_endpoint.ip || ''}-${dst_endpoint.ip || ''}`,
+                  title: sig ? `${name}: ${sig}` : name,
+                  desc: message,
+                  types: [g('UNIFIpolicyName')],
+                  analytic: { type_id: 1, type: 'Rule', uid: g('UNIFIipsSignatureId'), name: sig || k.UNIFIpolicyName || name, category: k.UNIFIpolicyName },
+                },
+                evidences: [{ src_endpoint, dst_endpoint, connection_info }],
+                risk_level: risk,
+              };
+              Object.assign(ev, action);
+              // IDS (not IPS) mode: traffic passed, the signature only fired.
+              if (!blocked) { ev.disposition_id = 15; ev.disposition = 'Detected'; }
+              metadata.profiles = ['security_control'];
+            } else if (isFw) {
+              ev = {
+                class_uid: 4001, class_name: 'Network Activity', category_uid: 4, category_name: 'Network Activity',
+                activity_id: blocked ? 5 : 6, activity_name: blocked ? 'Refuse' : 'Traffic',
+                severity_id: sevFromCef(cefSev),
+                src_endpoint, dst_endpoint, connection_info, traffic,
+                firewall_rule: { name: g('UNIFIpolicyName'), type: policyType, uid: g('UNIFIpolicyId', 'UNIFIruleId') },
+                app_name: g('app'),
+              };
+              Object.assign(ev, action);
+              metadata.profiles = ['security_control'];
+            } else if (isClient) {
+              const n = lc(name) || '';
+              const pick = n.includes('disconnected') ? [2, 'Close'] : n.includes('roamed') ? [99, 'Roam'] : n.includes('connected') ? [1, 'Open'] : [99, name];
+              const aid = pick[0];
+              const aname = pick[1];
+              ev = {
+                class_uid: 4001, class_name: 'Network Activity', category_uid: 4, category_name: 'Network Activity',
+                activity_id: aid, activity_name: aname,
+                severity_id: sevFromCef(cefSev),
+                src_endpoint,
+                dst_endpoint: prune({
+                  name: g('UNIFIlastConnectedToDeviceName', 'UNIFIconnectedToDeviceName'),
+                  mac: lc(g('UNIFIlastConnectedToDeviceMac', 'UNIFIconnectedToDeviceMac')),
+                  ip: g('UNIFIlastConnectedToDeviceIp', 'UNIFIconnectedToDeviceIp'),
+                  type: 'Access Point',
+                }),
+                connection_info: { protocol_name: g('UNIFIwifiBand') ? 'wifi' : 'ethernet', direction_id: 0 },
+                traffic,
+              };
+            } else if (isLogin) {
+              const failed = /fail|denied|invalid/i.test(`${name} ${message}`);
+              ev = {
+                class_uid: 3002, class_name: 'Authentication', category_uid: 3, category_name: 'Identity & Access Management',
+                activity_id: 1, activity_name: 'Logon',
+                severity_id: sevFromCef(cefSev),
+                user: { name: admin },
+                src_endpoint: { ip: src_endpoint.ip },
+                auth_protocol: g('UNIFIauthMethod', 'UNIFIaccessMethod'), auth_protocol_id: 99,
+                status_id: failed ? 2 : 1, status: failed ? 'Failure' : 'Success',
+                service: { name: product },
+              };
+            } else if (isConfig) {
+              ev = {
+                class_uid: 5019, class_name: 'Device Config State Change', category_uid: 5, category_name: 'Discovery',
+                activity_id: 1, activity_name: 'Log',
+                severity_id: sevFromCef(cefSev),
+                actor: admin ? { user: { name: admin } } : undefined,
+                status_detail: [g('UNIFIsettingsSection'), g('UNIFIsettingsEntry')].filter(Boolean).join('/') || undefined,
+              };
+            } else {
+              ev = {
+                class_uid: 0, class_name: 'Base Event', category_uid: 0, category_name: 'Uncategorized',
+                activity_id: 99, activity_name: name,
+                severity_id: sevFromCef(cefSev),
+              };
+            }
+            ev.time = t;
+            ev.message = message || name;
+            ev.metadata = metadata;
+            ev.device = device;
+            // Everything UniFi sent that the mapping did not use stays available.
+            const unmapped = { cef_name: name, cef_severity: num(cefSev), category, sub_category: sub };
+            if (ev.class_uid === 5019) unmapped.src_ip = src_endpoint.ip;
+            for (const key of Object.keys(k)) if (!used.has(key)) unmapped[key] = k[key];
+            ev.unmapped = unmapped;
+          } else if (kern) {
+            // ---- Kernel firewall line: [CHAIN-A-ID] or [CHAIN-ID-A] then KEY=VALUE pairs
+            const chain = kern[1] || kern[4];
+            const letter = kern[2] || kern[6];
+            const ruleId = kern[3] || kern[5];
+            const kv = {};
+            const kvre = /\b([A-Z]+)=("[^"]*"|\S*)/g;
+            let m;
+            while ((m = kvre.exec(line)) !== null) kv[m[1]] = m[2].replace(/^"|"$/g, '');
+            const blocked = letter === 'D' || letter === 'R';
+            const descr = kv.DESCR;
+            ev = {
+              class_uid: 4001, class_name: 'Network Activity', category_uid: 4, category_name: 'Network Activity',
+              activity_id: blocked ? 5 : 6, activity_name: blocked ? 'Refuse' : 'Traffic',
+              severity_id: 1,
+              time: Math.round((__e._time || Date.now() / 1000) * 1000),
+              message: descr || `${chain} ${blocked ? 'blocked' : 'allowed'}`,
+              src_endpoint: { ip: kv.SRC, port: num(kv.SPT), interface_name: kv.IN },
+              dst_endpoint: { ip: kv.DST, port: num(kv.DPT), interface_name: kv.OUT },
+              connection_info: { protocol_name: lc(kv.PROTO), direction_id: /^WAN_(IN|LOCAL)/.test(chain) ? 1 : /^WAN_OUT/.test(chain) ? 2 : 0 },
+              traffic: { bytes: num(kv.LEN), packets: 1 },
+              firewall_rule: { uid: ruleId, name: descr || chain, category: chain },
+              action_id: blocked ? 2 : 1, action: blocked ? 'Denied' : 'Allowed',
+              disposition_id: blocked ? 2 : 1, disposition: blocked ? 'Blocked' : 'Allowed',
+              metadata: { version: OCSF_VERSION, product: { name: 'UniFi Network', vendor_name: 'Ubiquiti' }, log_name: 'unifi', log_format: 'iptables', profiles: ['security_control'] },
+              device: { type_id: 9, type: 'Firewall', hostname: __e.host, vendor_name: 'Ubiquiti' },
+              unmapped: { MAC: kv.MAC, TTL: num(kv.TTL), TOS: kv.TOS, ID: kv.ID, WINDOW: kv.WINDOW },
+            };
+          }
+
+          if (ev) {
+            ev.type_uid = ev.class_uid * 100 + ev.activity_id;
+            // OCSF validator: activity 99 uses the caption "Other", except Base Event, where type_uid 99
+            // is the whole type and should carry the source event name.
+            ev.type_name = `${ev.class_name}: ${ev.activity_id === 99 && ev.class_uid !== 0 ? 'Other' : ev.activity_name}`;
+            // device comes from the host profile for every class except 5019, where it is native.
+            ev.metadata.profiles = (ev.metadata.profiles || []).concat(['host']).filter((v, i, a) => a.indexOf(v) === i);
+            ev.severity = SEV_NAME[ev.severity_id];
+            const out = prune(ev);
+            __e._raw = JSON.stringify(out);
+            __e.__ocsf_class_uid = ev.class_uid;
+            __e.sourcetype = 'ubiquiti:unifi:ocsf';
+            if (out.time) __e._time = out.time / 1000;
+            // Drop the parsed syslog fields; _raw now carries everything.
+            for (const f of Object.keys(__e)) {
+              if (!['_raw', '_time', 'host', 'source', 'sourcetype', 'index', '__ocsf_class_uid'].includes(f) && !f.startsWith('__')) delete __e[f];
+            }
+          }

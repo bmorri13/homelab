@@ -1,0 +1,90 @@
+[
+ {
+  "_raw": "Oct 21 22:43:24 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|546|Config Modified|5|UNIFIcategory=Audit UNIFIhost=Home Gateway UNIFIsettingsChanges=enabled_allowed_traffic: true UNIFIaccessMethod=web UNIFIsettingsSection=System UNIFIsettingsEntry=traffic_flow UNIFIadmin=UniFi User src=203.0.113.80 UNIFIutcTime=2026-10-22T02:43:24.054Z msg=UniFi User made a change to  in System settings. Source IP: 203.0.113.80",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:44:01 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|546|Config Modified|5|UNIFIcategory=Audit UNIFIhost=Home Gateway UNIFIsettingsChanges=enabled_allowed_traffic: false UNIFIaccessMethod=web UNIFIsettingsSection=System UNIFIsettingsEntry=traffic_flow UNIFIadmin=UniFi User src=203.0.113.80 UNIFIutcTime=2026-10-22T02:44:01.346Z msg=UniFi User made a change to  in System settings. Source IP: 203.0.113.80",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Jul 17 10:51:14 CONTROLLER CEF:0|Ubiquiti|UniFi Network|10.4.57|400|WiFi Client Connected|1|UNIFIcategory=Client Devices UNIFIsite=Site A UNIFIhost=CONTROLLER UNIFIconnectedToDeviceName=UNIAP-01 UNIFIconnectedToDeviceIp=10.0.0.10 UNIFIconnectedToDeviceMac=aa:bb:cc:00:00:01 UNIFIconnectedToDeviceModel=U6-LR UNIFIconnectedToDeviceVersion=6.7.54 UNIFIclientAlias=PHONE-01 UNIFIclientHostname=phone-01 UNIFIclientIp=10.0.1.50 UNIFIclientMac=aa:bb:cc:11:11:11 UNIFIwifiChannel=52 UNIFIwifiChannelWidth=40 UNIFIwifiName=CORP-WIFI UNIFIwifiBand=na UNIFIauthMethod=wpapsk UNIFIWiFiRssi=-60 UNIFInetworkName=USERS UNIFInetworkSubnet=10.0.1.0/24 UNIFInetworkVlan=3 UNIFIutcTime=2026-07-17T08:51:14.660Z msg=PHONE-01 connected to CORP-WIFI on UNIAP-01. Connection Info: Ch. 52 (5 GHz, 40 MHz), -60 dBm. IP: 10.0.1.50",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Jul 17 10:50:35 CONTROLLER CEF:0|Ubiquiti|UniFi Network|10.4.57|401|WiFi Client Disconnected|2|UNIFIcategory=Client Devices UNIFIsite=Site A UNIFIhost=CONTROLLER UNIFIlastConnectedToDeviceName=UNIAP-01 UNIFIlastConnectedToDeviceIp=10.0.0.10 UNIFIlastConnectedToDeviceMac=aa:bb:cc:00:00:01 UNIFIlastConnectedToDeviceModel=U6-LR UNIFIlastConnectedToDeviceVersion=6.7.54 UNIFIclientAlias=PHONE-01 UNIFIclientHostname=phone-01 UNIFIclientIp=10.0.1.50 UNIFIclientMac=aa:bb:cc:11:11:11 UNIFIwifiChannel=6 UNIFIwifiChannelWidth=20 UNIFIwifiName=CORP-WIFI UNIFIwifiBand=ng UNIFIwifiAirtimeUtilization=10 UNIFIwifiInterference=10 UNIFIlastConnectedToWiFiRssi=-67 UNIFIduration=31m 59s UNIFIusageDown=16,52 KB UNIFIusageUp=18,08 KB UNIFInetworkName=USERS UNIFInetworkSubnet=10.0.1.0/24 UNIFInetworkVlan=3 UNIFIutcTime=2026-07-17T08:50:35.355Z msg=PHONE-01 disconnected from CORP-WIFI. Time Connected: 31m 59s. Data Used: 18,08 KB (up) / 16,52 KB (down). Last Connected To: UNIAP-01 at -67 dBm.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Jul 17 10:40:42 CONTROLLER CEF:0|Ubiquiti|UniFi Network|10.4.57|402|WiFi Client Roamed|1|UNIFIcategory=Client Devices UNIFIsite=Site A UNIFIhost=CONTROLLER UNIFIconnectedToDeviceName=UNIAP-02 UNIFIconnectedToDeviceIp=10.0.0.11 UNIFIconnectedToDeviceMac=aa:bb:cc:00:00:02 UNIFIconnectedToDeviceModel=U6-LR UNIFIconnectedToDeviceVersion=6.7.54 UNIFIlastConnectedToDeviceName=UNIAP-01 UNIFIlastConnectedToDeviceIp=10.0.0.10 UNIFIlastConnectedToDeviceMac=aa:bb:cc:00:00:01 UNIFIlastConnectedToDeviceModel=U6-LR UNIFIlastConnectedToDeviceVersion=6.7.54 UNIFIclientAlias=LAPTOP-01 aa:11 UNIFIclientHostname=LAPTOP-01 UNIFIclientIp=10.0.1.49 UNIFIclientMac=aa:bb:cc:22:22:22 UNIFIwifiChannel=36 UNIFIwifiChannelWidth=40 UNIFIwifiName=CORP-WIFI UNIFIwifiBand=na UNIFIWiFiRssi=-72 UNIFIlastConnectedToWiFiChannel=44 UNIFIlastConnectedToWiFiChannelWidth=40 UNIFIlastConnectedToWiFiBand=na UNIFIlastConnectedToWiFiRssi=-76 UNIFIutcTime=2026-07-17T08:40:42.057Z msg=LAPTOP-01 aa:11 roamed from UNIAP-01 to UNIAP-02. Connection Info: Ch. 36 (5 GHz, 40 MHz), -72 dBm. Roaming Decision: -76 dBm to -72 dBm.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Jul 17 10:14:14 CONTROLLER CEF:0|Ubiquiti|UniFi Network|10.4.57|544|Network Accessed|4|UNIFIcategory=Audit UNIFIsite=Site A UNIFIhost=CONTROLLER UNIFIaccessMethod=web UNIFIadmin=admin src=10.0.1.38 UNIFIutcTime=2026-07-17T08:14:14.329Z msg=admin accessed UniFi Network using the web. Source IP: 10.0.1.38",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Jul 17 10:51:20 CONTROLLER CEF:0|Ubiquiti|UniFi Network|10.4.57|400|WiFi Client Connected|1|UNIFIcategory=Client Devices UNIFIsite=Site A UNIFIhost=CONTROLLER UNIFIconnectedToDeviceName=UNIAP-01 UNIFIconnectedToDeviceIp=10.0.0.10 UNIFIconnectedToDeviceMac=aa:bb:cc:00:00:01 UNIFIconnectedToDeviceModel=U6-LR UNIFIconnectedToDeviceVersion=6.7.54 UNIFIclientAlias=TV-01 UNIFIclientIp=10.0.1.206 UNIFIclientMac=aa:bb:cc:33:33:33 UNIFIwifiChannel=44 UNIFIwifiChannelWidth=40 UNIFIwifiName=CORP-WIFI UNIFIwifiBand=na UNIFIauthMethod=wpapsk UNIFIWiFiRssi=-51 UNIFInetworkName=USERS UNIFInetworkSubnet=10.0.1.0/24 UNIFInetworkVlan=3 UNIFIutcTime=2026-07-17T08:51:20.000Z msg=TV-01 connected to CORP-WIFI on UNIAP-01. Connection Info: Ch. 44 (5 GHz, 40 MHz), -51 dBm. IP: 10.0.1.206",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.6.101|201|Threat Detected and Blocked|7|UNIFIcategory=Security UNIFIhost=UDM-Pro proto=TCP spt=53250 dpt=32400 act=blocked app=Other UNIFIrisk=medium UNIFIpolicyName=DShield Block List UNIFIpolicyType=IDS/IPS UNIFIdirection=incoming deviceOutboundInterface=Default UNIFIdeviceMac=68:d7:9a:35:af:41 UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDM-Pro UNIFIdeviceIp=192.168.1.1 UNIFIdeviceVersion=5.1.31 src=198.235.24.95 dst=192.168.1.26 UNIFIsrcRegion=US UNIFIdstZone=Internal UNIFItotalBytes=58 UNIFItotalPackets=1 UNIFIpacketsReceived=0 UNIFIpacketsSent=1 UNIFIbytesReceived=0 UNIFIbytesSent=58 UNIFIflowCount=1 UNIFIflowId=null UNIFIflowStartTime=Aug 28, 2026 at 9:29:29.569 PM UNIFIipsSessionId=825220889423931 UNIFIipsSignature=ET DROP Dshield Block Listed Source group 1 UNIFIipsSignatureId=2402000 UNIFIutcTime=2026-08-29T01:29:30.869Z msg=A network intrusion attempt from 198.235.24.95 to 192.168.1.26 has been detected and blocked.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi OS|5.1.31|1005|Admin Made Config Changes|2|UNIFIhost=Host UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDMPRO UNIFIdeviceIp=71.235.83.203 UNIFIdeviceMac=68:D7:9A:35:AF:41 UNIFIdeviceVersion=5.1.31 msg=Ian C. changed Syslog Settings Mode setting from",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|201|Threat Detected and Blocked|9|UNIFIcategory=Security UNIFIhost=UDM-Pro UNIFIdeviceMac=68:d7:9a:35:af:41 UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDM-Pro UNIFIdeviceIp=192.168.1.1 UNIFIdeviceVersion=5.1.31 UNIFIsrcClientAlias=tranquility UNIFIsrcClientHostname=tranquility UNIFIsrcClientMac=1c:1b:0d:18:07:53 UNIFIsrcClientModel=Dell T110 Server UNIFIdstClientAlias=tranquility UNIFIdstClientHostname=tranquility UNIFIdstClientMac=1c:1b:0d:18:07:53 UNIFIdstClientModel=Dell T110 Server UNIFIutcTime=2026-08-27T00:02:03.992Z msg=A network intrusion attempt from tranquility to tranquility has been detected and blocked.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|100|Internet Down|10|UNIFIcategory=Internet and WAN UNIFIhost=UDM-Pro UNIFIdeviceMac=68:d7:9a:35:af:41 UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDM-Pro UNIFIdeviceIp=192.168.1.1 UNIFIdeviceVersion=5.1.31 UNIFIwanName=Comcast UNIFIwanId=WAN1 UNIFIwanPort=9 UNIFIwanIsp=Comcast Cable UNIFIwanSubnet=71.235.83.203/21 UNIFIwanSla=Auto UNIFIutcTime=2026-08-25T07:22:44.467Z msg=Internet connection WAN1 (Comcast Cable) on port 9 is down.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.6.101|112|High Latency Detected|4|UNIFIcategory=Internet and WAN UNIFIhost=UDM-Pro UNIFIdeviceMac=68:d7:9a:35:af:41 UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDM-Pro UNIFIdeviceIp=192.168.1.1 UNIFIdeviceVersion=5.1.31 UNIFIwanName=Comcast UNIFIwanId=WAN1 UNIFIwanPort=9 UNIFIwanIsp=Comcast Cable UNIFIwanSubnet=71.235.83.203/21 UNIFIwanSla=Auto UNIFIwanLatency=62 UNIFIutcTime=2026-08-29T01:18:57.217Z msg=Internet connection WAN1 (Comcast Cable) on port 9 is experiencing high latency.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.6.101|578|Network Updated|4|UNIFIcategory=Software Updates UNIFIhost=UDM-Pro UNIFIapplication=UniFi Network UNIFIapplicationVersion=10.6.101 UNIFIapplicationPriorVersion=10.5.67 UNIFIutcTime=2026-08-28T02:28:59.064Z msg=UniFi Network has updated to 10.6.101",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|512|Device Offline|8|UNIFIcategory=UniFi Devices UNIFIhost=UDM-Pro UNIFIdeviceMac=d0:21:f9:bc:15:fc UNIFIdeviceName=U6-Lite Liams Room UNIFIdeviceModel=U6-Lite UNIFIdeviceIp=192.168.1.66 UNIFIdeviceVersion=6.7.54 UNIFIconnectedToDeviceName=UDM-Pro UNIFIconnectedToDevicePort=1 UNIFIconnectedToDeviceIp=192.168.1.1 UNIFIconnectedToDeviceMac=68:d7:9a:35:af:41 UNIFIconnectedToDeviceModel=UDM-Pro UNIFIconnectedToDeviceVersion=5.1.26 UNIFIreference=https://help.ui.com/hc/en-us/articles/7258465146519 UNIFIutcTime=2026-08-23T20:28:58.384Z msg=U6-Lite Liams Room went offline.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|530|AP Channel Change|2|UNIFIcategory=UniFi Devices UNIFIhost=UDM-Pro UNIFIdeviceMac=24:5a:4c:58:91:f4 UNIFIdeviceName=UAP-IW Basement Theater UNIFIdeviceModel=UAP-IW-HD UNIFIdeviceIp=192.168.1.162 UNIFIdeviceVersion=6.7.54 UNIFIcurrentChannel=112 UNIFIpriorChannel=40 UNIFIutcTime=2026-08-20T06:01:15.074Z msg=UAP-IW Basement Theater moved to channel 112 from 40.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|113|Packet Loss Detected|4|UNIFIcategory=Internet and WAN UNIFIhost=UDM-Pro UNIFIdeviceMac=68:d7:9a:35:af:41 UNIFIdeviceName=UDM-Pro UNIFIdeviceModel=UDM-Pro UNIFIdeviceIp=192.168.1.1 UNIFIdeviceVersion=5.1.31 UNIFIwanName=Comcast UNIFIwanId=WAN1 UNIFIwanIsp=Comcast Cable UNIFIwanSubnet=71.235.83.203/21 UNIFIwanSla=Auto UNIFIutcTime=2026-08-25T07:20:58.294Z msg=Internet connection WAN1 (Comcast Cable) on port 9 is experiencing packet loss.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Protect|7.2.105|2159|motion|3|UNIFIcategory=detection eventId=4ebd78c0-8f52-4e1a-8b66-84a6f5d487a2 eventType=motion category=detection severity=3 timestamp=1788011392204 msg=",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.68.57|200|Threat Detected|7|UNIFIcategory=Security UNIFIsite=Default UNIFIhost=UCK G2 Plus site-controller proto=TCP spt=38738 dpt=22 act=allowed app=SSH UNIFIrisk=medium UNIFIpolicyName=Scanning Activity UNIFIpolicyType=IDS/IPS UNIFIdirection=outgoing deviceOutboundInterface=Internet 1 UNIFIdeviceMac=02:00:01:27:fb:2b UNIFIdeviceName=Gateway Max UNIFIdeviceModel=Gateway Max UNIFIdeviceIp=198.51.100.1 UNIFIdeviceVersion=5.0.16 UNIFIsrcClientAlias=ssdf-vector UNIFIsrcClientMac=02:01:01:02:a1:46 UNIFIsrcClientModel=Windows PC UNIFIsrcZone=Internal UNIFIdstClientAlias=02:00:01:27:fb:2c UNIFIdstClientMac=02:00:01:27:fb:2c UNIFIdstRegion=US UNIFIdstZone=External UNIFItotalBytes=74 UNIFItotalPackets=1 UNIFIpacketsReceived=0 UNIFIpacketsSent=1 UNIFIbytesReceived=0 UNIFIbytesSent=74 UNIFIflowCount=1 UNIFIflowId=null UNIFIflowStartTime=Jun 14, 2026 at 7:48:50.822 PM UNIFIipsSessionId=1190371755462149 UNIFIipsSignature=ET SCAN Potential SSH Scan OUTBOUND UNIFIipsSignatureId=2003068 UNIFIutcTime=2026-06-14T19:49:59.858Z msg=A network intrusion attempt from ssdf-vector to 02:00:01:27:fb:2c has been detected.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:50:00 UCG-Max CEF:0|Ubiquiti|UniFi Network|10.5.67|201|Threat Detected and Blocked|7|UNIFIcategory=Security proto=TCP spt=60363 dpt=22 act=blocked UNIFIpolicyName=Scanning Activity UNIFIpolicyType=IDS/IPS deviceInboundInterface=WireGuard Server 1 UNIFIdeviceMac=0c:ea:14:8a:4d:e3 src=192.168.2.3 dst=192.168.30.29 UNIFItotalBytes=78 UNIFIipsSignature=ET SCAN Potential SSH Scan msg=A network intrusion attempt has been detected and blocked.",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:51:00 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|300|Blocked by Firewall|4|UNIFIcategory=Security UNIFIsubCategory=Firewall UNIFIhost=Home Gateway proto=TCP spt=51515 dpt=23 act=blocked UNIFIpolicyName=Block All Traffic UNIFIpolicyType=Firewall UNIFIsrcZone=External UNIFIdstZone=Gateway src=203.0.113.7 dst=198.51.100.20 deviceInboundInterface=Internet 1 UNIFIdeviceMac=aa:bb:cc:dd:ee:ff UNIFIdeviceName=UCG-Max UNIFIutcTime=2026-10-22T02:51:00.000Z msg=Traffic from 203.0.113.7 to 198.51.100.20 was blocked by Block All Traffic. (synthetic)",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:51:05 Home-Gateway [WAN_LOCAL-D-2147483647] DESCR=\"[WAN_LOCAL]Block All Traffic\" IN=eth4 OUT= MAC=aa:bb:cc:dd:ee:ff:11:22:33:44:55:66:08:00 SRC=203.0.113.9 DST=198.51.100.20 LEN=44 TOS=0x00 PREC=0x00 TTL=242 ID=54321 PROTO=TCP SPT=40000 DPT=8443 WINDOW=1024 RES=0x00 SYN URGP=0",
+  "_time": 1792635000
+ },
+ {
+  "_raw": "Oct 21 22:51:10 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|500|Admin Accessed UniFi Network|2|UNIFIcategory=System UNIFIsubCategory=Admin UNIFIhost=Home Gateway UNIFIadmin=UniFi User UNIFIaccessMethod=web src=203.0.113.50 UNIFIutcTime=2026-10-22T02:51:10.000Z msg=UniFi User logged in to UniFi Network. (synthetic)",
+  "_time": 1792635000
+ }
+]

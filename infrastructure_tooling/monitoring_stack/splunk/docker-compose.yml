@@ -1,0 +1,89 @@
+# Splunk Enterprise (developer license) behind Cribl Stream - homelab logging box
+# on security-tooling-01. All log sources send to Cribl; Splunk only receives from
+# Cribl over the stack's internal network. Data and config live on the host under
+# ${SPLUNK_DATA_DIR} and ${CRIBL_DATA_DIR} and survive container recreation and
+# image upgrades. Use scripts/deploy.sh rather than a bare `up`.
+services:
+  splunk:
+    image: splunk/splunk:10.6.1@sha256:2a7cf9d2e8a2226773a9fac95b5e0e2cc8752496abfb134a21bdf8f67c9ee44d
+    container_name: splunk
+    hostname: splunk-homelab
+    restart: unless-stopped
+    environment:
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_START_ARGS=--accept-license
+      # Only applied on first start; change it in the UI afterwards.
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD:?set SPLUNK_PASSWORD in .env}
+      - SPLUNK_HTTP_ENABLESSL=true
+    ports:
+      - "8000:8000"   # Splunk Web (HTTPS, self-signed)
+    # Not published: 9997 (receives from Cribl), 8089 (REST), 8088 (HEC, unused).
+    volumes:
+      - splunk-etc:/opt/splunk/etc
+      - splunk-var:/opt/splunk/var
+      # Parent of the Unraid NFS mount. rslave lets an NFS mount that comes up
+      # after the container started still propagate in; archive_bucket.sh only
+      # archives when the share's marker file is visible.
+      - type: bind
+        source: ${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}
+        target: /opt/splunk/archive
+        bind:
+          propagation: rslave
+          create_host_path: true
+    mem_limit: ${SPLUNK_MEM_LIMIT:-8g}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  cribl:
+    image: cribl/cribl:4.20.3@sha256:8c7ac510ef79c4c5952490efc709b6dcaa0aa1e528754a2edc3faebe4ec1145c
+    container_name: cribl
+    hostname: cribl-homelab
+    restart: unless-stopped
+    environment:
+      - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
+    ports:
+      - "9000:9000"       # Cribl UI
+      - "514:9514/udp"    # syslog: Proxmox, Unraid, other hosts -> index=infra
+      - "514:9514/tcp"
+      - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
+      - "5514:9515/tcp"
+      - "8088:8088"       # HEC from the OTel collectors (token required)
+    volumes:
+      # Config (seeded from cribl/ by deploy.sh), state, and the persistent queue
+      # that holds data while Splunk is down.
+      - ${CRIBL_DATA_DIR:-/srv/cribl}:/opt/cribl/config-volume
+    depends_on:
+      - splunk
+    # The Cribl server can exit while the container stays up (the entrypoint just
+    # sleeps), so report it as unhealthy when the API stops answering.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    mem_limit: ${CRIBL_MEM_LIMIT:-2g}
+    logging: *logging
+
+volumes:
+  # Bind-backed named volumes: fixed host paths, plus Docker's copy-up of the
+  # image's /opt/splunk/etc defaults on first start.
+  splunk-etc:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SPLUNK_DATA_DIR:-/srv/splunk}/etc
+  splunk-var:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SPLUNK_DATA_DIR:-/srv/splunk}/var

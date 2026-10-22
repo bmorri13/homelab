@@ -154,7 +154,7 @@ That chart is the source of truth for `argocd-cm`. Settings added through the Ar
 | `resource.exclusions` for `AutoscalingListener`, `EphemeralRunner`, `EphemeralRunnerSet` | The ARC controller stamps `app.kubernetes.io/instance` onto the runtime objects it creates. ArgoCD reads that as its own tracking label, sees resources absent from Git, and prunes them; the controller recreates them, looping every reconcile. `AutoscalingRunnerSet` is deliberately **not** excluded — that one does come from Git. |
 | Ingress health override | Traefik runs hostNetwork with its Service disabled and there is no MetalLB, so `status.loadBalancer` never populates and ArgoCD's built-in check would leave every Ingress-owning app stuck at `Progressing`. |
 
-> **The two ARC apps must keep `prune: false`.** The exclusions above stop ArgoCD tracking the `actions.github.com` kinds, but the ARC controller also creates a **Role and RoleBinding** per listener — core RBAC kinds, so no `apiGroups`-based exclusion can cover them without excluding all RBAC cluster-wide. Those still carry the `app.kubernetes.io/instance` label, so re-enabling prune would resume deleting them and restart the loop. Expect `arc-runner-scaleset-k3s` and `arc-runner-daily-news-k3s` to sit permanently `OutOfSync / Healthy` — that is the intended steady state, not drift to fix.
+> **The ARC runner apps must keep `prune: false`.** The exclusions above cover the `actions.github.com` kinds, but the ARC controller also creates a **Role and RoleBinding** per listener, which no `apiGroups`-based exclusion can cover without excluding all RBAC. The controller is therefore run with `flags.excludeLabelPropagationPrefixes: [app.kubernetes.io/instance]` (set on the `arc-controller-k3s` Application, which is not in Git) so it stops copying ArgoCD's tracking label onto them. Keep prune off anyway: if that flag is ever lost, prune would delete the listener RBAC and loop. With the flag in place, `arc-runner-scaleset-k3s` and `arc-runner-cointhieves-k3s` should both show `Synced / Healthy`.
 
 ### Vault 
 - In order to manage kubernetes secrets, we will deploy [Vault](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)
@@ -765,6 +765,8 @@ terraform apply -var-file="secrets.tfvars"
 📖 **Full Documentation:** See the complete setup guide, configuration examples, and security practices in [`infrastructure_tooling/proxmox/README.md`](infrastructure_tooling/proxmox/README.md)
 
 ## Monitoring Stack Setup - Elastic & Cribl
+> **Update:** the homelab logging box is now Splunk Enterprise on a developer license, running on `security-tooling-01`. See [`infrastructure_tooling/monitoring_stack/splunk/README.md`](infrastructure_tooling/monitoring_stack/splunk/README.md). The Elastic and Cribl write-up below is kept for reference.
+
 - Using Docker Compose on a VM within Proxmox, I have configured a basic monitoring stack leveraging Elastic and Cribl for my logging infastructure
     - In order to avoid requring a license (e.g. Splunk Developer license) I have chosen Elastic as my logging solution along with Cribl to allow for easy data ingestion
 - In this section I will breakdown setting up both Elastic and Cribl utilizing running both Elastic and Cribl on a single VM with Docker Compose

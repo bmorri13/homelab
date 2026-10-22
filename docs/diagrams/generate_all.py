@@ -25,6 +25,9 @@ def main():
     import gitops_ci_pipeline
     gitops_ci_pipeline.generate()
 
+    import homelab_overview_png
+    homelab_overview_png.generate()
+
     print("\nAll diagrams generated successfully.")
 
 
