@@ -1,0 +1,43 @@
+{{- if .Values.enabled }}
+---
+# Tailnet-only, same pattern as mcp.bmosan.com: the DNS record points at
+# k3s-01's tailnet IP and this allowlist rejects non-tailnet sources.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: tailnet-only
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- toYaml .Values.ingress.sourceRanges | nindent 6 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apiary
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-tailnet-only@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: apiary
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - {{ .Values.host }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+{{- end }}

@@ -1,0 +1,30 @@
+{{- /*
+Catalog for the Apiary console (apiary.bmosan.com): every MCP server and the
+credentials it needs. Apiary reads this ConfigMap and only ever writes the
+Vault paths listed here (and only under kv/apiary/). Disabled servers and
+credentials are listed too, so a credential can be stored before it's enabled.
+*/}}
+{{- $servers := list }}
+{{- range $name, $s := .Values.mcpServers }}
+{{- $c := $s.console | default dict }}
+{{- $servers = append $servers (dict "name" $name "kind" "MCPServer" "enabled" (ne (toString $s.enabled) "false") "title" ($c.title | default $name) "description" ($c.description | default "")) }}
+{{- end }}
+{{- range $name, $s := .Values.remoteServers }}
+{{- $c := $s.console | default dict }}
+{{- $servers = append $servers (dict "name" $name "kind" "MCPRemoteProxy" "enabled" (ne (toString $s.enabled) "false") "title" ($c.title | default $name) "description" ($c.description | default "")) }}
+{{- end }}
+{{- $creds := list }}
+{{- range $id, $es := .Values.externalSecrets.secrets }}
+{{- if $es.fields }}
+{{- $creds = append $creds (dict "id" $id "server" (required (printf "externalSecrets.secrets.%s.server is required with fields" $id) $es.server) "title" ($es.title | default $id) "description" ($es.description | default "") "vaultPath" $es.vaultPath "externalSecret" $id "enabled" (ne (toString $es.enabled) "false") "fields" $es.fields) }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apiary-catalog
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+data:
+  catalog.json: |
+    {{- dict "servers" $servers "credentials" $creds | toPrettyJson | nindent 4 }}

@@ -1,0 +1,44 @@
+{{- if .Values.enabled }}
+---
+# What Apiary may do in the MCP namespace, and nothing else in the cluster:
+# read its catalog and the ToolHive resources' status, force-sync
+# ExternalSecrets after a Vault write, and delete MCP server pods so they
+# restart with the new Secret (the app never deletes the gateway's pod).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apiary
+  namespace: {{ .Values.mcpNamespace }}
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [apiary-catalog]
+    verbs: [get]
+  - apiGroups: ["toolhive.stacklok.dev"]
+    resources: [mcpservers, mcpremoteproxies]
+    verbs: [get, list]
+  - apiGroups: ["external-secrets.io"]
+    resources: [externalsecrets]
+    verbs: [get, list, patch]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apiary
+  namespace: {{ .Values.mcpNamespace }}
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apiary
+subjects:
+  - kind: ServiceAccount
+    name: apiary
+    namespace: {{ .Release.Namespace }}
+{{- end }}

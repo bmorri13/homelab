@@ -18,6 +18,10 @@ group:
 # ---------------------------------------------------------------------------
 mcpServers:
   toolhive-docs:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: ToolHive docs
+      description: Search the ToolHive documentation.
     enabled: true
     # Searches the ToolHive documentation. No credentials, no egress needed
     # (its vector DB is baked into the image), so it is a safe first backend.
@@ -67,12 +71,16 @@ mcpServers:
                 sizeLimit: 256Mi
 
   unifi-network:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: UniFi Network
+      description: Read-only view of the home UniFi network (clients, devices, events).
     # UniFi Network MCP (github.com/sirkirby/unifi-mcp), read-only. Three
     # independent layers keep it read-only: Cedar only admits readOnlyHint
     # tools (all 101 reads are annotated; the 106 create/update/delete tools
     # are not), the server's own policy gates refuse every mutation, and the
     # UniFi account it uses should have the "View Only" role.
-    # Disabled until its credentials exist in Vault at kv/toolhive-unifi-network.
+    # Disabled until its credentials exist in Vault at kv/apiary/shared/unifi-network (set them in Apiary).
     enabled: false
     # Only the UniFi controller, HTTPS (REST + the events websocket).
     egress:
@@ -157,6 +165,10 @@ mcpServers:
 # ---------------------------------------------------------------------------
 remoteServers:
   excalidraw:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: Excalidraw
+      description: Draw diagrams with Excalidraw's hosted MCP server.
     enabled: true
     # Excalidraw's official hosted server (ToolHive registry entry
     # io.github.stacklok/excalidraw-remote). No credentials. Diagram content
@@ -174,22 +186,38 @@ remoteServers:
           memory: 128Mi
 
 # ExternalSecrets pulled from Vault (ClusterSecretStore vault-backend) into
-# toolhive-mcp, for MCP servers to reference via spec.secrets. Example:
+# toolhive-mcp, for MCP servers to reference via spec.secrets.
+#
+# Credentials entered through the Apiary console live under kv/apiary/ (the
+# only Vault prefix Apiary can write) and list their form fields; each such
+# entry also appears in the apiary-catalog ConfigMap. Example:
 #   github-mcp:
-#     vaultPath: kv/toolhive-github-mcp
-#     keys: [token]
+#     enabled: true
+#     server: github          # key under mcpServers/remoteServers
+#     title: GitHub token
+#     vaultPath: kv/apiary/shared/github-mcp
+#     fields:
+#       - {key: token, label: Personal access token, secret: true}
+# Entries not managed by Apiary can use `keys: [...]` instead of `fields`.
 externalSecrets:
   secretStoreName: vault-backend
   refreshInterval: 1h
   secrets:
     # UniFi local account for unifi-network (create it with the "View Only"
-    # role). Keys: username, password.
+    # role). Set it in Apiary, then enable this and the server together.
     unifi-network-mcp:
       # Off until the Vault entry exists (an ExternalSecret with no source
-      # turns the ArgoCD app Degraded). Enable together with the server.
+      # turns the ArgoCD app Degraded). Apiary lists it either way.
       enabled: false
-      vaultPath: kv/toolhive-unifi-network
-      keys: [username, password]
+      server: unifi-network
+      title: UniFi local account
+      description: >-
+        A local UniFi OS account with the View Only role and local access
+        only, used by the MCP server to log in to the controller.
+      vaultPath: kv/apiary/shared/unifi-network
+      fields:
+        - {key: username, label: Username, secret: false}
+        - {key: password, label: Password, secret: true}
 
 # ---------------------------------------------------------------------------
 # vMCP gateway
