@@ -1,6 +1,12 @@
 ---
 
-# Setups up the cluser wide secret store
+# Sets up the cluster-wide secret store.
+#
+# ESO logs in to Vault with its own ServiceAccount (Vault Kubernetes auth),
+# not a stored token. The Vault side is runtime state, not GitOps; see
+# README.md in this directory for the exact commands. The Vault role
+# `external-secrets` grants only the `eso-read` policy (read kv/data/*,
+# read+list kv/metadata/*), so ESO cannot write to Vault.
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
@@ -12,7 +18,10 @@ spec:
       path: "kv"
       version: "v2"
       auth:
-        tokenSecretRef:
-          name: "vault-token"
-          key: "token"
-          namespace: "default"
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "external-secrets"
+          serviceAccountRef:
+            name: external-secrets-operator
+            namespace: external-secrets
+            audiences: ["vault"]
