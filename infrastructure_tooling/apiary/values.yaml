@@ -2,15 +2,16 @@
 # credential, it lands in Vault (kv/apiary/*), ESO syncs it into
 # toolhive-mcp, and the MCP server restarts. See README.md.
 
-# Off until the Vault entries it needs exist (GitHub OAuth app, GHCR pull
-# token) and CI has published an image. Turning this on renders everything.
-enabled: false
+# Needs its Vault entries (GitHub OAuth app, GHCR pull token, app keys)
+# and a published image. false renders nothing.
+enabled: true
 
 image:
   repository: ghcr.io/bmorri13/apiary
   # Pin by digest. CI prints it in the run summary.
-  tag: ""
-  digest: ""
+  # apiary v0.1, commit 6600607 (CI run 39726196625).
+  tag: sha-6600607
+  digest: sha256:a80d068cd2101a1ca9ae196155fe7c6dc0a7d78ff500d0812d60cf4f5121988e
 
 oauth2Proxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
