@@ -15,6 +15,10 @@ image:
 
 oauth2Proxy:
   image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+  # Only Traefik may set X-Forwarded-*. Traefik is hostNetwork, so its
+  # connections reach the pod from the node's cni0 address.
+  trustedProxyIPs:
+    - 10.42.0.1/32
 
 host: apiary.bmosan.com
 # GitHub logins allowed in. Enforced by oauth2-proxy and again by the app.
