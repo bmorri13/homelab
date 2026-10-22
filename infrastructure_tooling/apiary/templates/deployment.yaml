@@ -1,0 +1,163 @@
+{{- if .Values.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apiary
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+# Tokens are mounted explicitly below: one for the Kubernetes API, one with
+# audience "vault" for Vault Kubernetes auth.
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apiary
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # Rate limiting and token caching are in-process; keep one replica.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "apiary.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "apiary.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: apiary
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: apiary-ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        # Front door: GitHub login. Only this port is exposed; the app listens
+        # on 127.0.0.1 and trusts X-Forwarded-User from here.
+        - name: oauth2-proxy
+          image: {{ .Values.oauth2Proxy.image }}
+          args:
+            - --provider=github
+            {{- range .Values.adminUsers }}
+            - --github-user={{ . }}
+            {{- end }}
+            - --email-domain=*
+            - --http-address=0.0.0.0:4180
+            - --upstream=http://127.0.0.1:8080/
+            - --redirect-url=https://{{ .Values.host }}/oauth2/callback
+            - --reverse-proxy=true
+            - --cookie-name=__Host-apiary
+            - --cookie-secure=true
+            # Strict would drop the session cookie on the OAuth callback from
+            # github.com. Lax still keeps it off cross-site POSTs.
+            - --cookie-samesite=lax
+            - --cookie-expire=8h
+            - --pass-user-headers=true
+            - --skip-provider-button=true
+            - --skip-auth-route=GET=^/healthz$
+            - --silence-ping-logging=true
+            - --show-debug-on-error=false
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: apiary-github-oauth, key: client_id}
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: apiary-github-oauth, key: client_secret}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef: {name: apiary-app, key: cookie_secret}
+          ports:
+            - name: http
+              containerPort: 4180
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ping, port: http}
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources.oauth2Proxy | nindent 12 }}
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+        - name: apiary
+          image: {{ include "apiary.image" . }}
+          env:
+            - name: APIARY_BASE_URL
+              value: https://{{ .Values.host }}
+            - name: APIARY_ADMIN_USERS
+              value: {{ join "," .Values.adminUsers | quote }}
+            - name: APIARY_MCP_NAMESPACE
+              value: {{ .Values.mcpNamespace }}
+            - name: APIARY_VAULT_ADDR
+              value: {{ .Values.vault.addr }}
+            - name: APIARY_VAULT_ROLE
+              value: {{ .Values.vault.role }}
+            - name: APIARY_CSRF_KEY
+              valueFrom:
+                secretKeyRef: {name: apiary-app, key: csrf_key}
+          resources:
+            {{- toYaml .Values.resources.app | nindent 12 }}
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: kube-api
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            - name: vault-token
+              mountPath: /var/run/secrets/apiary/vault
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: kube-api
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - {key: ca.crt, path: ca.crt}
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: vault
+                  expirationSeconds: 3600
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apiary
+  labels:
+    {{- include "apiary.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "apiary.selector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

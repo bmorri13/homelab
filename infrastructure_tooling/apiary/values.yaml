@@ -1,0 +1,66 @@
+# Apiary: web console for the ToolHive MCP gateway. Paste a backend
+# credential, it lands in Vault (kv/apiary/*), ESO syncs it into
+# toolhive-mcp, and the MCP server restarts. See README.md.
+
+# Off until the Vault entries it needs exist (GitHub OAuth app, GHCR pull
+# token) and CI has published an image. Turning this on renders everything.
+enabled: false
+
+image:
+  repository: ghcr.io/bmorri13/apiary
+  # Pin by digest. CI prints it in the run summary.
+  tag: ""
+  digest: ""
+
+oauth2Proxy:
+  image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+
+host: apiary.bmosan.com
+# GitHub logins allowed in. Enforced by oauth2-proxy and again by the app.
+adminUsers:
+  - bmorri13
+
+# Namespace that holds the MCP servers, their ExternalSecrets and the
+# apiary-catalog ConfigMap (rendered by the toolhive_mcp chart).
+mcpNamespace: toolhive-mcp
+
+vault:
+  addr: http://vault.vault.svc.cluster.local:8200
+  role: apiary
+
+secrets:
+  secretStoreName: vault-backend
+  refreshInterval: 1h
+  # Generated in Vault, never seen by a person: cookie_secret, csrf_key.
+  appPath: kv/apiary-system/app
+  # GitHub OAuth app: client_id, client_secret.
+  githubOAuthPath: kv/apiary-github-oauth
+  # GHCR pull credential for the private image: username, token
+  # (a GitHub token with read:packages only).
+  ghcrPullPath: kv/apiary-ghcr-pull
+
+ingress:
+  className: traefik
+  entrypoints: websecure
+  clusterIssuer: bmosan-cert
+  tlsSecretName: apiary-bmosan-com-tls
+  # Tailscale (CGNAT + ULA) sources only; LAN clients get 403.
+  sourceRanges:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
+
+networkPolicy:
+  # API server as seen after kube-proxy DNAT (same as toolhive_mcp).
+  apiServer:
+    cidrs:
+      - 192.168.4.98/32
+      - 10.43.0.1/32
+    ports: [6443, 443]
+
+resources:
+  app:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {cpu: 300m, memory: 192Mi}
+  oauth2Proxy:
+    requests: {cpu: 10m, memory: 24Mi}
+    limits: {cpu: 200m, memory: 96Mi}
