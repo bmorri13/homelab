@@ -76,6 +76,18 @@ fi
 ./scripts/cribl-bootstrap.sh
 ./scripts/cribl-packs.sh
 
+# Installing a pack has made the Cribl server exit right afterwards, with no error,
+# while the container stays up. Make sure the API is answering before finishing.
+cribl_up() { curl -sf http://127.0.0.1:9000/api/v1/health >/dev/null; }
+sleep 10
+if ! cribl_up; then
+    echo "cribl: API not answering after setup, restarting the container" >&2
+    docker compose restart cribl
+    for _ in $(seq 1 30); do cribl_up && break; sleep 5; done
+    cribl_up || { echo "cribl: still not answering after restart" >&2; exit 1; }
+fi
+echo "cribl: healthy"
+
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
     echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2
 fi

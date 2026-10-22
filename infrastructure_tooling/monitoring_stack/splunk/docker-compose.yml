@@ -61,6 +61,14 @@ services:
       - ${CRIBL_DATA_DIR:-/srv/cribl}:/opt/cribl/config-volume
     depends_on:
       - splunk
+    # The Cribl server can exit while the container stays up (the entrypoint just
+    # sleeps), so report it as unhealthy when the API stops answering.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     mem_limit: ${CRIBL_MEM_LIMIT:-2g}
     logging: *logging
 
