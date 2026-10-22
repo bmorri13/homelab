@@ -1,0 +1,103 @@
+# Falco on k3s-01. Alerts are one JSON object per line on stdout; the OTel collector
+# DaemonSet (infrastructure_tooling/otel_collector_k3s) already ships pod logs to
+# Cribl, where the cc-falco-ocsf pack turns them into OCSF Detection Findings in
+# index=security (matched on namespace "falco"). Host config and rule exceptions
+# match infrastructure_tooling/monitoring_stack/falco/.
+falco:
+  driver:
+    kind: modern_ebpf      # kernel 6.8 with BTF; no kernel module
+
+  falcoctl:
+    artifact:
+      install:
+        enabled: true      # installs the container plugin and falco-rules at pod start
+      follow:
+        enabled: false     # no rule auto-updates between restarts
+
+  # Same exceptions as the VMs (rules.d/homelab_exceptions.yaml).
+  customRules:
+    homelab_exceptions.yaml: |-
+        # Homelab tuning for the default Falco ruleset. Each exception is scoped to a
+        # known-good image and process so the rule still fires for anything else.
+        # Add new ones here, with the evidence that justified them.
+
+        # guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
+        # pg_isready (perl) reads /etc/shadow. systemd-sysusers (comm is truncated to
+        # "systemd-sysuser") reads it when packages create users, on hosts and in CI image builds.
+        - rule: Read sensitive file untrusted
+          condition: >-
+            and not ((container.image.repository = postgres and proc.name = pg_isready) or
+            proc.name startswith systemd-sysuser)
+          override:
+            condition: append
+
+        # Splunk: splunkd runs its own Python and shell helpers (secure gateway, modular
+        # inputs) as a matter of course.
+        - rule: Run shell untrusted
+          condition: and not (container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9))
+          override:
+            condition: append
+
+        # ARC runner pods (k3s-01) are ephemeral CI containers: jobs download tools into
+        # the runner's home and apt-install compilers, then run them, which is the job.
+        # GuardRail's scan ran /home/runner/.cache/opengrep/.../opengrep-core about 350
+        # times a minute, and a Rust build ran apt-installed gcc/cc1/as hundreds of times.
+        # Only this rule is exempt in arc-runners; reverse shells, credential searches,
+        # sensitive reads, container escapes and K8s API contact still alert there.
+        - rule: Drop and execute new binary in container
+          condition: and not k8s.ns.name = arc-runners
+          override:
+            condition: append
+
+        # Cluster infrastructure talks to the Kubernetes API by design: ArgoCD, the OTel
+        # collector (k8s_attributes, k8s_events), ESO, cert-manager, the ARC controller,
+        # the ToolHive operator, Falco itself, and Vault (Kubernetes auth TokenReview).
+        # Application namespaces (apiary, toolhive-mcp's kubectl MCP server, alexprinter,
+        # stirling-pdf, uptime-kuma) still alert: there, API access is worth seeing.
+        - rule: Contact K8S API Server From Container
+          condition: >-
+            and not k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
+            cert-manager, arc-systems, toolhive-system, falco, vault)
+          override:
+            condition: append
+
+        # dockerd and BuildKit unpacking image layers truncate files like var/log/dpkg.log
+        # inside layer snapshots (seen from the DinD sidecar and image builds in arc-runners). Real log clearing,
+        # outside dockerd's own storage, still alerts.
+        - rule: Clear Log Activities
+          condition: >-
+            and not ((proc.name = dockerd and fd.name startswith /var/lib/docker/) or
+            (proc.name = buildkitd and fd.name startswith /var/lib/buildkit/))
+          override:
+            condition: append
+
+        # The Docker-in-Docker sidecar in arc-runners: dockerd opens packet sockets to
+        # set up networking for each CI job's containers.
+        - rule: Packet socket created in container
+          condition: and not (proc.name = dockerd and container.image.repository = docker.io/library/docker)
+          override:
+            condition: append
+
+  falco:
+    priority: notice
+    json_output: true
+    json_include_output_property: true
+    json_include_tags_property: true
+    stdout_output:
+      enabled: true
+    # OCSF needs process/parent PIDs and an image id on every alert.
+    append_output:
+      - suggested_output: true
+      - match:
+          source: syscall
+        extra_fields:
+          - proc.pid
+          - proc.ppid
+          - container.image.id
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1024Mi

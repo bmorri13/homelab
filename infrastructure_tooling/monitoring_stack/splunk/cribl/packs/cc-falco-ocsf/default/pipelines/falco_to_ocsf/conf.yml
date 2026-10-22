@@ -1,0 +1,122 @@
+output: default
+asyncFuncTimeout: 1000
+description: Falco JSON alerts to OCSF 1.9.0 Detection Findings
+functions:
+  - id: code
+    filter: "true"
+    description: Parse the Falco alert and build the OCSF event in _raw
+    conf:
+      maxNumOfIterations: 5000
+      activeLogSampleRate: 1
+      useUniqueAccumulator: false
+      code: |-
+          // Falco JSON alert -> OCSF 1.9.0 Detection Finding (2004) in _raw.
+          // Cribl's Code function checker rejects ??, ?., object spread, empty syntax-tree
+          // nodes (for (;;) without init, destructuring holes) and identifiers named proto
+          // or process (Node globals), so the process/file objects are procObj/fileObj.
+          const OCSF_VERSION = '1.9.0';
+          let d = null;
+          try { d = JSON.parse(String(__e._raw || '')); } catch (err) { d = null; }
+
+          if (d && d.rule && d.output_fields) {
+            const f = d.output_fields;
+            const has = (v) => v !== undefined && v !== null && v !== '' && v !== '<NA>';
+            const num = (v) => { const n = Number(v); return has(v) && Number.isFinite(n) ? n : undefined; };
+            const prune = (o) => {
+              if (Array.isArray(o)) {
+                const a = o.map(prune).filter((v) => v !== undefined);
+                return a.length ? a : undefined;
+              }
+              if (o && typeof o === 'object') {
+                const r = {};
+                for (const k of Object.keys(o)) {
+                  const v = prune(o[k]);
+                  if (v !== undefined) r[k] = v;
+                }
+                return Object.keys(r).length ? r : undefined;
+              }
+              return has(o) ? o : undefined;
+            };
+
+            const SEV = { emergency: 5, alert: 5, critical: 5, error: 4, warning: 3, notice: 2, informational: 1, info: 1, debug: 1 };
+            const SEV_NAME = { 0: 'Unknown', 1: 'Informational', 2: 'Low', 3: 'Medium', 4: 'High', 5: 'Critical' };
+            const severity_id = SEV[String(d.priority || '').toLowerCase()] || 0;
+            const t = Date.parse(d.time || '') || Math.round((__e._time || Date.now() / 1000) * 1000);
+
+            // MITRE ATT&CK from Falco tags: T#### technique ids and mitre_<tactic> tags.
+            const TACTICS = {
+              mitre_reconnaissance: ['TA0043', 'Reconnaissance'], mitre_resource_development: ['TA0042', 'Resource Development'],
+              mitre_initial_access: ['TA0001', 'Initial Access'], mitre_execution: ['TA0002', 'Execution'],
+              mitre_persistence: ['TA0003', 'Persistence'], mitre_privilege_escalation: ['TA0004', 'Privilege Escalation'],
+              mitre_defense_evasion: ['TA0005', 'Defense Evasion'], mitre_credential_access: ['TA0006', 'Credential Access'],
+              mitre_discovery: ['TA0007', 'Discovery'], mitre_lateral_movement: ['TA0008', 'Lateral Movement'],
+              mitre_collection: ['TA0009', 'Collection'], mitre_command_and_control: ['TA0011', 'Command and Control'],
+              mitre_exfiltration: ['TA0010', 'Exfiltration'], mitre_impact: ['TA0040', 'Impact'],
+            };
+            const tags = Array.isArray(d.tags) ? d.tags : [];
+            const tactics = tags.filter((x) => TACTICS[x]).map((x) => ({ uid: TACTICS[x][0], name: TACTICS[x][1] }));
+            const techniques = tags.filter((x) => /^T\d{4}(\.\d{3})?$/.test(x));
+            const attacks = techniques.map((tid) => ({ technique: { uid: tid }, tactic: tactics.length ? tactics[0] : undefined, version: '15' }));
+            if (!techniques.length && tactics.length) tactics.forEach((ta) => attacks.push({ tactic: ta, version: '15' }));
+
+            const container = has(f['container.id']) && f['container.id'] !== 'host' ? {
+              uid: f['container.id'],
+              name: f['container.name'],
+              // OCSF requires image.uid; Falco's container.image.id is added by append_output.
+              image: has(f['container.image.id']) ? { uid: f['container.image.id'], name: f['container.image.repository'], labels: has(f['container.image.tag']) ? [f['container.image.tag']] : undefined } : undefined,
+            } : undefined;
+            const procObj = {
+              name: f['proc.name'],
+              pid: num(f['proc.pid']),
+              cmd_line: f['proc.cmdline'],
+              file: has(f['proc.exepath']) ? { type_id: 1, type: 'Regular File', path: f['proc.exepath'], name: String(f['proc.exepath']).split('/').pop() } : undefined,
+              parent_process: has(f['proc.pname']) && num(f['proc.ppid']) !== undefined ? { name: f['proc.pname'], pid: num(f['proc.ppid']) } : undefined,
+              user: has(f['user.name']) ? { name: f['user.name'], uid: has(f['user.uid']) ? String(f['user.uid']) : undefined } : undefined,
+            };
+            const fileObj = has(f['fd.name']) && String(f['fd.name']).charAt(0) === '/' ? { type_id: 1, type: 'Regular File', path: f['fd.name'], name: String(f['fd.name']).split('/').pop() } : undefined;
+
+            const ev = {
+              class_uid: 2004, class_name: 'Detection Finding', category_uid: 2, category_name: 'Findings',
+              activity_id: 1, activity_name: 'Create',
+              type_uid: 200401, type_name: 'Detection Finding: Create',
+              severity_id, severity: SEV_NAME[severity_id],
+              is_alert: true,
+              // Falco only detects; the activity was not blocked.
+              action_id: 3, action: 'Observed',
+              disposition_id: 15, disposition: 'Detected',
+              time: t,
+              message: d.output,
+              finding_info: {
+                uid: [d.hostname, f['evt.time'] || d.time, d.rule].join('|'),
+                title: d.rule,
+                desc: d.output,
+                types: tags.filter((x) => !/^T\d{4}|^mitre_|^maturity_/.test(x)),
+                analytic: { type_id: 1, type: 'Rule', name: d.rule, category: d.source },
+                attacks: attacks,
+              },
+              // OCSF requires a pid on process objects; without one (no append_output) the
+              // process details stay in unmapped.output_fields only.
+              evidences: procObj.pid !== undefined || fileObj ? [{ process: procObj.pid !== undefined ? procObj : undefined, container: container, file: fileObj }] : undefined,
+              device: { type_id: 0, type: 'Unknown', hostname: d.hostname, name: d.hostname },
+              metadata: {
+                version: OCSF_VERSION,
+                product: { name: 'Falco', vendor_name: 'The Falco Project' },
+                log_name: 'falco',
+                log_format: 'json',
+                event_code: d.rule,
+                original_time: d.time,
+                profiles: ['host', 'container', 'security_control'],
+              },
+              unmapped: { priority: d.priority, source: d.source, tags: tags, output_fields: f },
+            };
+            if (has(f['k8s.ns.name'])) {
+              ev.unmapped.k8s = { namespace: f['k8s.ns.name'], pod: f['k8s.pod.name'] };
+            }
+
+            const out = prune(ev);
+            __e._raw = JSON.stringify(out);
+            __e.sourcetype = 'falco:ocsf';
+            if (d.hostname) __e.host = d.hostname;
+            __e.__falco_alert = true;
+            __e._time = t / 1000;
+          }

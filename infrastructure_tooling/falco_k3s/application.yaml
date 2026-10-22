@@ -1,0 +1,28 @@
+---
+# ArgoCD Application for Falco on k3s-01 (runtime security alerts on stdout,
+# shipped by otel-collector-k3s to Cribl -> index=security). No secrets needed.
+# Apply once:
+#   kubectl apply -f infrastructure_tooling/falco_k3s/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco-k3s
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/falco_k3s
+    helm:
+      releaseName: falco
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

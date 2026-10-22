@@ -1,0 +1,6 @@
+falco_alert_samples:
+  sampleName: falco_alert_samples.json
+  description: Real Falco 0.45.1 alerts from security-tooling-01 (the last 4 include the append_output pid/image fields)
+  created: 1792640000000
+  size: 14589
+  numEvents: 11
