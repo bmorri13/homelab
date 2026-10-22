@@ -22,9 +22,12 @@ falco:
         # Add new ones here, with the evidence that justified them.
 
         # guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
-        # pg_isready (perl) reads /etc/shadow.
+        # pg_isready (perl) reads /etc/shadow. systemd-sysusers (comm is truncated to
+        # "systemd-sysuser") reads it when packages create users, on hosts and in CI image builds.
         - rule: Read sensitive file untrusted
-          condition: and not (container.image.repository = postgres and proc.name = pg_isready)
+          condition: >-
+            and not ((container.image.repository = postgres and proc.name = pg_isready) or
+            proc.name startswith systemd-sysuser)
           override:
             condition: append
 
@@ -58,11 +61,13 @@ falco:
           override:
             condition: append
 
-        # dockerd unpacking image layers truncates files like var/log/dpkg.log inside
-        # layer snapshots (seen from the DinD sidecar in arc-runners). Real log clearing,
+        # dockerd and BuildKit unpacking image layers truncate files like var/log/dpkg.log
+        # inside layer snapshots (seen from the DinD sidecar and image builds in arc-runners). Real log clearing,
         # outside dockerd's own storage, still alerts.
         - rule: Clear Log Activities
-          condition: and not (proc.name = dockerd and fd.name startswith /var/lib/docker/)
+          condition: >-
+            and not ((proc.name = dockerd and fd.name startswith /var/lib/docker/) or
+            (proc.name = buildkitd and fd.name startswith /var/lib/buildkit/))
           override:
             condition: append
 

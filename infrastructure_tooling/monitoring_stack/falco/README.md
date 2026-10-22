@@ -41,10 +41,10 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 
 | Rule | Exception | Why |
 |---|---|---|
-| Read sensitive file untrusted | `postgres` image, `pg_isready` | The guardrail-postgres healthcheck reads `/etc/shadow` every 5 s |
+| Read sensitive file untrusted | `postgres` image + `pg_isready`; `systemd-sysusers` | The guardrail-postgres healthcheck reads `/etc/shadow` every 5 s; package installs create users (hosts and CI image builds) |
 | Run shell untrusted | `splunk/splunk` image, parent `splunkd`/python | Splunk runs its own helper scripts |
 | Drop and execute new binary in container | `arc-runners` namespace | Ephemeral CI containers download tools and apt-install compilers, then run them: opengrep-core about 350 times a minute, gcc/cc1/as hundreds of times per Rust build. All other rules still apply to the runners |
-| Clear Log Activities | `dockerd` writing under `/var/lib/docker/` | Unpacking image layers truncates `var/log/dpkg.log` inside snapshots (the DinD sidecar in arc-runners) |
+| Clear Log Activities | `dockerd` under `/var/lib/docker/`, `buildkitd` under `/var/lib/buildkit/` | Unpacking image layers truncates `var/log/dpkg.log` inside snapshots (DinD and image builds in arc-runners) |
 | Packet socket created in container | `dockerd` in the `docker.io/library/docker` image | The DinD sidecar in arc-runners sets up networking for each CI job's containers |
 | Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault | Controllers use the API by design |
 
