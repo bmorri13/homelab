@@ -232,7 +232,7 @@ auth:
   # Sidecar in the vMCP pod that exposes the API server's JWKS on localhost
   # (see templates/gateway/oidcconfig.yaml for why it exists).
   jwksProxy:
-    image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+    image: registry.k8s.io/kubectl:v1.37.1@sha256:b7cab618e281b1ee7484e7b706a96e2135fbb6e072c2a573a7dab4e87d7f2385
     port: 8001
     resources:
       requests:
