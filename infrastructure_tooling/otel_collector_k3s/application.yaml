@@ -1,0 +1,28 @@
+---
+# ArgoCD Application for the OpenTelemetry Collector on k3s-01 (pod logs and
+# Kubernetes events -> Cribl HEC). Requires the HEC token in Vault at kv/cribl-hec
+# (property "token"). Apply once:
+#   kubectl apply -f infrastructure_tooling/otel_collector_k3s/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-k3s
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/otel_collector_k3s
+    helm:
+      releaseName: otel-collector
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: otel-collector
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

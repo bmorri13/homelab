@@ -56,7 +56,7 @@ Routes match on the input.
 
 `syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
 
-`hec_in` picks the index:
+`hec_in` receives the OTel collectors: the host agents in [`otel-agent/`](otel-agent/README.md) (journald and Docker containers on the VMs and Proxmox nodes) and the k3s-01 DaemonSet in `infrastructure_tooling/otel_collector_k3s`. It picks the index:
 
 1. Keep an index the collector set, if it is one of the indexes above.
 2. `service.name` containing claude, codex, or agent → `ai_agents`.
@@ -66,7 +66,16 @@ Routes match on the input.
 6. A `container.name` field (Docker hosts) → `apps`.
 7. Everything else → `infra`.
 
-Dropped before indexing: the `arc-runners` namespace, `kube-probe` hits, debug-level lines, debug-severity syslog, and Cribl's own info-level logs. The `splunk_out` pipeline runs on everything sent to Splunk and redacts private keys, AWS/GitHub/Slack/Vault/API keys, JWTs, `Authorization:` headers, and `password=`/`token=`-style values.
+Dropped before indexing:
+
+- the `arc-runners` namespace and `kube-probe` hits
+- successful container health checks (`GET /health`, `/api/health`, `/ready`, and so on)
+- SeaweedFS `LockRing` chatter
+- MOTD news, and routine systemd unit start/stop messages (failures are kept)
+- debug-level lines and debug-severity syslog
+- Cribl's own info-level logs
+
+Cribl runs 2 workers (`cribl/local/cribl/cribl.yml`). The default of one per CPU minus two did not fit the 2 GiB container limit and was OOM-killed. The `splunk_out` pipeline runs on everything sent to Splunk and redacts private keys, AWS/GitHub/Slack/Vault/API keys, JWTs, `Authorization:` headers, and `password=`/`token=`-style values.
 
 Cribl's OpenTelemetry (OTLP) input is not used. In testing (Cribl 4.20.3) it accepted data with a missing or wrong token, so collectors send over HEC, which does enforce its token.
 
