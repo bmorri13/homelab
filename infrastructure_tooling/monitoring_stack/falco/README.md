@@ -43,7 +43,7 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 |---|---|---|
 | Read sensitive file untrusted | `postgres` image, `pg_isready` | The guardrail-postgres healthcheck reads `/etc/shadow` every 5 s |
 | Run shell untrusted | `splunk/splunk` image, parent `splunkd`/python | Splunk runs its own helper scripts |
-| Drop and execute new binary in container | `arc-runners` namespace, binaries under `/home/runner/` | CI jobs run the tools they download; GuardRail's scan ran opengrep-core about 350 times a minute |
+| Drop and execute new binary in container | `arc-runners` namespace | Ephemeral CI containers download tools and apt-install compilers, then run them: opengrep-core about 350 times a minute, gcc/cc1/as hundreds of times per Rust build. All other rules still apply to the runners |
 | Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault | Controllers use the API by design |
 
 Application namespaces still alert on API contact. That includes the `toolhive-mcp` kubectl MCP server, where agent-driven cluster access is worth seeing.

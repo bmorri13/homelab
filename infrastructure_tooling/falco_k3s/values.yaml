@@ -35,13 +35,14 @@ falco:
           override:
             condition: append
 
-        # ARC runner pods (k3s-01): CI jobs download tools and build binaries into the
-        # runner's home and run them, which is the job. GuardRail's scan alone ran
-        # /home/runner/.cache/opengrep/.../opengrep-core about 350 times a minute.
-        # Only this rule, only in arc-runners, only for binaries under /home/runner/;
-        # every other rule still applies to the runners.
+        # ARC runner pods (k3s-01) are ephemeral CI containers: jobs download tools into
+        # the runner's home and apt-install compilers, then run them, which is the job.
+        # GuardRail's scan ran /home/runner/.cache/opengrep/.../opengrep-core about 350
+        # times a minute, and a Rust build ran apt-installed gcc/cc1/as hundreds of times.
+        # Only this rule is exempt in arc-runners; reverse shells, credential searches,
+        # sensitive reads, container escapes and K8s API contact still alert there.
         - rule: Drop and execute new binary in container
-          condition: and not (k8s.ns.name = arc-runners and proc.exepath startswith /home/runner/)
+          condition: and not k8s.ns.name = arc-runners
           override:
             condition: append
 
