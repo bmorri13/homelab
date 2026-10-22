@@ -1,0 +1,29 @@
+functions:
+  - id: drop
+    filter: __e['k8s.namespace.name'] == 'arc-runners'
+    conf: {}
+    description: "GitHub Actions runner pods: job chatter, no value"
+  - id: drop
+    filter: /kube-probe\//.test(_raw)
+    conf: {}
+    description: Kubernetes liveness/readiness probe hits
+  - id: drop
+    filter: /"level":"debug"|\blevel=debug\b|\bDEBUG\b/i.test(_raw)
+    conf: {}
+    description: Debug-level lines
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: >-
+            ['network', 'infra', 'k8s', 'apps', 'audit', 'ai_agents', 'cribl', 'unrouted'].includes(index) ? index
+            : /claude|codex|agent/i.test(__e['service.name'] || '') ? 'ai_agents'
+            : ['vault', 'toolhive-mcp', 'toolhive-system'].includes(__e['k8s.namespace.name']) ? 'audit'
+            : ['alexprinter', 'stirling-pdf', 'uptime-kuma'].includes(__e['k8s.namespace.name']) ? 'apps'
+            : __e['k8s.namespace.name'] ? 'k8s'
+            : __e['container.name'] ? 'apps'
+            : 'infra'
+    description: Keep a valid index the collector set; otherwise route by source
+asyncFuncTimeout: 1000
+output: default

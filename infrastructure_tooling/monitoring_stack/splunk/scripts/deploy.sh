@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Bring up Splunk and sync the repo-managed homelab_base app into it.
-# Safe to re-run: restarts splunkd only when the app actually changed.
+# Bring up Splunk and Cribl, sync the repo-managed apps under apps/ into Splunk,
+# and seed Cribl's config on first deploy.
+# Safe to re-run: restarts splunkd only when the app actually changed, and never
+# overwrites Cribl config after the first deploy (the Cribl UI owns it from then on).
 # Run on security-tooling-01 as root from this directory's checkout.
 set -euo pipefail
 
@@ -10,6 +12,7 @@ cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 DATA_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 ARCHIVE_DIR="${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}"
+CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
 
 wait_healthy() {
     local status
@@ -23,7 +26,15 @@ wait_healthy() {
     return 1
 }
 
-mkdir -p "$DATA_DIR/etc" "$DATA_DIR/var" "$ARCHIVE_DIR"
+mkdir -p "$DATA_DIR/etc" "$DATA_DIR/var" "$ARCHIVE_DIR" "$CRIBL_DIR"
+
+# Seed Cribl's config before its first start. After that, changes are made in the
+# Cribl UI; export them back to cribl/ in the repo to keep them.
+if [[ ! -f "$CRIBL_DIR/local/cribl/inputs.yml" ]]; then
+    mkdir -p "$CRIBL_DIR/local/cribl"
+    rsync -a --exclude 'CLAUDE.md' cribl/local/cribl/ "$CRIBL_DIR/local/cribl/"
+    echo "seeded Cribl config into $CRIBL_DIR/local/cribl"
+fi
 
 docker compose up -d
 echo "waiting for splunk to become healthy (first start takes several minutes)..."
@@ -32,21 +43,29 @@ wait_healthy
 SPLUNK_UID=$(docker exec splunk id -u splunk)
 SPLUNK_GID=$(docker exec splunk id -g splunk)
 
-# local/ and local.meta hold changes made in Splunk Web; never overwrite them.
-changes=$(rsync -a --delete --checksum --itemize-changes \
-    --exclude 'local/' --exclude 'metadata/local.meta' \
-    homelab_base/ "$DATA_DIR/etc/apps/homelab_base/")
-chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_DIR/etc/apps/homelab_base"
+# Sync every app under apps/ into Splunk. local/ and local.meta hold changes made
+# in Splunk Web; never overwrite them. Apps removed from the repo are not deleted
+# from Splunk; remove those by hand.
+changes=""
+for app in apps/*/; do
+    name=$(basename "$app")
+    changes+=$(rsync -a --delete --checksum --itemize-changes \
+        --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
+        "$app" "$DATA_DIR/etc/apps/$name/")
+    chown -R "$SPLUNK_UID:$SPLUNK_GID" "$DATA_DIR/etc/apps/$name"
+done
 
 if [[ -n "$changes" ]]; then
-    echo "homelab_base changed:"; echo "$changes"
+    echo "apps changed:"; echo "$changes"
     docker compose restart splunk
     wait_healthy
 else
-    echo "homelab_base unchanged"
+    echo "apps unchanged"
 fi
 
+./scripts/cribl-bootstrap.sh
+
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
-    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - frozen buckets will stay on local disk until the Unraid share is mounted" >&2
+    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2
 fi
-echo "done: https://$(hostname):8000"
+echo "done: Splunk https://$(hostname):8000  Cribl http://$(hostname):9000"

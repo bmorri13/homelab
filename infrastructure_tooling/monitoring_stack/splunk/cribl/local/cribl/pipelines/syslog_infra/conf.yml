@@ -1,0 +1,16 @@
+functions:
+  - id: drop
+    filter: severity >= 7
+    conf: {}
+    description: Debug-level syslog
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: "'infra'"
+        - name: sourcetype
+          value: sourcetype || 'syslog'
+    description: ""
+asyncFuncTimeout: 1000
+output: default
