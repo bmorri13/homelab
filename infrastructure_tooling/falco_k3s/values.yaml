@@ -120,3 +120,72 @@ falco:
       memory: 256Mi
     limits:
       memory: 1024Mi
+
+# Kubernetes audit detections. The apiserver posts audit events
+# (infrastructure_tooling/k3s_audit) to this Deployment's k8saudit plugin, which runs
+# the k8saudit-rules set. Alerts go to stdout as JSON like the DaemonSet's; FALCO_HOSTNAME
+# is the node name, so they arrive in index=security with host=k3s-01.
+falco-k8saudit:
+  fullnameOverride: falco-k8saudit
+  driver:
+    enabled: false
+  collectors:
+    enabled: false
+  controller:
+    kind: deployment
+    deployment:
+      replicas: 1        # the plugin is a webhook receiver; more replicas would need a load balancer for nothing
+
+  falcoctl:
+    artifact:
+      install:
+        enabled: true
+      follow:
+        enabled: false   # pinned rules, as with the syscall DaemonSet
+    config:
+      artifact:
+        install:
+          refs: [k8saudit-rules:0.16, k8saudit:0.16]   # falcoctl pulls the json plugin as a dependency
+        follow:
+          refs: []
+
+  # Fixed ClusterIP: the apiserver runs on the host and can't resolve cluster DNS
+  # (audit-webhook.kubeconfig points here). Not exposed outside the cluster.
+  services:
+    - name: webhook
+      type: ClusterIP
+      clusterIP: 10.43.200.10
+      ports:
+        - name: k8saudit
+          port: 9765
+          targetPort: 9765
+          protocol: TCP
+
+  falco:
+    rules_files:
+      - /etc/falco/k8s_audit_rules.yaml
+      - /etc/falco/rules.d
+    plugins:
+      - name: k8saudit
+        library_path: libk8saudit.so
+        init_config: ""
+        open_params: "http://:9765/k8s-audit"
+      - name: json
+        library_path: libjson.so
+        init_config: ""
+    load_plugins: [k8saudit, json]
+    priority: notice
+    json_output: true
+    json_include_output_property: true
+    json_include_tags_property: true
+    stdout_output:
+      enabled: true
+    webserver:
+      enabled: true      # liveness/readiness probes; ClusterIP only
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

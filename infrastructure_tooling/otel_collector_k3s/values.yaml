@@ -1,6 +1,7 @@
 # Pod logs and Kubernetes events from k3s-01 -> Cribl HEC on security-tooling-01
 # (http://192.168.4.11:8088). Cribl picks the Splunk index from k8s.namespace.name
-# (cribl/local/cribl/pipelines/hec_in): k8s, apps, or audit. The HEC token comes
+# (cribl/local/cribl/pipelines/hec_in): k8s, apps, or audit. The Kubernetes API audit
+# log is tailed from the host and sent with index=audit already set. The HEC token comes
 # from Vault kv/cribl-hec (property "token") through an ExternalSecret.
 
 externalSecret:
@@ -54,6 +55,17 @@ opentelemetry-collector:
     metrics:
       enabled: false
 
+  # Kubernetes API audit log written by the k3s apiserver (infrastructure_tooling/k3s_audit).
+  extraVolumes:
+    - name: k8s-audit
+      hostPath:
+        path: /var/log/kubernetes/audit
+        type: DirectoryOrCreate
+  extraVolumeMounts:
+    - name: k8s-audit
+      mountPath: /var/log/kubernetes/audit
+      readOnly: true
+
   resources:
     requests:
       cpu: 50m
@@ -70,6 +82,24 @@ opentelemetry-collector:
         endpoint: ${env:MY_POD_IP}:13133
     receivers:
       k8s_events: {}             # single node, so a DaemonSet does not duplicate events
+      # One JSON audit event per line. The body is sent unchanged; only the event time
+      # is lifted out so Splunk's _time is when the API request arrived.
+      filelog/k8s_audit:
+        include: [/var/log/kubernetes/audit/audit.log]
+        start_at: end
+        storage: file_storage    # cursor survives restarts and log rotation
+        include_file_name: false
+        operators:
+          - type: regex_parser
+            regex: '"requestReceivedTimestamp":"(?P<ts>[^"]+)"'
+            on_error: send_quiet
+            timestamp:
+              parse_from: attributes.ts
+              layout_type: gotime
+              layout: "2006-01-02T15:04:05.999999999Z07:00"
+          - type: remove
+            field: attributes.ts
+            if: 'attributes.ts != nil'
     processors:
       memory_limiter:
         check_interval: 1s
@@ -91,6 +121,13 @@ opentelemetry-collector:
               - resource.attributes["k8s.event.name"] != nil or attributes["k8s.event.name"] != nil
             statements:
               - set(attributes["com.splunk.sourcetype"], "kube:events")
+      transform/k8s_audit:
+        log_statements:
+          - context: log
+            statements:
+              - set(attributes["com.splunk.index"], "audit")
+              - set(attributes["com.splunk.sourcetype"], "kube:apiserver:audit")
+              - set(attributes["com.splunk.source"], "/var/log/kubernetes/audit/audit.log")
     exporters:
       splunk_hec:
         token: ${env:CRIBL_HEC_TOKEN}
@@ -112,4 +149,8 @@ opentelemetry-collector:
         logs:
           receivers: [k8s_events]  # the logsCollection preset adds file_log
           processors: [memory_limiter, resource/host, transform/events, batch]
+          exporters: [splunk_hec]
+        logs/k8s_audit:
+          receivers: [filelog/k8s_audit]
+          processors: [memory_limiter, resource/host, transform/k8s_audit, batch]
           exporters: [splunk_hec]

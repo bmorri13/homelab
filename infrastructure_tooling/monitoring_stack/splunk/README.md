@@ -37,7 +37,7 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
-| `audit` | Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
+| `audit` | Kubernetes API audit log (k3s-01), Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
 | `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`) | 90 days |
 | `cribl` | Cribl's own warnings and errors | 14 days |
@@ -128,7 +128,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 | Prefix | Use | Examples |
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
-| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault` |
+| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit` |
 | none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
@@ -141,6 +141,7 @@ Current base apps:
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`).
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
+- `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 

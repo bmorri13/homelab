@@ -1,8 +1,13 @@
 apiVersion: v2
 name: falco-k3s
-description: Falco runtime security DaemonSet on k3s-01 - alerts as JSON on stdout, shipped by the OTel collector to Cribl
-version: 0.1.0
+description: Falco on k3s-01 - syscall DaemonSet plus a k8saudit Deployment fed by the apiserver audit webhook; alerts as JSON on stdout, shipped by the OTel collector to Cribl
+version: 0.2.0
 dependencies:
   - name: falco
+    version: 9.2.1
+    repository: https://falcosecurity.github.io/charts
+  # Second release of the same chart: no driver, k8saudit plugin only.
+  - name: falco
+    alias: falco-k8saudit
     version: 9.2.1
     repository: https://falcosecurity.github.io/charts
