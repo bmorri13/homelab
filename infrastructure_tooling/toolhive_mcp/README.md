@@ -13,12 +13,14 @@ Traefik (hostNetwork :443) ── ipAllowList: tailnet ranges only ── TLS: b
         ▼
 vMCP "homelab"  (VirtualMCPServer, Service vmcp-homelab:4483, path /mcp)
   ├─ authN: client token = Kubernetes ServiceAccount JWT, audience https://mcp.bmosan.com
-  ├─ authZ: Cedar — listed clients only, read-only tools only
+  ├─ authZ: Cedar — listed clients only; read-only tools, plus authz.writeTools
   ├─ audit: one JSON event per request on stdout
   └─ aggregates every MCPServer in MCPGroup "homelab", tools prefixed "<server>_"
         ▼
 MCPServer toolhive-docs (proxy runner → server pod)
+MCPServer cribl (proxy runner → login shim → https://192.168.4.11:9000/api/v1/mcp)
 MCPRemoteProxy excalidraw (proxy pod → https://mcp.excalidraw.com/mcp)
+MCPRemoteProxy splunk (proxy pod → https://192.168.4.11:8089/services/mcp)
 more added via values.yaml
 ```
 
@@ -36,7 +38,7 @@ Three ArgoCD Applications, one chart directory each (the repo's usual
 
 `toolhive_mcp/templates/` is split by concern:
 
-- `mcp-servers/` — MCPGroup, one MCPServer per `values.mcpServers` entry, one MCPRemoteProxy (+ its egress policy) per `values.remoteServers` entry, Vault ExternalSecrets
+- `mcp-servers/` — MCPGroup, one MCPServer per `values.mcpServers` entry, one MCPRemoteProxy (+ its egress policy) per `values.remoteServers` entry, Vault ExternalSecrets, the `mcp-trusted-cas` ConfigMap (`files/*.crt`) and the `mcp-scripts` ConfigMap (`scripts/*.py`)
 - `gateway/` — VirtualMCPServer (aggregation, Cedar policies, audit, JWKS sidecar) and MCPOIDCConfig
 - `ingress/` — Traefik Ingress + tailnet-only Middleware
 - `security/` — client ServiceAccounts (namespace `toolhive-clients`) and NetworkPolicies
@@ -242,7 +244,9 @@ automatically, with its tools prefixed `<name>_`.
 
 Then decide what clients may call. **New tools are callable only if** the
 server marks them `readOnlyHint: true` or you add them to
-`authz.readOnlyTools`. Grant write tools narrowly via `authz.extraPolicies`.
+`authz.readOnlyTools`. Tools that change things go in `authz.writeTools`
+(allowed for every listed client), or narrowly per client via
+`authz.extraPolicies`.
 
 Example: GitHub MCP, read-only, token from Vault.
 
@@ -289,10 +293,10 @@ Checklist for each new server:
 2. **Credentials** come only from `externalSecrets` + `spec.secrets`, never
    `env`. Use a scoped, read-only token where the service supports one.
 3. **Egress:** `default-deny` blocks everything outside the namespace except
-   DNS. A server that calls the internet (GitHub, AWS) needs a NetworkPolicy
-   allowing its pods (label `app: <name>`) out on 443. Add it under
-   `templates/security/` next to the others. Don't widen the namespace-wide
-   rules.
+   DNS. List what the server may reach under its `egress:` key
+   (`- cidr: <addr>/32` with `ports: [...]`); that renders an
+   `allow-egress-<name>` policy for its pods only. Don't widen the
+   namespace-wide rules.
 4. **Kubernetes MCP / filesystem MCP:** give the server its own ServiceAccount
    (`spec.serviceAccount`) bound to a read-only Role, never the operator's or
    the vMCP's. Avoid hostPath `volumes`.
@@ -318,8 +322,15 @@ remoteServers:
 ```
 
 Credentials for a remote server go in `spec.headerForward.addHeadersFromSecret`
-(from an `externalSecrets` entry), never `addPlaintextHeaders`. Check the
-remote's tool annotations (`tools/list`) and allowlist accordingly.
+(from an `externalSecrets` entry), never `addPlaintextHeaders`. When the
+header needs more than the raw secret (e.g. `Bearer <token>`), give the
+`externalSecrets` entry a `template:` that builds it. Check the remote's tool
+annotations (`tools/list`) and allowlist accordingly.
+
+A remote server **on the LAN** needs `spec.allowPrivateEndpoint: true` and an
+`egress:` list on the entry. That replaces the public-internet egress policy
+with exactly those destinations. If its cert is from a private CA, put the CA in
+`files/` and mount `mcp-trusted-cas` into the proxy (see `splunk`).
 
 **Excalidraw** (added from the ToolHive registry entry
 `io.github.stacklok/excalidraw-remote`): `read_me` and `create_view` are
@@ -328,6 +339,54 @@ annotated read-only; `read_checkpoint` and `save_checkpoint` are allowlisted
 uploads the diagram to a public excalidraw.com link; add
 `excalidraw_export_to_excalidraw` to `authz.readOnlyTools` to enable it.
 Diagram content is sent to Excalidraw's hosted service either way.
+
+## Splunk and Cribl
+
+Both run on security-tooling-01 (`infrastructure_tooling/monitoring_stack/splunk/`)
+and present certs from the homelab CA (`files/homelab-ca.crt`, made by that
+stack's `scripts/tls-certs.sh`).
+
+**Splunk** (`remoteServers.splunk`) is the Splunk MCP Server app on splunkd's
+port 8089, which only accepts connections from k3s-01. The proxy sends
+`Authorization: Bearer <token>`. The token is an encrypted Splunk MCP token for
+the user `mcp-gateway` (role `mcp_reader`: search on every index, no admin),
+valid for at most 180 days. Vault: `kv/apiary/shared/splunk`, field `token`. To
+rotate it, run this on a machine that can ssh to both hosts. The token goes from
+one host to the other without being printed:
+
+```bash
+ssh root@security-tooling-01 /opt/splunk-stack/scripts/splunk-mcp-token.sh |
+  ssh root@k3s-01 'VT=$(kubectl -n default get secret vault-token -o jsonpath="{.data.token}" | base64 -d);
+    { printf "%s\n" "$VT"; cat; } | kubectl -n vault exec -i vault-0 -- sh -c \
+    "read -r VT; read -r T; export VAULT_TOKEN=\$VT; printf %s \"\$T\" | vault kv put kv/apiary/shared/splunk token=-"'
+```
+
+Or paste a token into Apiary. Then delete the old token in Splunk under
+Settings > Tokens.
+
+**Cribl** (`mcpServers.cribl`) is Cribl's MCP server on the Leader. It needs a
+session token that expires hourly, so the "server" is
+[`scripts/cribl_mcp_auth.py`](scripts/cribl_mcp_auth.py) on a stock Python
+image. It logs in as the Cribl user from Vault (`kv/apiary/shared/cribl`,
+`username`/`password`), renews the token before it expires or on a 401, and
+forwards `/mcp` only. The rest of the Cribl API is not reachable through it. To
+create the user or rotate its password, pipe
+`/opt/splunk-stack/scripts/cribl-mcp-user.sh` into
+`vault kv put kv/apiary/shared/cribl -` the same way, then restart the server
+(`kubectl -n toolhive-mcp rollout restart sts cribl`). On Cribl's free license
+every user is an admin, so Cedar is what limits it.
+
+Tool names repeat the prefix (`splunk_splunk_run_query`,
+`cribl_cribl_getSources`): the workload prefix plus the servers' own. For
+testing, every tool of both is allowed:
+
+- Splunk's read tools carry `readOnlyHint`.
+- `splunk_run_query`, `splunk_run_saved_search` (SPL), `cribl_runSearchQuery`,
+  `cribl_setPipelineConfig` (rewrites a live pipeline), and the three Cribl
+  notebook editors are in `authz.writeTools`.
+- The 11 Cribl readers, which carry no annotations, are in `authz.readOnlyTools`.
+
+Remove lines from `authz.writeTools` to tighten it.
 
 ## Removing / updating / stopping a server
 
@@ -404,6 +463,9 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 | toolhive-docs proxy runner | operator default | operator default | ~2m, ~14Mi |
 | toolhive-docs server | 50m / 500m | 256Mi / 768Mi | ~5m idle, ~290Mi (embedded vector DB) |
 | excalidraw remote proxy | 10m / 200m | 32Mi / 128Mi | ~1m, ~15Mi |
+| splunk remote proxy | 10m / 200m | 32Mi / 128Mi | ~2m, ~23Mi |
+| cribl proxy runner | operator default | operator default | ~5m, ~39Mi |
+| cribl login shim | 10m / 200m | 32Mi / 128Mi | ~6m, ~18Mi |
 
 ## Upgrading ToolHive
 
