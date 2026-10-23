@@ -4,9 +4,11 @@ Splunk Enterprise on a developer license (10 GB/day) behind Cribl Stream, both i
 
 ```
 UniFi gateway ──syslog 5514──┐
-Proxmox, Unraid ─syslog 514──┼──► Cribl ──S2S (compose network only)──► Splunk
-OTel collectors ──HEC 8088───┘    drop noise, mask secrets,
-                                  set index + sourcetype
+Proxmox, Unraid ─syslog 514──┼──► Cribl Worker ──S2S (compose network only)──► Splunk
+OTel collectors ──HEC 8088───┘    drop noise, mask secrets,                    ▲ 8089 (k3s-01 only)
+                                  set index + sourcetype                       │
+                                       ▲ config (4200)            MCP gateway on k3s-01
+                                  Cribl Leader ◄── UI, API, MCP (9000, HTTPS) ─┘
 ```
 
 Every source sends to Cribl. Splunk receives only from Cribl, and its receiving ports are not published on the host. If Splunk is down (restart, upgrade), Cribl holds data in a persistent queue (up to 10 GB) and catches up.
@@ -17,9 +19,11 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 |---|---|---|
 | Splunk config (`/opt/splunk/etc`) | `/srv/splunk/etc` on the VM | Survives container recreation and upgrades |
 | Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes; the oldest data is deleted at the cap. |
-| Cribl config, state, queue | `/srv/cribl` on the VM | Seeded from `cribl/` on first deploy |
+| Cribl Leader: settings, users, Worker Group config | `/srv/cribl` on the VM | Group config in `groups/default/` (a git repo the Leader commits to). Seeded from `cribl/` on first deploy. |
+| Cribl Worker: pulled config, persistent queue | `/srv/cribl-worker` on the VM | Nothing here that the Leader can't send again, except queued data |
+| TLS certs for 8089 and the Cribl API | `/root/homelab-ca` (CA), `/srv/splunk/etc/auth/homelab/`, `/srv/cribl/local/cribl/auth/homelab-tls/` | Issued and renewed by `scripts/tls-certs.sh`. See [MCP access](#mcp-access). |
 | Frozen archive | Not enabled yet (issue #165) | Planned: Unraid NFS share at `/mnt/unraid-splunk/frozen` |
-| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl `local`, 14 nightly archives. Skipped until the share exists. |
+| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives. Skipped until the share exists. |
 | Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
 
@@ -44,7 +48,8 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | Port | Service | Notes |
 |---|---|---|
 | `8000` | Splunk Web (HTTPS, self-signed) | |
-| `9000` | Cribl UI (HTTP) | |
+| `8089` | Splunk REST API + MCP Server app (HTTPS, homelab CA) | Published on 192.168.4.11 only. `scripts/mgmt-firewall.sh` drops everything but k3s-01 and local containers. |
+| `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | |
 | `514` tcp/udp | Cribl syslog → `infra` | Proxmox, Unraid, other hosts |
 | `5514` tcp/udp | Cribl syslog → `network` | UniFi gateway |
 | `8088` | Cribl HEC (HTTP) | OTel collectors. Requires `CRIBL_HEC_TOKEN`. |
@@ -86,9 +91,35 @@ Dropped before indexing:
 - debug-level lines and debug-severity syslog
 - Cribl's own info-level logs
 
-Cribl runs 2 workers (`cribl/local/cribl/cribl.yml`). The default of one per CPU minus two did not fit the 2 GiB container limit and was OOM-killed. The `splunk_out` pipeline runs on everything sent to Splunk and redacts private keys, AWS/GitHub/Slack/Vault/API keys, JWTs, `Authorization:` headers, and `password=`/`token=`-style values.
+Cribl runs distributed: a Leader container (`cribl`) and one Worker container (`cribl-worker`) in the `default` Worker Group, on the free license. Distributed mode is only needed for Cribl's MCP server, which exists on a Leader and not on a single instance. The Worker runs 2 worker processes (`cribl/local/cribl/cribl.yml`). The default of one per CPU minus two did not fit the 2 GiB container limit and was OOM-killed. The Leader needs about 2.1 GiB and has a 3 GiB limit. The `splunk_out` pipeline runs on everything sent to Splunk and redacts private keys, AWS/GitHub/Slack/Vault/API keys, JWTs, `Authorization:` headers, and `password=`/`token=`-style values.
 
 Cribl's OpenTelemetry (OTLP) input is not used. In testing (Cribl 4.20.3) it accepted data with a missing or wrong token, so collectors send over HEC, which does enforce its token.
+
+## MCP access
+
+The MCP gateway on k3s-01 (`infrastructure_tooling/toolhive_mcp`) reaches Splunk and Cribl over the LAN.
+
+### Homelab CA
+
+`scripts/tls-certs.sh` keeps a small CA in `/root/homelab-ca` on this VM (key mode 600, never copied off). It can only sign names under `bmosan.com`, `localhost`, this VM's host names, and private IPs (`192.168.0.0/16`, `127.0.0.0/8`), so a leaked key cannot impersonate public sites. It issues 825-day certs for Splunk's port 8089 and the Cribl Leader API, and reissues them within 30 days of expiry on any deploy. The CA cert is public and lives in `toolhive_mcp/files/homelab-ca.crt`, which the gateway trusts.
+
+### Splunk
+
+The Splunk MCP Server app (Splunkbase) is not in the repo (Splunkbase license). Install it by hand into `/srv/splunk/etc/apps/Splunk_MCP_Server` (extract the `.tgz`, `chown -R 41812:41812`, restart Splunk). `deploy.sh` leaves it alone. Its endpoint is `https://192.168.4.11:8089/services/mcp`.
+
+The gateway authenticates as the local user `mcp-gateway` with the `mcp_reader` role (`00_homelab_roles`): search on every index, plus the app's `mcp_tool_execute` capability, no admin rights. MCP tokens are encrypted Splunk tokens, valid for at most 180 days, minted by an admin:
+
+```bash
+# On security-tooling-01. Creates mcp-gateway if missing (random password, not kept)
+# and prints a new token. Pipe it straight into Vault rather than to the terminal.
+./scripts/splunk-mcp-token.sh
+```
+
+Store it in Vault at `kv/apiary/shared/splunk` (field `token`), or paste it into Apiary.
+
+### Cribl
+
+The Leader serves Cribl's MCP server at `https://192.168.4.11:9000/api/v1/mcp`. On the free license every user is an admin, so MCP clients get the full set of 16 tools, including the ones that change pipelines (`setPipelineConfig`) and edit search notebooks. Cribl session tokens expire after an hour (`api.authTokenTTL`, default 3600 s, also used for UI sessions), so the gateway needs something that logs in and refreshes the token rather than a static bearer token.
 
 ## Splunk apps
 
@@ -154,22 +185,26 @@ The mount uses `soft` and `nofail` so a down Unraid never blocks boot or hangs s
 mkdir -p /opt/splunk-stack
 # copy this directory to /opt/splunk-stack (git archive from a checkout)
 cd /opt/splunk-stack
-cp .env-example .env    # set SPLUNK_PASSWORD, CRIBL_ADMIN_PASSWORD, CRIBL_HEC_TOKEN
+cp .env-example .env    # set SPLUNK_PASSWORD, CRIBL_ADMIN_PASSWORD, CRIBL_HEC_TOKEN, CRIBL_DIST_TOKEN
 chmod 600 .env
 ./scripts/deploy.sh
 ```
 
 `deploy.sh` is safe to re-run. It:
 
-1. Seeds Cribl's config from `cribl/local/cribl/` if `/srv/cribl` has none yet.
-2. Starts the stack and waits for Splunk to become healthy.
-3. Syncs every app under `apps/` into Splunk, restarting splunkd only if something changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk.
-4. Runs `cribl-bootstrap.sh`. On first deploy, while Cribl still accepts its default admin/admin login, this sets the Cribl admin password and the HEC token from `.env` and enables the HEC input. Later runs see the default login rejected and change nothing.
-5. Runs `cribl-packs.sh`, which installs each pack under `cribl/packs/` through the Cribl API when it is missing or its `package.json` version changed. Packs must go through the API: a pack copied into Cribl's config directory shows up in the list, but `pack:<id>` references to it don't resolve. The repo owns packs, so an upgrade replaces UI edits made to an installed pack.
+1. Installs and runs the port 8089 firewall (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
+2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089 and the Cribl Leader.
+3. Starts the stack and waits for Splunk to become healthy.
+4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
+5. Seeds the Cribl Worker Group config once, while the Leader is stopped: from the old single-instance config in `/srv/cribl/local/cribl/` if there is one (the one-time move to Leader + Worker), otherwise from `cribl/local/cribl/`.
+6. Runs `cribl-bootstrap.sh`: switches the Leader API to HTTPS, sets the HEC token from `.env` on a freshly seeded group and deploys the group config to the Worker, and, on a brand-new Leader still on admin/admin, sets the admin password.
+7. Runs `cribl-packs.sh`, which installs each pack under `cribl/packs/` in the Worker Group through the Leader API when it is missing or its `package.json` version changed, then deploys it to the Worker. Packs must go through the API: a pack copied into Cribl's config directory shows up in the list, but `pack:<id>` references to it don't resolve. The repo owns packs, so an upgrade replaces UI edits made to an installed pack.
+
+Moving from the single-instance Cribl to Leader + Worker loses a minute or two of syslog while the containers are recreated. The OTel collectors buffer and retry HEC, so they lose nothing. Check that `/srv/cribl/state/queues` is empty first (Splunk up, queue drained): the old instance's persistent queue is not carried over.
 
 ### Changing Cribl config
 
-After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. To keep a change, copy the changed files from `/srv/cribl/local/cribl/` back into `cribl/local/cribl/` and commit them. To push a repo change to a running Cribl, copy the file the other way (into `/srv/cribl/local/cribl/`), then `docker compose restart cribl`. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
+After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. Edit the `default` Worker Group in the Leader UI, then **Commit & Deploy** so the Worker gets the change. To keep a change, copy the changed files from `/srv/cribl/groups/default/local/cribl/` back into `cribl/local/cribl/` and commit them. To push a repo change to a running Cribl, copy the file the other way, `docker compose restart cribl`, then commit and deploy the group in the UI. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
 
 ### License
 
@@ -192,11 +227,11 @@ Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./s
    ```bash
    mkdir -p /srv/splunk /srv/cribl
    tar -xzf /mnt/unraid-splunk/backups/<latest>.tar.gz -C /srv/splunk etc
-   tar -xzf /mnt/unraid-splunk/backups/<latest>.tar.gz -C /srv/cribl local
+   tar -xzf /mnt/unraid-splunk/backups/<latest>.tar.gz -C /srv/cribl local groups
    ```
 3. `./scripts/deploy.sh`
 
-Config, users, dashboards, the license, and Cribl's routes and tokens come back. Indexed data is lost; frozen buckets, once archiving is enabled, can be thawed.
+Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` to `toolhive_mcp/files/homelab-ca.crt`, and re-mint the Splunk MCP token (see below). Indexed data is lost; frozen buckets, once archiving is enabled, can be thawed.
 
 ## Host tuning
 

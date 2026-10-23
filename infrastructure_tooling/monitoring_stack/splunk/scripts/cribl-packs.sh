@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install or upgrade the repo's Cribl packs (cribl/packs/<id>/) through the Cribl API.
+# Install or upgrade the repo's Cribl packs (cribl/packs/<id>/) in the default Worker
+# Group through the Leader API, then commit and deploy them to the Worker.
 # A pack is (re)installed when it is missing or its package.json version differs from
 # the installed one, so bump the version to roll out a change. The repo owns packs:
 # an upgrade replaces the installed copy, including edits made to it in the UI.
@@ -9,18 +10,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 : "${CRIBL_ADMIN_PASSWORD:?set CRIBL_ADMIN_PASSWORD in .env}"
-API="${CRIBL_API:-http://127.0.0.1:9000/api/v1}"
+. scripts/cribl-lib.sh
 
 shopt -s nullglob
 packs=(cribl/packs/*/package.json)
 [[ ${#packs[@]} -gt 0 ]] || { echo "cribl: no packs in cribl/packs"; exit 0; }
 
-session=$(python3 -c 'import json, os; print(json.dumps({"username": "admin", "password": os.environ["CRIBL_ADMIN_PASSWORD"]}))' |
-    curl -sf -X POST "$API/auth/login" -H 'Content-Type: application/json' --data @- |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])')
+session=$(cribl_login admin CRIBL_ADMIN_PASSWORD)
+[[ -n "$session" ]] || { echo "cribl: login failed" >&2; exit 1; }
 auth=(-H "Authorization: Bearer $session")
+changed=()
 
-installed=$(curl -sf "${auth[@]}" "$API/packs" |
+installed=$(ccurl -sf "${auth[@]}" "$API/m/$GROUP/packs" |
     python3 -c 'import json, sys; print(json.dumps({p["id"]: p.get("version") for p in json.load(sys.stdin)["items"]}))')
 
 for manifest in "${packs[@]}"; do
@@ -34,19 +35,24 @@ for manifest in "${packs[@]}"; do
 
     crbl=$(mktemp --suffix=.crbl)
     tar --exclude 'CLAUDE.md' -czf "$crbl" -C "$dir" package.json default data
-    source=$(curl -sf "${auth[@]}" -H 'Content-Type: application/octet-stream' \
-        -X PUT "$API/packs?filename=$id.crbl" --data-binary @"$crbl" |
+    source=$(ccurl -sf "${auth[@]}" -H 'Content-Type: application/octet-stream' \
+        -X PUT "$API/m/$GROUP/packs?filename=$id.crbl" --data-binary @"$crbl" |
         python3 -c 'import json, sys; print(json.load(sys.stdin)["source"])')
     rm -f "$crbl"
 
     if [[ -n "$current" ]]; then
-        curl -sf "${auth[@]}" -X DELETE "$API/packs/$id" >/dev/null
+        ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/packs/$id" >/dev/null
     fi
-    resp=$(curl -s "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/packs" \
+    resp=$(ccurl -s "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/m/$GROUP/packs" \
         -d "{\"source\":\"$source\"}")
     if [[ "$resp" == *'"status":"error"'* ]]; then
         echo "cribl: installing pack $id failed: $resp" >&2
         exit 1
     fi
     echo "cribl: pack $id ${current:-not installed} -> $version"
+    changed+=("$id $version")
 done
+
+if [[ ${#changed[@]} -gt 0 ]]; then
+    cribl_commit_deploy "Install packs: ${changed[*]} (deploy.sh)"
+fi

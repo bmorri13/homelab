@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Bring up Splunk and Cribl, sync the repo-managed apps under apps/ into Splunk,
-# and seed Cribl's config on first deploy.
-# Safe to re-run: restarts splunkd only when the app actually changed, and never
-# overwrites Cribl config after the first deploy (the Cribl UI owns it from then on).
+# issue the TLS certs, restrict port 8089, and seed Cribl's Worker Group config on
+# first deploy.
+# Safe to re-run: restarts splunkd only when an app or its cert actually changed, and
+# never overwrites Cribl config after the first deploy (the Cribl UI owns it from then
+# on).
 # Run on security-tooling-01 as root from this directory's checkout.
 set -euo pipefail
 
@@ -13,6 +15,7 @@ set -a; . ./.env; set +a
 DATA_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 ARCHIVE_DIR="${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}"
 CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
+CRIBL_WORKER_DIR="${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}"
 
 wait_healthy() {
     local status
@@ -26,15 +29,20 @@ wait_healthy() {
     return 1
 }
 
-mkdir -p "$DATA_DIR/etc" "$DATA_DIR/var" "$ARCHIVE_DIR" "$CRIBL_DIR"
+mkdir -p "$DATA_DIR/etc" "$DATA_DIR/var" "$ARCHIVE_DIR" "$CRIBL_DIR" "$CRIBL_WORKER_DIR"
 
-# Seed Cribl's config before its first start. After that, changes are made in the
-# Cribl UI; export them back to cribl/ in the repo to keep them.
-if [[ ! -f "$CRIBL_DIR/local/cribl/inputs.yml" ]]; then
-    mkdir -p "$CRIBL_DIR/local/cribl"
-    rsync -a --exclude 'CLAUDE.md' cribl/local/cribl/ "$CRIBL_DIR/local/cribl/"
-    echo "seeded Cribl config into $CRIBL_DIR/local/cribl"
-fi
+# Only k3s-01 may reach the published Splunk management port. Applied before any
+# container starts, and on every boot by the systemd unit.
+install -m 644 systemd/splunk-mgmt-firewall.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable splunk-mgmt-firewall.service >/dev/null 2>&1
+./scripts/mgmt-firewall.sh
+
+# TLS certs for Splunk's management port and the Cribl Leader API. Sets
+# $certs_changed to the services whose cert was (re)issued.
+issue_certs() { certs_changed+=" $(./scripts/tls-certs.sh | sed -n 's/^changed: //p' | tr '\n' ' ')"; }
+certs_changed=""
+issue_certs
 
 # Sync every app under apps/ into Splunk. local/ and local.meta hold changes made
 # in Splunk Web; never overwrite them. Apps removed from the repo are not deleted
@@ -58,15 +66,17 @@ if [[ -d "$DATA_DIR/etc/system" ]]; then
     # Splunk has started before: sync first, so a fix to an app that stops splunkd
     # from starting can still be deployed.
     sync_apps
-    docker compose up -d
-    if [[ -n "$changes" ]]; then docker compose restart splunk; fi
+    docker compose up -d --remove-orphans
+    if [[ -n "$changes" || "$certs_changed" == *splunk* ]]; then docker compose restart splunk; fi
     echo "waiting for splunk to become healthy..."
     wait_healthy
 else
-    # First start: the image populates etc/ on startup, so apps go in afterwards.
-    docker compose up -d
+    # First start: the image populates etc/ (including the CA bundle tls-certs.sh
+    # builds on) on startup, so the cert and apps go in afterwards.
+    docker compose up -d --remove-orphans
     echo "waiting for splunk to become healthy (first start takes several minutes)..."
     wait_healthy
+    issue_certs
     sync_apps
     if [[ -n "$changes" ]]; then
         docker compose restart splunk
@@ -74,12 +84,44 @@ else
     fi
 fi
 
+# The Leader reads its cert at startup. A brand-new Leader is still on HTTP and gets
+# switched to HTTPS by cribl-bootstrap.sh.
+if [[ "$certs_changed" == *cribl* && -f "$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl/inputs.yml" ]]; then
+    docker compose restart cribl
+fi
+
+# Seed the Worker Group config once. The Leader creates the empty default group on
+# its first start in master mode; the inputs, outputs, pipelines and routes are then
+# copied in while it is stopped. The source is the config of the old single-instance
+# Cribl if this volume has one (the one-time move to Leader + Worker), otherwise the
+# repo seed in cribl/local/cribl. cribl-bootstrap.sh then sets the HEC token and
+# deploys the config to the Worker. After that the Cribl UI owns the config; export
+# changes back to cribl/ in the repo to keep them.
+seed_cribl_group() {
+    local group_dir="$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl" src
+    [[ -f "$group_dir/inputs.yml" ]] && return 0
+    for _ in $(seq 1 60); do
+        [[ -f "$group_dir/auth/cribl.secret" ]] && break
+        sleep 5
+    done
+    [[ -f "$group_dir/auth/cribl.secret" ]] || { echo "cribl: Leader did not create group $CRIBL_GROUP" >&2; return 1; }
+    if [[ -f "$CRIBL_DIR/local/cribl/inputs.yml" ]]; then src="$CRIBL_DIR/local/cribl"; else src=cribl/local/cribl; fi
+    docker compose stop cribl
+    cp "$src/inputs.yml" "$src/outputs.yml" "$src/cribl.yml" "$group_dir/"
+    rsync -a --exclude 'CLAUDE.md' "$src/pipelines/" "$group_dir/pipelines/"
+    touch "$CRIBL_DIR/.group-seeded"
+    docker compose start cribl
+    echo "cribl: seeded group $CRIBL_GROUP from $src"
+}
+CRIBL_GROUP=default
+seed_cribl_group
+
 ./scripts/cribl-bootstrap.sh
 ./scripts/cribl-packs.sh
 
 # Installing a pack has made the Cribl server exit right afterwards, with no error,
 # while the container stays up. Make sure the API is answering before finishing.
-cribl_up() { curl -sf http://127.0.0.1:9000/api/v1/health >/dev/null; }
+cribl_up() { curl -sf --cacert "$CRIBL_DIR/local/cribl/auth/homelab-tls/ca.crt" https://127.0.0.1:9000/api/v1/health >/dev/null; }
 sleep 10
 if ! cribl_up; then
     echo "cribl: API not answering after setup, restarting the container" >&2
@@ -92,4 +134,4 @@ echo "cribl: healthy"
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
     echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2
 fi
-echo "done: Splunk https://$(hostname):8000  Cribl http://$(hostname):9000"
+echo "done: Splunk https://$(hostname):8000  Cribl https://$(hostname):9000"

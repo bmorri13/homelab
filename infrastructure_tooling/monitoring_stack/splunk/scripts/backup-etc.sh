@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Nightly backup of Splunk config ($SPLUNK_DATA_DIR/etc) and Cribl config
-# ($CRIBL_DATA_DIR/local) to the Unraid NFS share. Indexed data is not included.
-# The archive contains splunk.secret, cribl.secret, password hashes, and the
-# encrypted HEC token, so keep the share restricted to this VM.
+# Nightly backup of Splunk config ($SPLUNK_DATA_DIR/etc) and the Cribl Leader's
+# config ($CRIBL_DATA_DIR/local for Leader settings and users, groups/ for the Worker
+# Group config) to the Unraid NFS share. Indexed data is not included. The Worker
+# holds nothing it cannot pull from the Leader again.
+# The archive contains splunk.secret, cribl.secret, password hashes, the homelab TLS
+# keys, and the encrypted HEC token, so keep the share restricted to this VM.
 #   cron: 15 3 * * * /opt/splunk-stack/scripts/backup-etc.sh >> /var/log/splunk-etc-backup.log 2>&1
 set -euo pipefail
 
@@ -22,8 +24,10 @@ fi
 
 mkdir -p "$DEST"
 out="$DEST/splunk-etc-$(date +%Y%m%d-%H%M%S).tar.gz"
-# Restore: tar -xzf <file> -C "$DATA_DIR" etc && tar -xzf <file> -C "$CRIBL_DIR" local
-tar -czf "$out.tmp" -C "$DATA_DIR" etc -C "$CRIBL_DIR" local
+# Restore: tar -xzf <file> -C "$DATA_DIR" etc && tar -xzf <file> -C "$CRIBL_DIR" local groups
+groups=()
+[[ -d "$CRIBL_DIR/groups" ]] && groups=(groups)
+tar -czf "$out.tmp" -C "$DATA_DIR" etc -C "$CRIBL_DIR" local "${groups[@]}"
 mv "$out.tmp" "$out"
 echo "$(date -Is) wrote $out ($(du -h "$out" | cut -f1))"
 
