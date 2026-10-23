@@ -1,4 +1,18 @@
 functions:
+  - id: eval
+    filter: >-
+      __e['k8s.namespace.name'] == 'vault' && /^\{/.test(_raw) && /"type":"(request|response)"/.test(_raw) && /"request":\{/.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'audit'"
+        - name: sourcetype
+          value: "'hashicorp_vault_audit_log'"
+    final: true
+    description: >-
+      Vault audit device (file, stdout) entries to index=audit. Final, so no drop
+      rule below can discard an audit record. Secret values and tokens are already
+      HMAC'd by Vault.
   - id: drop
     filter: __e['k8s.namespace.name'] == 'arc-runners'
     conf: {}

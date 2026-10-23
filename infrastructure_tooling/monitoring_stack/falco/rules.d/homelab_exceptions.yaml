@@ -5,17 +5,25 @@
 # guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
 # pg_isready (perl) reads /etc/shadow. systemd-sysusers (comm is truncated to
 # "systemd-sysuser") reads it when packages create users, on hosts and in CI image builds.
+# ubuntu-desktop-01: the GNOME update notifier runs
+# `pkexec /usr/lib/update-notifier/package-system-locked` about every 2 minutes, and
+# pkexec reads /etc/shadow for PAM. Other pkexec use still alerts.
 - rule: Read sensitive file untrusted
   condition: >-
     and not ((container.image.repository = postgres and proc.name = pg_isready) or
-    proc.name startswith systemd-sysuser)
+    proc.name startswith systemd-sysuser or
+    (proc.name = pkexec and proc.cmdline contains /usr/lib/update-notifier/))
   override:
     condition: append
 
 # Splunk: splunkd runs its own Python and shell helpers (secure gateway, modular
 # inputs) as a matter of course.
+# Steampipe (used by GuardRail's CI scans in arc-runners) runs an embedded
+# Postgres from its own install directory; initdb in single-user mode spawns sh.
 - rule: Run shell untrusted
-  condition: and not (container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9))
+  condition: >-
+    and not ((container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9)) or
+    (k8s.ns.name = arc-runners and proc.pname = postgres and proc.pexepath contains /steampipe/db/))
   override:
     condition: append
 
@@ -25,20 +33,31 @@
 # times a minute, and a Rust build ran apt-installed gcc/cc1/as hundreds of times.
 # Only this rule is exempt in arc-runners; reverse shells, credential searches,
 # sensitive reads, container escapes and K8s API contact still alert there.
+# BuildKit probes for QEMU emulation by writing a tiny binary to /tmp/qemu-check*/check
+# and running it, once per build. Inside DinD the container has no k8s metadata, so
+# the arc-runners exemption doesn't catch it.
 - rule: Drop and execute new binary in container
-  condition: and not k8s.ns.name = arc-runners
+  condition: >-
+    and not (k8s.ns.name = arc-runners or
+    (proc.pname = buildkitd and proc.exepath glob "/tmp/qemu-check*/check"))
   override:
     condition: append
 
 # Cluster infrastructure talks to the Kubernetes API by design: ArgoCD, the OTel
 # collector (k8s_attributes, k8s_events), ESO, cert-manager, the ARC controller,
 # the ToolHive operator, Falco itself, and Vault (Kubernetes auth TokenReview).
-# Application namespaces (apiary, toolhive-mcp's kubectl MCP server, alexprinter,
-# stirling-pdf, uptime-kuma) still alert: there, API access is worth seeing.
+# Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still
+# alert: there, API access is worth seeing.
+# toolhive-mcp's kubectl MCP server runs `kubectl proxy`, which reopens its pooled
+# API connection about once an hour. Falco sees only that connect, never the
+# requests an agent sends through it, so the alert carried no signal. Any other
+# process in toolhive-mcp contacting the API still alerts. Agent API activity needs
+# the k3s audit log (Falco k8saudit plugin) instead.
 - rule: Contact K8S API Server From Container
   condition: >-
-    and not k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
-    cert-manager, arc-systems, toolhive-system, falco, vault)
+    and not (k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
+    cert-manager, arc-systems, toolhive-system, falco, vault) or
+    (k8s.ns.name = toolhive-mcp and proc.name = kubectl and proc.cmdline startswith "kubectl proxy"))
   override:
     condition: append
 
