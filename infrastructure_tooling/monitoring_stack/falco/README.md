@@ -11,7 +11,8 @@ k3s-01:  falco (DaemonSet) --stdout--> pod log --> OTel DaemonSet --+--> Cribl h
 
 | Where | How | Config |
 |---|---|---|
-| security-tooling-01, github-action-runner, openclaw-claude-01 | `install.sh` (deb, systemd `falco-modern-bpf`) | `config.d/homelab.yaml`, `rules.d/*.yaml` |
+| VMs: security-tooling-01, github-action-runner, openclaw-claude-01, docker-compose-02, docker-compose-03, splunk-docker-compose-mcp, ubuntu-desktop-01 | `install.sh` (deb, systemd `falco-modern-bpf`) | `config.d/homelab.yaml`, `rules.d/*.yaml` |
+| Proxmox nodes: proxmox, proxmox2, proxmox3 (Debian 13) | `install.sh`, as on the VMs | the same |
 | k3s-01 | Argo CD app `falco-k3s` (`infrastructure_tooling/falco_k3s`) | the same rules, inlined in `values.yaml` as `customRules` |
 
 ## Install or update a host
@@ -42,16 +43,16 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 | Rule | Exception | Why |
 |---|---|---|
 | Read sensitive file untrusted | `postgres` image + `pg_isready`; `systemd-sysusers` | The guardrail-postgres healthcheck reads `/etc/shadow` every 5 s; package installs create users (hosts and CI image builds) |
-| Run shell untrusted | `splunk/splunk` image, parent `splunkd`/python | Splunk runs its own helper scripts |
+| Run shell untrusted | `splunk/splunk` image, parent `splunkd`/python; in arc-runners, Steampipe's embedded `postgres` | Splunk runs its own helper scripts; GuardRail CI's Steampipe runs initdb, which spawns `sh` |
 | Drop and execute new binary in container | `arc-runners` namespace | Ephemeral CI containers download tools and apt-install compilers, then run them: opengrep-core about 350 times a minute, gcc/cc1/as hundreds of times per Rust build. All other rules still apply to the runners |
 | Clear Log Activities | `dockerd` under `/var/lib/docker/`, `buildkitd` under `/var/lib/buildkit/` | Unpacking image layers truncates `var/log/dpkg.log` inside snapshots (DinD and image builds in arc-runners) |
 | Packet socket created in container | `dockerd` in the `docker.io/library/docker` image | The DinD sidecar in arc-runners sets up networking for each CI job's containers |
-| Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault | Controllers use the API by design |
+| Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault; `kubectl proxy` in toolhive-mcp | Controllers use the API by design. The kubectl MCP server's proxy reopens its pooled connection hourly, and Falco can't see the requests sent through it |
 
-Application namespaces still alert on API contact. That includes the `toolhive-mcp` kubectl MCP server, where agent-driven cluster access is worth seeing.
+Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that needs the k3s audit log (the `k8saudit` plugin below).
 
 ## Next
 
 - **Custom AI-agent rules:** issue #176, once the defaults are quiet.
-- **Phase 2 hosts:** docker-compose-02/03, splunk-docker-compose-mcp, ubuntu-desktop-01, the Proxmox nodes, and coding-box (which needs the Arch install path).
+- **coding-box:** needs an Arch install path (no deb).
 - **Optional plugins:** `k8saudit` (needs a k3s audit policy, which means a k3s restart) and `github`.

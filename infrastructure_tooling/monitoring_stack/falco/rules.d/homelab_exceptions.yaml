@@ -14,8 +14,12 @@
 
 # Splunk: splunkd runs its own Python and shell helpers (secure gateway, modular
 # inputs) as a matter of course.
+# Steampipe (used by GuardRail's CI scans in arc-runners) runs an embedded
+# Postgres from its own install directory; initdb in single-user mode spawns sh.
 - rule: Run shell untrusted
-  condition: and not (container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9))
+  condition: >-
+    and not ((container.image.repository = splunk/splunk and proc.pname in (splunkd, python3.13, python3.9)) or
+    (k8s.ns.name = arc-runners and proc.pname = postgres and proc.pexepath contains /steampipe/db/))
   override:
     condition: append
 
@@ -33,12 +37,18 @@
 # Cluster infrastructure talks to the Kubernetes API by design: ArgoCD, the OTel
 # collector (k8s_attributes, k8s_events), ESO, cert-manager, the ARC controller,
 # the ToolHive operator, Falco itself, and Vault (Kubernetes auth TokenReview).
-# Application namespaces (apiary, toolhive-mcp's kubectl MCP server, alexprinter,
-# stirling-pdf, uptime-kuma) still alert: there, API access is worth seeing.
+# Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still
+# alert: there, API access is worth seeing.
+# toolhive-mcp's kubectl MCP server runs `kubectl proxy`, which reopens its pooled
+# API connection about once an hour. Falco sees only that connect, never the
+# requests an agent sends through it, so the alert carried no signal. Any other
+# process in toolhive-mcp contacting the API still alerts. Agent API activity needs
+# the k3s audit log (Falco k8saudit plugin) instead.
 - rule: Contact K8S API Server From Container
   condition: >-
-    and not k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
-    cert-manager, arc-systems, toolhive-system, falco, vault)
+    and not (k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
+    cert-manager, arc-systems, toolhive-system, falco, vault) or
+    (k8s.ns.name = toolhive-mcp and proc.name = kubectl and proc.cmdline startswith "kubectl proxy"))
   override:
     condition: append
 
