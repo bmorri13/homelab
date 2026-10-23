@@ -43,12 +43,59 @@ rules:
       - system:kube-scheduler
       - system:kube-proxy
       - system:k3s-controller
+      - system:k3s-supervisor
       - system:cloud-controller-manager
 
-  # The kubelet reporting node and pod status.
+  # The kubelet: status reports and pod service-account token requests.
   - level: None
-    userGroups: [system:nodes]
-    verbs: [get, list, watch, update, patch]
+    userGroups:
+      - system:nodes
+
+  # Status subresource writes: controllers reporting state, several a minute, each
+  # carrying the whole object. Spec changes are separate requests and still recorded.
+  - level: None
+    verbs: [update, patch]
+    resources:
+      - group: ""
+        resources: ["*/status"]
+      - group: apps
+        resources: ["*/status"]
+      - group: batch
+        resources: ["*/status"]
+      - group: toolhive.stacklok.dev
+        resources: ["*/status"]
+      - group: argoproj.io
+        resources: ["*/status"]
+      - group: actions.github.com
+        resources: ["*/status"]
+      - group: cert-manager.io
+        resources: ["*/status"]
+      - group: external-secrets.io
+        resources: ["*/status"]
+
+  # ToolHive's per-server proxy runners and the vMCP gateway poll their own
+  # StatefulSets, Services, pods and ToolHive resources in toolhive-mcp every few
+  # seconds (about 100 MB/day). Scoped to that namespace, so the kubectl MCP server
+  # reading anything elsewhere in the cluster is still recorded.
+  - level: None
+    verbs: [get, list, watch]
+    userGroups:
+      - system:serviceaccounts:toolhive-mcp
+    namespaces: [toolhive-mcp]
+    resources:
+      - group: ""
+        resources: [pods, services]
+      - group: apps
+        resources: [statefulsets]
+      - group: toolhive.stacklok.dev
+
+  # Access reviews by cluster add-ons (metrics-server checks every scrape).
+  - level: None
+    userGroups:
+      - system:serviceaccounts:kube-system
+    resources:
+      - group: authentication.k8s.io
+      - group: authorization.k8s.io
 
   # Reads by infrastructure controllers (the same namespaces Falco exempts from its
   # API-contact rule). Their writes are still recorded below. Reads by application
@@ -75,7 +122,23 @@ rules:
       - group: authentication.k8s.io
       - group: authorization.k8s.io
 
-  # Changes: include the request body (what was applied, exec'd, deleted).
+  # Changes by infrastructure controllers (Argo CD syncs, cert-manager CA injection,
+  # operators): who changed what, without the body. Git already holds the desired state.
+  - level: Metadata
+    verbs: [create, update, patch, delete, deletecollection]
+    userGroups:
+      - system:serviceaccounts:kube-system
+      - system:serviceaccounts:argocd
+      - system:serviceaccounts:otel-collector
+      - system:serviceaccounts:falco
+      - system:serviceaccounts:cert-manager
+      - system:serviceaccounts:external-secrets
+      - system:serviceaccounts:arc-systems
+      - system:serviceaccounts:toolhive-system
+      - system:serviceaccounts:vault
+
+  # Changes by people and application workloads: include the request body (what was
+  # applied, exec'd, deleted).
   - level: Request
     verbs: [create, update, patch, delete, deletecollection]
 
