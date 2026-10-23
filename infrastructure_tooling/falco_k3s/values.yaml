@@ -24,10 +24,14 @@ falco:
         # guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
         # pg_isready (perl) reads /etc/shadow. systemd-sysusers (comm is truncated to
         # "systemd-sysuser") reads it when packages create users, on hosts and in CI image builds.
+        # ubuntu-desktop-01: the GNOME update notifier runs
+        # `pkexec /usr/lib/update-notifier/package-system-locked` about every 2 minutes, and
+        # pkexec reads /etc/shadow for PAM. Other pkexec use still alerts.
         - rule: Read sensitive file untrusted
           condition: >-
             and not ((container.image.repository = postgres and proc.name = pg_isready) or
-            proc.name startswith systemd-sysuser)
+            proc.name startswith systemd-sysuser or
+            (proc.name = pkexec and proc.cmdline contains /usr/lib/update-notifier/))
           override:
             condition: append
 
@@ -48,8 +52,13 @@ falco:
         # times a minute, and a Rust build ran apt-installed gcc/cc1/as hundreds of times.
         # Only this rule is exempt in arc-runners; reverse shells, credential searches,
         # sensitive reads, container escapes and K8s API contact still alert there.
+        # BuildKit probes for QEMU emulation by writing a tiny binary to /tmp/qemu-check*/check
+        # and running it, once per build. Inside DinD the container has no k8s metadata, so
+        # the arc-runners exemption doesn't catch it.
         - rule: Drop and execute new binary in container
-          condition: and not k8s.ns.name = arc-runners
+          condition: >-
+            and not (k8s.ns.name = arc-runners or
+            (proc.pname = buildkitd and proc.exepath glob "/tmp/qemu-check*/check"))
           override:
             condition: append
 

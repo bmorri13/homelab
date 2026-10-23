@@ -10,6 +10,6 @@ tailscale-operator:
 
 externalSecret:
   enabled: true
-  refreshInterval: "15s"
+  refreshInterval: "1h"
   secretStoreName: vault-backend
   vaultPath: kv/tailscale-operator
