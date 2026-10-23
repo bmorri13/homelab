@@ -45,6 +45,7 @@ rules:
       - system:k3s-controller
       - system:k3s-supervisor
       - system:cloud-controller-manager
+      - k3s-cloud-controller-manager   # k3s's embedded CCM authenticates under this name
 
   # The kubelet: status reports and pod service-account token requests.
   - level: None

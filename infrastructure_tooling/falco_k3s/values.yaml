@@ -127,6 +127,14 @@ falco:
 # is the node name, so they arrive in index=security with host=k3s-01.
 falco-k8saudit:
   fullnameOverride: falco-k8saudit
+  # k3s control-plane identities missing from the rules' allowed_k8s_users list
+  # ("Disallowed K8s User" fired every minute for the embedded cloud controller).
+  customRules:
+    homelab_k8saudit.yaml: |-
+      - list: allowed_k8s_users
+        items: ["k3s-cloud-controller-manager", "system:k3s-supervisor", "system:k3s-controller"]
+        override:
+          items: append
   driver:
     enabled: false
   collectors:
@@ -145,7 +153,7 @@ falco-k8saudit:
     config:
       artifact:
         install:
-          refs: [k8saudit-rules:0.16, k8saudit:0.16]   # falcoctl pulls the json plugin as a dependency
+          refs: ["k8saudit-rules:0.16", "k8saudit:0.16"]   # falcoctl pulls the json plugin as a dependency
         follow:
           refs: []
 
