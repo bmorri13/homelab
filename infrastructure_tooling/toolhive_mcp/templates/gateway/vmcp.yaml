@@ -47,6 +47,12 @@ spec:
             permit(principal, action == Action::"call_tool", resource == Tool::{{ . | quote }})
             when { principal has claim_sub && {{ $allowed }} };
           {{- end }}
+          # Tools that change things, allowed on purpose (see authz.writeTools).
+          {{- range .Values.authz.writeTools }}
+          - |-
+            permit(principal, action == Action::"call_tool", resource == Tool::{{ . | quote }})
+            when { principal has claim_sub && {{ $allowed }} };
+          {{- end }}
           {{- range .Values.authz.extraPolicies }}
           - {{ . | quote }}
           {{- end }}

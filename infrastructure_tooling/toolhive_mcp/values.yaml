@@ -158,6 +158,72 @@ mcpServers:
               configMap:
                 name: mcp-trusted-cas
 
+  cribl:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: Cribl Stream
+      description: >-
+        The Cribl Stream Leader on security-tooling-01: sources, destinations,
+        pipelines, metrics and alerts, plus pipeline and search notebook edits.
+    # Cribl's own MCP server on the Leader (https://192.168.4.11:9000/api/v1/mcp,
+    # see monitoring_stack/splunk). It takes a bearer session token that expires
+    # after an hour, so this "server" is scripts/cribl_mcp_auth.py on a stock
+    # Python image: it logs in as the Cribl user in Vault, keeps the token fresh,
+    # and forwards /mcp only. On Cribl's free license every user is an admin, so
+    # Cedar is what limits it; all 16 tools are allowed for testing (authz).
+    enabled: true
+    egress:
+      - cidr: 192.168.4.11/32
+        ports: [9000]
+    spec:
+      image: python:3.13.17-slim@sha256:fe14fd57a4c0361110eaa0c284112b189750bcb43fb04bb5d1ee7b7744027ccf
+      transport: streamable-http
+      proxyPort: 8080
+      mcpPort: 8080
+      # The image has no ENTRYPOINT, so these replace its CMD.
+      args: ["python3", "-I", "/opt/mcp-scripts/cribl_mcp_auth.py"]
+      env:
+        - {name: CRIBL_URL, value: "https://192.168.4.11:9000"}
+        # The Leader's cert is from the homelab CA (files/homelab-ca.crt).
+        - {name: CRIBL_CA_FILE, value: /etc/mcp-trusted-cas/homelab-ca.crt}
+        - {name: PORT, value: "8080"}
+      secrets:
+        - {name: cribl-mcp, key: username, targetEnvName: CRIBL_USERNAME}
+        - {name: cribl-mcp, key: password, targetEnvName: CRIBL_PASSWORD}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      podTemplateSpec:
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mcp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - {name: mcp-scripts, mountPath: /opt/mcp-scripts, readOnly: true}
+                - {name: trusted-cas, mountPath: /etc/mcp-trusted-cas, readOnly: true}
+          volumes:
+            - name: mcp-scripts
+              configMap:
+                name: mcp-scripts
+            - name: trusted-cas
+              configMap:
+                name: mcp-trusted-cas
+
 # ---------------------------------------------------------------------------
 # Remote (hosted) MCP servers. Each key becomes an MCPRemoteProxy named <key>
 # in the group; `spec` is passed through verbatim (v1beta1 MCPRemoteProxy).
@@ -177,6 +243,58 @@ remoteServers:
       remoteUrl: https://mcp.excalidraw.com/mcp
       transport: streamable-http
       proxyPort: 8080
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+  splunk:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: Splunk
+      description: >-
+        Splunk Enterprise on security-tooling-01 through the Splunk MCP Server
+        app: search every index, list indexes, sourcetypes and saved searches.
+    # The Splunk MCP Server app (Splunkbase) on splunkd's management port. Not
+    # hosted: it is on the LAN, so allowPrivateEndpoint plus an egress rule for
+    # that one address instead of internet egress. The token is an encrypted
+    # Splunk MCP token for the mcp-gateway user (role mcp_reader: search on every
+    # index, no admin), sent as "Authorization: Bearer <token>". Port 8089 has
+    # the homelab CA's cert and only accepts connections from k3s-01.
+    enabled: true
+    egress:
+      - cidr: 192.168.4.11/32
+        ports: [8089]
+    spec:
+      remoteUrl: https://192.168.4.11:8089/services/mcp
+      allowPrivateEndpoint: true
+      transport: streamable-http
+      proxyPort: 8080
+      headerForward:
+        addHeadersFromSecret:
+          - headerName: Authorization
+            valueSecretRef:
+              name: splunk-mcp
+              key: authorization
+      resourceOverrides:
+        proxyDeployment:
+          env:
+            # Go reads this as the whole trust store, which is all the proxy
+            # needs: it only ever calls Splunk.
+            - {name: SSL_CERT_FILE, value: /etc/mcp-trusted-cas/homelab-ca.crt}
+      podTemplateSpec:
+        spec:
+          containers:
+            - name: toolhive
+              volumeMounts:
+                - {name: trusted-cas, mountPath: /etc/mcp-trusted-cas, readOnly: true}
+          volumes:
+            - name: trusted-cas
+              configMap:
+                name: mcp-trusted-cas
       resources:
         requests:
           cpu: 10m
@@ -218,6 +336,36 @@ externalSecrets:
       fields:
         - {key: username, label: Username, secret: false}
         - {key: password, label: Password, secret: true}
+
+    # Cribl Leader user for the cribl server (mcp-gateway, created by
+    # monitoring_stack/splunk/scripts/cribl-mcp-user.sh).
+    cribl-mcp:
+      enabled: true
+      server: cribl
+      title: Cribl user
+      description: >-
+        The Cribl user the MCP gateway logs in as (mcp-gateway). An admin, as
+        every user is on Cribl's free license. Rotate with
+        monitoring_stack/splunk/scripts/cribl-mcp-user.sh.
+      vaultPath: kv/apiary/shared/cribl
+      fields:
+        - {key: username, label: Username, secret: false}
+        - {key: password, label: Password, secret: true}
+    # Splunk MCP token for the splunk remote proxy. The proxy needs the whole
+    # header value, so the Secret holds "Bearer <token>" under authorization.
+    splunk-mcp:
+      enabled: true
+      server: splunk
+      title: Splunk MCP token
+      description: >-
+        Encrypted Splunk MCP token for the mcp-gateway user (role mcp_reader),
+        from monitoring_stack/splunk/scripts/splunk-mcp-token.sh. Valid for at
+        most 180 days.
+      vaultPath: kv/apiary/shared/splunk
+      fields:
+        - {key: token, label: MCP token, secret: true}
+      template:
+        authorization: "Bearer {{ .token }}"
 
 # ---------------------------------------------------------------------------
 # vMCP gateway
@@ -296,6 +444,36 @@ authz:
     - excalidraw_save_checkpoint
     # Deliberately NOT allowed: excalidraw_export_to_excalidraw uploads the
     # diagram to a public excalidraw.com share link. Add it here to enable.
+    # Cribl tools only read, but none carries readOnlyHint. The aggregated
+    # names repeat the prefix: workload "cribl" + Cribl's own "cribl_" names.
+    - cribl_cribl_getSystemMetrics
+    - cribl_cribl_getAlerts
+    - cribl_cribl_listWorkerGroups
+    - cribl_cribl_getSources
+    - cribl_cribl_getDestinations
+    - cribl_cribl_getPipelines
+    - cribl_cribl_getPipelineConfig
+    - cribl_cribl_getSearchNotebooks
+    - cribl_cribl_getSearchContext
+    - cribl_cribl_getSearchJobResults
+    - cribl_cribl_getDatasetIntelligence
+    # Splunk's read tools carry readOnlyHint and are allowed automatically.
+  # Tools that change something or start work, allowed on purpose (for now, to
+  # test everything Splunk and Cribl offer). Remove a line to take one away.
+  writeTools:
+    # Run SPL. The app marks these destructive because SPL can write (collect,
+    # outputlookup, ...); mcp-gateway's mcp_reader role has no admin or delete.
+    - splunk_splunk_run_query
+    - splunk_splunk_run_saved_search
+    # Starts a Cribl Search job.
+    - cribl_cribl_runSearchQuery
+    # Replaces a live pipeline's config in the Leader's default group (takes
+    # effect on the next Commit & Deploy).
+    - cribl_cribl_setPipelineConfig
+    # Edit Cribl Search notebooks.
+    - cribl_cribl_addToSearchNotebook
+    - cribl_cribl_editSearchNotebookSection
+    - cribl_cribl_removeSearchNotebookSection
   # Extra raw Cedar policies, appended verbatim. Use these to grant write
   # tools to specific clients, e.g.:
   #   - 'permit(principal == Client::"system:serviceaccount:toolhive-clients:macbook-air", action == Action::"call_tool", resource == Tool::"github_create_issue");'

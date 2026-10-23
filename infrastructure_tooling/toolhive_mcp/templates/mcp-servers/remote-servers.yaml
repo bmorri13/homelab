@@ -2,7 +2,8 @@
 Remote (hosted) MCP servers. Each enabled entry in .Values.remoteServers
 becomes an MCPRemoteProxy in the shared MCPGroup: a small proxy pod in this
 namespace that makes the outbound call, so internet egress is granted to that
-pod alone and never to the vMCP. The proxy itself is unauthenticated and, like
+pod alone and never to the vMCP. An entry with `egress` gets exactly those
+destinations instead (for a server on the LAN, with spec.allowPrivateEndpoint). The proxy itself is unauthenticated and, like
 the MCPServer proxies, reachable only from inside this namespace.
 */}}
 {{- range $name, $remote := .Values.remoteServers }}
@@ -18,7 +19,32 @@ spec:
   groupRef:
     name: {{ $.Values.group.name }}
   {{- toYaml $remote.spec | nindent 2 }}
-{{- if $.Values.networkPolicy.enabled }}
+{{- if and $.Values.networkPolicy.enabled $remote.egress }}
+---
+# Egress for the {{ $name }} proxy: only the destinations listed under
+# remoteServers.{{ $name }}.egress (a server on the LAN rather than the internet).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-{{ $name }}
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      toolhive-name: {{ $name }}
+  policyTypes: [Egress]
+  egress:
+    {{- range $remote.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- range .ports }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
+{{- else if $.Values.networkPolicy.enabled }}
 ---
 # Internet egress for the {{ $name }} proxy only: HTTPS to public addresses.
 # Private, CGNAT/tailnet and link-local ranges are excluded so the proxy can't
