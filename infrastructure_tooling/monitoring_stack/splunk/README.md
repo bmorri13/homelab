@@ -33,7 +33,7 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
-| `audit` | Vault, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
+| `audit` | Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
 | `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`) | 90 days |
 | `cribl` | Cribl's own warnings and errors | 14 days |
@@ -58,6 +58,14 @@ Routes match on the input.
 `syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
 
 Falco alerts arriving through `hec_in` (journald identifier `falco`, or the `falco` namespace on k3s) are chained to the [`cc-falco-ocsf`](cribl/packs/cc-falco-ocsf) pack and sent to `security`; see [`../falco/`](../falco/README.md).
+
+Vault's audit log arrives through `hec_in` too. Vault writes it to stdout (a `file` audit device at path `stdout/`), so it shares the pod log with Vault's server log. `hec_in` recognises the audit entries, tags them `sourcetype=hashicorp_vault_audit_log` and sends them to `audit`, before any drop rule can see them. Vault HMACs tokens and secret values in the entries. To recreate the device after a Vault rebuild, run as a token with `sudo` on `sys/audit`:
+
+```bash
+kubectl -n vault exec -it vault-0 -- vault audit enable -path=stdout file file_path=stdout
+```
+
+If every enabled audit device fails to write, Vault refuses requests. Stdout doesn't fail in practice, but keep that in mind before adding a second device that can.
 
 `hec_in` receives the OTel collectors: the host agents in [`otel-agent/`](otel-agent/README.md) (journald and Docker containers on the VMs and Proxmox nodes) and the k3s-01 DaemonSet in `infrastructure_tooling/otel_collector_k3s`. It picks the index:
 
@@ -89,7 +97,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 | Prefix | Use | Examples |
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
-| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf` |
+| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault` |
 | none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
@@ -100,7 +108,8 @@ Current base apps:
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
 - `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk.
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
-- `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`).
+- `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`).
+- `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 
