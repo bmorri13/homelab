@@ -57,9 +57,18 @@ services:
       - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
       - CRIBL_DIST_MODE=master
       - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@0.0.0.0:4200
+      # Cribl's MCP tools call the Leader API over HTTPS at the Leader's own interface
+      # address, so its Node runtime must trust the homelab CA.
+      - NODE_EXTRA_CA_CERTS=/opt/cribl/config-volume/local/cribl/auth/homelab-tls/ca.crt
     ports:
       - "9000:9000"       # Cribl UI, API and MCP (HTTPS, homelab CA)
     # Not published: 4200 (Worker connections, compose network only).
+    # Only on cribl-leader, at a fixed address that tls-certs.sh puts in the cert (see
+    # NODE_EXTRA_CA_CERTS above). On a second network the MCP tools could pick the
+    # other, changing address.
+    networks:
+      cribl-leader:
+        ipv4_address: ${CRIBL_LEADER_IP:-192.168.237.2}
     volumes:
       # Leader settings, users, the Worker Group config (groups/default, a git
       # repo), and the TLS cert written by scripts/tls-certs.sh.
@@ -95,6 +104,9 @@ services:
       - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
       - "5514:9515/tcp"
       - "8088:8088"       # HEC from the OTel collectors (token required)
+    networks:
+      - default           # sends to splunk:9997
+      - cribl-leader      # pulls config from cribl:4200
     volumes:
       # Config pulled from the Leader, and the persistent queue that holds data
       # while Splunk is down.
@@ -110,6 +122,14 @@ services:
       start_period: 60s
     mem_limit: ${CRIBL_MEM_LIMIT:-2g}
     logging: *logging
+
+networks:
+  # The Leader's network. A 192.168.x subnet because the homelab CA may only sign
+  # private 192.168.0.0/16 addresses; this one is not used on the LAN.
+  cribl-leader:
+    ipam:
+      config:
+        - subnet: ${CRIBL_LEADER_SUBNET:-192.168.237.0/29}
 
 volumes:
   # Bind-backed named volumes: fixed host paths, plus Docker's copy-up of the
