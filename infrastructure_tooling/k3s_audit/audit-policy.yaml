@@ -1,0 +1,147 @@
+# Kubernetes API audit policy for k3s-01. The apiserver writes matching events to
+# /var/log/kubernetes/audit/audit.log (shipped to Splunk index=audit by the OTel
+# DaemonSet) and posts them to the falco-k8saudit webhook (detections to index=security).
+#
+# Goal: who changed what, and every API call made by workloads (agents included),
+# without the control plane's own chatter. Rules are evaluated in order; first match wins.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+rules:
+  # Health, metrics and API discovery.
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /readyz*
+      - /livez*
+      - /version
+      - /metrics
+      - /openapi*
+      - /api
+      - /api/*
+      - /apis
+      - /apis/*
+
+  # Leader-election leases, events and endpoint bookkeeping change every few seconds.
+  - level: None
+    resources:
+      - group: coordination.k8s.io
+        resources: [leases]
+      - group: ""
+        resources: [events, endpoints]
+      - group: events.k8s.io
+        resources: [events]
+      - group: discovery.k8s.io
+        resources: [endpointslices]
+
+  # Control-plane components talking to the apiserver.
+  - level: None
+    users:
+      - system:apiserver
+      - system:kube-controller-manager
+      - system:kube-scheduler
+      - system:kube-proxy
+      - system:k3s-controller
+      - system:k3s-supervisor
+      - system:cloud-controller-manager
+      - k3s-cloud-controller-manager   # k3s's embedded CCM authenticates under this name
+
+  # The kubelet: status reports and pod service-account token requests.
+  - level: None
+    userGroups:
+      - system:nodes
+
+  # Status subresource writes: controllers reporting state, several a minute, each
+  # carrying the whole object. Spec changes are separate requests and still recorded.
+  - level: None
+    verbs: [update, patch]
+    resources:
+      - group: ""
+        resources: ["*/status"]
+      - group: apps
+        resources: ["*/status"]
+      - group: batch
+        resources: ["*/status"]
+      - group: toolhive.stacklok.dev
+        resources: ["*/status"]
+      - group: argoproj.io
+        resources: ["*/status"]
+      - group: actions.github.com
+        resources: ["*/status"]
+      - group: cert-manager.io
+        resources: ["*/status"]
+      - group: external-secrets.io
+        resources: ["*/status"]
+
+  # ToolHive's per-server proxy runners and the vMCP gateway poll their own
+  # StatefulSets, Services, pods and ToolHive resources in toolhive-mcp every few
+  # seconds (about 100 MB/day). Scoped to that namespace, so the kubectl MCP server
+  # reading anything elsewhere in the cluster is still recorded.
+  - level: None
+    verbs: [get, list, watch]
+    userGroups:
+      - system:serviceaccounts:toolhive-mcp
+    namespaces: [toolhive-mcp]
+    resources:
+      - group: ""
+        resources: [pods, services]
+      - group: apps
+        resources: [statefulsets]
+      - group: toolhive.stacklok.dev
+
+  # Access reviews by cluster add-ons (metrics-server checks every scrape).
+  - level: None
+    userGroups:
+      - system:serviceaccounts:kube-system
+    resources:
+      - group: authentication.k8s.io
+      - group: authorization.k8s.io
+
+  # Reads by infrastructure controllers (the same namespaces Falco exempts from its
+  # API-contact rule). Their writes are still recorded below. Reads by application
+  # service accounts, toolhive-mcp's kubectl MCP server included, are kept.
+  - level: None
+    verbs: [get, list, watch]
+    userGroups:
+      - system:serviceaccounts:kube-system
+      - system:serviceaccounts:argocd
+      - system:serviceaccounts:otel-collector
+      - system:serviceaccounts:falco
+      - system:serviceaccounts:cert-manager
+      - system:serviceaccounts:external-secrets
+      - system:serviceaccounts:arc-systems
+      - system:serviceaccounts:toolhive-system
+      - system:serviceaccounts:vault
+
+  # Secrets, ConfigMaps, tokens and auth reviews: record who and what, never the
+  # request or response body.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: [secrets, configmaps, serviceaccounts/token]
+      - group: authentication.k8s.io
+      - group: authorization.k8s.io
+
+  # Changes by infrastructure controllers (Argo CD syncs, cert-manager CA injection,
+  # operators): who changed what, without the body. Git already holds the desired state.
+  - level: Metadata
+    verbs: [create, update, patch, delete, deletecollection]
+    userGroups:
+      - system:serviceaccounts:kube-system
+      - system:serviceaccounts:argocd
+      - system:serviceaccounts:otel-collector
+      - system:serviceaccounts:falco
+      - system:serviceaccounts:cert-manager
+      - system:serviceaccounts:external-secrets
+      - system:serviceaccounts:arc-systems
+      - system:serviceaccounts:toolhive-system
+      - system:serviceaccounts:vault
+
+  # Changes by people and application workloads: include the request body (what was
+  # applied, exec'd, deleted).
+  - level: Request
+    verbs: [create, update, patch, delete, deletecollection]
+
+  # Everything else (reads by people and application workloads): metadata only.
+  - level: Metadata

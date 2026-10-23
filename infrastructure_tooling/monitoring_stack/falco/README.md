@@ -14,6 +14,7 @@ k3s-01:  falco (DaemonSet) --stdout--> pod log --> OTel DaemonSet --+--> Cribl h
 | VMs: security-tooling-01, github-action-runner, openclaw-claude-01, docker-compose-02, docker-compose-03, splunk-docker-compose-mcp, ubuntu-desktop-01 | `install.sh` (deb, systemd `falco-modern-bpf`) | `config.d/homelab.yaml`, `rules.d/*.yaml` |
 | Proxmox nodes: proxmox, proxmox2, proxmox3 (Debian 13) | `install.sh`, as on the VMs | the same |
 | k3s-01 | Argo CD app `falco-k3s` (`infrastructure_tooling/falco_k3s`) | the same rules, inlined in `values.yaml` as `customRules` |
+| k3s-01 API audit | `falco-k8saudit` Deployment in the same app, fed by the apiserver audit webhook ([`k3s_audit`](../../k3s_audit/README.md)) | the pinned `k8saudit-rules` set |
 
 ## Install or update a host
 
@@ -49,10 +50,10 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 | Packet socket created in container | `dockerd` in the `docker.io/library/docker` image | The DinD sidecar in arc-runners sets up networking for each CI job's containers |
 | Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault; `kubectl proxy` in toolhive-mcp | Controllers use the API by design. The kubectl MCP server's proxy reopens its pooled connection hourly, and Falco can't see the requests sent through it |
 
-Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that needs the k3s audit log (the `k8saudit` plugin below).
+Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that is in the k3s API audit log (`index=audit sourcetype=kube:apiserver:audit`), with Falco's Kubernetes audit rules running on it (`falco-k8saudit`).
 
 ## Next
 
 - **Custom AI-agent rules:** issue #176, once the defaults are quiet.
 - **coding-box:** needs an Arch install path (no deb).
-- **Optional plugins:** `k8saudit` (needs a k3s audit policy, which means a k3s restart) and `github`.
+- **Optional plugins:** `github`.
