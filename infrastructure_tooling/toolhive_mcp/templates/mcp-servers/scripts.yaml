@@ -1,0 +1,13 @@
+{{- /*
+Scripts that MCP servers run on stock images instead of a custom build (for
+example the Cribl login shim, scripts/cribl_mcp_auth.py). Each file in scripts/ is
+a ConfigMap key; mount the ConfigMap and point the server's args at the file.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-scripts
+  labels:
+    {{- include "toolhive-mcp.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "scripts/*.py").AsConfig | nindent 2 }}
