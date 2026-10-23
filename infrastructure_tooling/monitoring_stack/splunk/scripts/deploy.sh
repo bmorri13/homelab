@@ -16,6 +16,7 @@ DATA_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 ARCHIVE_DIR="${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}"
 CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
 CRIBL_WORKER_DIR="${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}"
+CRIBL_GROUP=default
 
 wait_healthy() {
     local status
@@ -113,7 +114,6 @@ seed_cribl_group() {
     docker compose start cribl
     echo "cribl: seeded group $CRIBL_GROUP from $src"
 }
-CRIBL_GROUP=default
 seed_cribl_group
 
 ./scripts/cribl-bootstrap.sh

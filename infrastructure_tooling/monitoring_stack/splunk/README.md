@@ -119,7 +119,7 @@ Store it in Vault at `kv/apiary/shared/splunk` (field `token`), or paste it into
 
 ### Cribl
 
-The Leader serves Cribl's MCP server at `https://192.168.4.11:9000/api/v1/mcp`. On the free license every user is an admin, so MCP clients get the full set of 16 tools, including the ones that change pipelines (`setPipelineConfig`) and edit search notebooks. Cribl session tokens expire after an hour (`api.authTokenTTL`, default 3600 s, also used for UI sessions), so the gateway needs something that logs in and refreshes the token rather than a static bearer token.
+The Leader serves Cribl's MCP server at `https://192.168.4.11:9000/api/v1/mcp`. On the free license every user is an admin, so MCP clients get the full set of 16 tools, including the ones that change pipelines (`setPipelineConfig`) and edit search notebooks. The MCP tools call the Leader API at the Leader's own interface address, so the Leader sits alone on the `cribl-leader` compose network at a fixed `192.168.237.2`, which is in its cert, and trusts the homelab CA through `NODE_EXTRA_CA_CERTS`. Cribl session tokens expire after an hour (`api.authTokenTTL`, default 3600 s, also used for UI sessions), so the gateway needs something that logs in and refreshes the token rather than a static bearer token.
 
 ## Splunk apps
 

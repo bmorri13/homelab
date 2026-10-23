@@ -4,8 +4,8 @@
 # the first run. Its certificate is public: the MCP gateway on k3s-01 trusts it via
 # toolhive_mcp/files/homelab-ca.crt. Its key never leaves /root/homelab-ca.
 # The CA can only sign names under bmosan.com, a few host names, and private IPs.
-# A leaf certificate is reissued when it is missing, expires within 30 days, or was
-# signed by a different CA. Prints "changed: splunk" / "changed: cribl" for each one
+# A leaf certificate is reissued when it is missing, expires within 30 days, was
+# signed by a different CA, or its names differ from the ones below. Prints "changed: splunk" / "changed: cribl" for each one
 # it wrote, so deploy.sh knows what to restart.
 # Run on security-tooling-01 as root (deploy.sh calls it).
 set -euo pipefail
@@ -14,6 +14,10 @@ CA_DIR="${HOMELAB_CA_DIR:-/root/homelab-ca}"
 SPLUNK_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
 HOST_IP="${HOST_IP:-192.168.4.11}"
+# The Leader's fixed address on its compose network (docker-compose.yml). Cribl's MCP
+# tools call the Leader API at the Leader's own interface address, so it must be in
+# the cert.
+CRIBL_LEADER_IP="${CRIBL_LEADER_IP:-192.168.237.2}"
 LEAF_DAYS=825
 RENEW_SECONDS=$((30 * 86400))
 
@@ -34,11 +38,22 @@ if [[ ! -f "$CA_DIR/ca.key" ]]; then
     echo "created homelab CA in $CA_DIR (copy ca.crt to toolhive_mcp/files/homelab-ca.crt)" >&2
 fi
 
-# needs_issue <cert>: true when the cert is missing, expiring, or not from this CA.
+# san_list <SAN spec | cert file>: the names, one per line, sorted, as openssl prints them.
+san_list() {
+    if [[ -f "$1" ]]; then
+        openssl x509 -noout -ext subjectAltName -in "$1" 2>/dev/null | tail -n +2 | tr ',' '\n'
+    else
+        tr ',' '\n' <<<"${1//IP:/IP Address:}"
+    fi | sed 's/^ *//' | sort
+}
+
+# needs_issue <cert> <SAN spec>: true when the cert is missing, expiring, not from
+# this CA, or has different names.
 needs_issue() {
     [[ -f "$1" ]] || return 0
     openssl x509 -checkend "$RENEW_SECONDS" -noout -in "$1" >/dev/null || return 0
     openssl verify -CAfile "$CA_DIR/ca.crt" "$1" >/dev/null 2>&1 || return 0
+    [[ "$(san_list "$1")" == "$(san_list "$2")" ]] || return 0
     return 1
 }
 
@@ -61,12 +76,12 @@ issue() {
 }
 
 # Splunk: serverCert is one PEM holding the cert, its (unencrypted) key, and the CA.
-# sslRootCAPath keeps Splunk's own default CA so nothing that already trusted it breaks.
+# caCertFile keeps Splunk's own default CA so nothing that already trusted it breaks.
 # Skipped on a fresh VM until Splunk's first start has created etc/auth.
 splunk_out="$SPLUNK_DIR/etc/auth/homelab"
-if [[ -f "$SPLUNK_DIR/etc/auth/cacert.pem" ]] && needs_issue "$splunk_out/splunk.crt"; then
-    issue splunk "$splunk_out" splunk-homelab \
-        "DNS:splunk-homelab,DNS:security-tooling-01,DNS:localhost,IP:$HOST_IP,IP:127.0.0.1"
+splunk_san="DNS:splunk-homelab,DNS:security-tooling-01,DNS:localhost,IP:$HOST_IP,IP:127.0.0.1"
+if [[ -f "$SPLUNK_DIR/etc/auth/cacert.pem" ]] && needs_issue "$splunk_out/splunk.crt" "$splunk_san"; then
+    issue splunk "$splunk_out" splunk-homelab "$splunk_san"
     cat "$splunk_out/splunk.crt" "$splunk_out/splunk.key" "$CA_DIR/ca.crt" > "$splunk_out/server.pem"
     cat "$SPLUNK_DIR/etc/auth/cacert.pem" "$CA_DIR/ca.crt" > "$splunk_out/cacert.pem"
     rm -f "$splunk_out/splunk.key"
@@ -79,9 +94,9 @@ fi
 
 # Cribl Leader: separate key and cert, plus the CA for the container healthcheck.
 cribl_out="$CRIBL_DIR/local/cribl/auth/homelab-tls"
-if needs_issue "$cribl_out/cribl.crt"; then
-    issue cribl "$cribl_out" cribl-homelab \
-        "DNS:cribl-homelab,DNS:security-tooling-01,DNS:localhost,IP:$HOST_IP,IP:127.0.0.1"
+cribl_san="DNS:cribl-homelab,DNS:security-tooling-01,DNS:localhost,IP:$HOST_IP,IP:$CRIBL_LEADER_IP,IP:127.0.0.1"
+if needs_issue "$cribl_out/cribl.crt" "$cribl_san"; then
+    issue cribl "$cribl_out" cribl-homelab "$cribl_san"
     cp "$CA_DIR/ca.crt" "$cribl_out/ca.crt"
     chmod 700 "$cribl_out"
     chmod 600 "$cribl_out/cribl.key"
