@@ -17,7 +17,10 @@ services:
       - SPLUNK_HTTP_ENABLESSL=true
     ports:
       - "8000:8000"   # Splunk Web (HTTPS, self-signed)
-    # Not published: 9997 (receives from Cribl), 8089 (REST), 8088 (HEC, unused).
+      # REST API + the Splunk MCP Server app, for the MCP gateway on k3s-01. LAN
+      # address only, and scripts/mgmt-firewall.sh drops every other source.
+      - "${SPLUNK_MGMT_BIND:-192.168.4.11}:8089:8089"
+    # Not published: 9997 (receives from Cribl), 8088 (HEC, unused).
     volumes:
       - splunk-etc:/opt/splunk/etc
       - splunk-var:/opt/splunk/var
@@ -41,6 +44,10 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # Cribl runs distributed (one Leader, one Worker) because the Cribl MCP server
+  # (/api/v1/mcp) only exists on a Leader. The Leader holds the config (in the
+  # default Worker Group) and serves the UI, API and MCP over HTTPS; the Worker
+  # pulls the config from it and does all the data processing.
   cribl:
     image: cribl/cribl:4.20.3@sha256:8c7ac510ef79c4c5952490efc709b6dcaa0aa1e528754a2edc3faebe4ec1145c
     container_name: cribl
@@ -48,21 +55,53 @@ services:
     restart: unless-stopped
     environment:
       - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
+      - CRIBL_DIST_MODE=master
+      - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@0.0.0.0:4200
     ports:
-      - "9000:9000"       # Cribl UI
+      - "9000:9000"       # Cribl UI, API and MCP (HTTPS, homelab CA)
+    # Not published: 4200 (Worker connections, compose network only).
+    volumes:
+      # Leader settings, users, the Worker Group config (groups/default, a git
+      # repo), and the TLS cert written by scripts/tls-certs.sh.
+      - ${CRIBL_DATA_DIR:-/srv/cribl}:/opt/cribl/config-volume
+    depends_on:
+      - splunk
+    # The Cribl server can exit while the container stays up (the entrypoint just
+    # sleeps), so report it as unhealthy when the API stops answering.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "--cacert", "/opt/cribl/config-volume/local/cribl/auth/homelab-tls/ca.crt",
+             "https://127.0.0.1:9000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # The Leader runs a config helper per Worker Group plus several service
+    # processes; it uses about 2.1 GiB and was OOM-killed at 2 GiB.
+    mem_limit: ${CRIBL_LEADER_MEM_LIMIT:-3g}
+    logging: *logging
+
+  cribl-worker:
+    image: cribl/cribl:4.20.3@sha256:8c7ac510ef79c4c5952490efc709b6dcaa0aa1e528754a2edc3faebe4ec1145c
+    container_name: cribl-worker
+    hostname: cribl-worker-homelab
+    restart: unless-stopped
+    environment:
+      - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
+      - CRIBL_DIST_MODE=worker
+      - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@cribl:4200?group=default
+    ports:
       - "514:9514/udp"    # syslog: Proxmox, Unraid, other hosts -> index=infra
       - "514:9514/tcp"
       - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
       - "5514:9515/tcp"
       - "8088:8088"       # HEC from the OTel collectors (token required)
     volumes:
-      # Config (seeded from cribl/ by deploy.sh), state, and the persistent queue
-      # that holds data while Splunk is down.
-      - ${CRIBL_DATA_DIR:-/srv/cribl}:/opt/cribl/config-volume
+      # Config pulled from the Leader, and the persistent queue that holds data
+      # while Splunk is down.
+      - ${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}:/opt/cribl/config-volume
     depends_on:
+      - cribl
       - splunk
-    # The Cribl server can exit while the container stays up (the entrypoint just
-    # sleeps), so report it as unhealthy when the API stops answering.
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/api/v1/health"]
       interval: 30s

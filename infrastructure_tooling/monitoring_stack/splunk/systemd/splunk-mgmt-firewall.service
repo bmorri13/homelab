@@ -1,0 +1,15 @@
+# Installed by scripts/deploy.sh. Applies scripts/mgmt-firewall.sh before Docker
+# starts, so the published port 8089 is never open to the LAN after a reboot.
+[Unit]
+Description=Restrict Splunk management port 8089 to the MCP gateway
+Before=docker.service
+Wants=network-pre.target
+After=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/splunk-stack/scripts/mgmt-firewall.sh
+
+[Install]
+WantedBy=multi-user.target
