@@ -13,6 +13,19 @@ functions:
       Vault audit device (file, stdout) entries to index=audit. Final, so no drop
       rule below can discard an audit record. Secret values and tokens are already
       HMAC'd by Vault.
+  - id: eval
+    filter: >-
+      __e['k8s.namespace.name'] == 'toolhive-mcp' && __e['k8s.container.name'] == 'vmcp' && /"msg":"audit_event"/.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'audit'"
+        - name: sourcetype
+          value: "'toolhive:vmcp:audit'"
+    final: true
+    description: >-
+      MCP gateway audit records (who called which tool, outcome) to index=audit.
+      Final, like the Vault audit rule. The rest of ToolHive's logs go to k8s.
   - id: drop
     filter: __e['k8s.namespace.name'] == 'arc-runners'
     conf: {}
@@ -56,9 +69,9 @@ functions:
   - id: drop
     filter: >-
       __e['k8s.namespace.name'] == 'toolhive-mcp' &&
-      (/"GET \/ HTTP\/1\.1" 200/.test(_raw) || /kubernetes cache synced successfully|waiting for Kubernetes cache sync/.test(_raw))
+      (/"(GET|POST|DELETE) \/(mcp|health)? HTTP\/1\.[01]" (2\d\d|404)\b/.test(_raw) || /kubernetes cache synced successfully|waiting for Kubernetes cache sync/.test(_raw))
     conf: {}
-    description: "ToolHive: gateway health polls of MCP backends and vMCP cache-sync loop (MCP calls are kept)"
+    description: "ToolHive: per-request access lines from MCP servers (mostly health polls; each tool call is in the vMCP audit record) and the vMCP cache-sync loop"
   - id: chain
     filter: >-
       (__e['syslog.identifier'] == 'falco' || __e['k8s.namespace.name'] == 'falco') && /^\{"hostname"/.test(_raw)
@@ -74,7 +87,7 @@ functions:
             __falco_alert ? 'security'
             : ['network', 'infra', 'k8s', 'apps', 'audit', 'ai_agents', 'security', 'cribl', 'unrouted'].includes(index) ? index
             : /claude|codex|agent/i.test(__e['service.name'] || '') ? 'ai_agents'
-            : ['vault', 'toolhive-mcp', 'toolhive-system'].includes(__e['k8s.namespace.name']) ? 'audit'
+            : __e['k8s.namespace.name'] == 'vault' ? 'audit'
             : ['alexprinter', 'stirling-pdf', 'uptime-kuma'].includes(__e['k8s.namespace.name']) ? 'apps'
             : __e['k8s.namespace.name'] ? 'k8s'
             : __e['container.name'] ? 'apps'
