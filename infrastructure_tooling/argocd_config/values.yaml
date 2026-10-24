@@ -13,3 +13,11 @@ resourceCustomizations:
     # Report Ingress resources as Healthy despite an empty status.loadBalancer,
     # which never populates on this cluster's hostNetwork Traefik setup.
     enabled: true
+
+# Local Argo CD accounts with API keys only (no UI login). Each gets the
+# built-in role named here through argocd-rbac-cm. Mint a key with
+# `argocd account generate-token --account <name>` (see toolhive_mcp README).
+apiAccounts:
+  # The ToolHive MCP gateway's Argo CD MCP server (toolhive_mcp mcpServers.argocd).
+  mcp-gateway:
+    role: role:readonly

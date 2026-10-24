@@ -224,6 +224,72 @@ mcpServers:
               configMap:
                 name: mcp-trusted-cas
 
+  argocd:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: Argo CD
+      description: >-
+        Argo CD on k3s-01: applications, sync and health status, resource
+        trees, events and workload logs. Read-only.
+    # The Argo project's MCP server (argoproj-labs/mcp-for-argocd). It calls
+    # argocd-server in-cluster as the Argo CD account mcp-gateway, which has
+    # an API key only and role:readonly (argocd_config chart). MCP_READ_ONLY
+    # also leaves out create/update/delete/sync/run_resource_action, so those
+    # tools don't exist even if the account gains rights.
+    enabled: true
+    egress:
+      # argocd-server.argocd.svc:80 -> container port 8080 (server.insecure;
+      # TLS ends at Traefik for argocd.bmosan.com).
+      - namespace: argocd
+        podLabels:
+          app.kubernetes.io/name: argocd-server
+        ports: [8080]
+    spec:
+      image: ghcr.io/argoproj-labs/mcp-for-argocd:v0.9.0@sha256:dffc6c719d8635be2d5f2c8ad1c0178540325da4b40da0b373307e12b4c48f86
+      transport: streamable-http
+      proxyPort: 8080
+      mcpPort: 3000
+      # The image's ENTRYPOINT is `node dist/index.js`; these replace its CMD.
+      # The server binds loopback unless told otherwise, and the proxy runner
+      # is another pod. --allow-unauthenticated: the default-deny policy only
+      # lets pods in this namespace reach it, and the vMCP authenticates callers.
+      args: ["http", "--bind-address", "0.0.0.0", "--allow-unauthenticated"]
+      env:
+        - {name: ARGOCD_BASE_URL, value: "http://argocd-server.argocd.svc.cluster.local"}
+        - {name: MCP_READ_ONLY, value: "true"}
+      secrets:
+        - {name: argocd-mcp, key: token, targetEnvName: ARGOCD_API_TOKEN}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          cpu: 300m
+          memory: 256Mi
+      podTemplateSpec:
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            # The image's USER.
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mcp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+
 # ---------------------------------------------------------------------------
 # Remote (hosted) MCP servers. Each key becomes an MCPRemoteProxy named <key>
 # in the group; `spec` is passed through verbatim (v1beta1 MCPRemoteProxy).
@@ -367,6 +433,19 @@ externalSecrets:
       template:
         authorization: "Bearer {{ .token }}"
 
+    # API key for the Argo CD account mcp-gateway (role:readonly), used by the
+    # argocd server. Mint it with the command in README "Argo CD".
+    argocd-mcp:
+      enabled: true
+      server: argocd
+      title: Argo CD API token
+      description: >-
+        API token for the Argo CD account mcp-gateway (read-only). Valid for
+        180 days; see the toolhive_mcp README to rotate it.
+      vaultPath: kv/apiary/shared/argocd
+      fields:
+        - {key: token, label: API token, secret: true}
+
 # ---------------------------------------------------------------------------
 # vMCP gateway
 # ---------------------------------------------------------------------------
@@ -458,6 +537,20 @@ authz:
     - cribl_cribl_getSearchJobResults
     - cribl_cribl_getDatasetIntelligence
     # Splunk's read tools carry readOnlyHint and are allowed automatically.
+    # Argo CD read tools (no readOnlyHint). The server runs with MCP_READ_ONLY,
+    # so its write tools are never offered. get_resources returns manifests;
+    # Argo CD masks Secret data for every account.
+    - argocd_list_applications
+    - argocd_get_application
+    - argocd_get_appproject
+    - argocd_list_clusters
+    - argocd_get_application_resource_tree
+    - argocd_get_application_managed_resources
+    - argocd_get_application_workload_logs
+    - argocd_get_application_events
+    - argocd_get_resource_events
+    - argocd_get_resources
+    - argocd_get_resource_actions
   # Tools that change something or start work, allowed on purpose (for now, to
   # test everything Splunk and Cribl offer). Remove a line to take one away.
   writeTools:

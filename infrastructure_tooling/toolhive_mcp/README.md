@@ -388,6 +388,43 @@ testing, every tool of both is allowed:
 
 Remove lines from `authz.writeTools` to tighten it.
 
+## Argo CD
+
+**Argo CD** (`mcpServers.argocd`) is the Argo project's MCP server
+(`argoproj-labs/mcp-for-argocd`). It calls `argocd-server` in-cluster over
+plain HTTP (`server.insecure`; TLS ends at Traefik), and its egress policy
+allows only the argocd-server pods. It is read-only twice over:
+
+- It authenticates as the Argo CD account `mcp-gateway`, which has an API key
+  only (no UI login) and `role:readonly`. Both are set in
+  `infrastructure_tooling/argocd_config` (`apiAccounts`).
+- `MCP_READ_ONLY=true` stops the server from offering `create_application`,
+  `update_application`, `delete_application`, `sync_application` and
+  `run_resource_action`.
+
+Its 11 read tools carry no annotations, so they are listed in
+`authz.readOnlyTools` (`argocd_list_applications`, ...). Note that
+`argocd_get_application_workload_logs` returns pod logs, and `role:readonly`
+can read any application's logs and manifests (Argo CD masks Secret data).
+
+The API token lives in Vault at `kv/apiary/shared/argocd`, field `token`. To
+mint or rotate it (180 days), run this on k3s-01. The token goes from the
+argocd-server pod into Vault without being printed:
+
+```bash
+kubectl -n argocd exec deploy/argocd-server -- \
+    argocd account generate-token --core --account mcp-gateway --expires-in 4320h |
+  { VT=$(kubectl -n default get secret vault-token -o jsonpath="{.data.token}" | base64 -d)
+    { printf "%s\n" "$VT"; cat; } | kubectl -n vault exec -i vault-0 -- sh -c \
+      'read -r VT; read -r T; export VAULT_TOKEN=$VT; printf %s "$T" | vault kv put kv/apiary/shared/argocd token=-'; }
+kubectl -n toolhive-mcp annotate externalsecret argocd-mcp force-sync=$(date +%s) --overwrite
+kubectl -n toolhive-mcp rollout restart sts argocd
+```
+
+Old tokens stay valid until they expire. List and revoke them with
+`argocd account get --core --account mcp-gateway` and
+`argocd account delete-token --core --account mcp-gateway <id>` (same `exec`).
+
 ## Removing / updating / stopping a server
 
 - **Remove:** delete its `mcpServers` entry (and any `externalSecrets` entry)

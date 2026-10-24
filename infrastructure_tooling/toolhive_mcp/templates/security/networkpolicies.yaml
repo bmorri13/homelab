@@ -99,6 +99,8 @@ spec:
 ---
 # Egress for MCP server {{ $name }}: only the destinations listed under
 # mcpServers.{{ $name }}.egress. Applies to both its proxy runner and server pod.
+# An entry is either a `cidr` (a LAN host) or a `namespace` plus `podLabels`
+# (an in-cluster service; policies match pods, not Service IPs).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -113,8 +115,17 @@ spec:
   egress:
     {{- range $server.egress }}
     - to:
+        {{- if .cidr }}
         - ipBlock:
             cidr: {{ .cidr }}
+        {{- else }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ required "egress entries need cidr or namespace" .namespace }}
+          podSelector:
+            matchLabels:
+              {{- required "egress entries with namespace need podLabels" .podLabels | toYaml | nindent 14 }}
+        {{- end }}
       ports:
         {{- range .ports }}
         - {protocol: TCP, port: {{ . }}}

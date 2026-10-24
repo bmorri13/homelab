@@ -55,3 +55,7 @@ data:
     hs.message = "Ingress is served by hostNetwork Traefik; no loadBalancer status expected on this cluster"
     return hs
 {{- end }}
+{{- range $name, $acct := .Values.apiAccounts }}
+  # API-key-only account; its role is bound in argocd-rbac-cm.
+  accounts.{{ $name }}: apiKey
+{{- end }}
