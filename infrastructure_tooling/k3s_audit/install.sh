@@ -42,6 +42,12 @@ if ! wait_ready; then
     wait_ready && echo "rolled back: k3s is up without auditing" >&2
     exit 1
 fi
+# The OTel collector's k8s_events receiver doesn't recover when its watch fails
+# during an API restart (it logs "Watch channel closed unexpectedly" and stops),
+# so Kubernetes events stop reaching Splunk until the collector restarts.
+k3s kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent >/dev/null 2>&1 &&
+    echo "restarted the otel collector (k8s_events)" ||
+    echo "could not restart the otel collector; restart it so Kubernetes events resume" >&2
 sleep 5
 if [[ -s /var/log/kubernetes/audit/audit.log ]]; then
     echo "k3s ready; audit log is being written"

@@ -11,6 +11,11 @@ license has no other role), and nothing else of the Cribl API is reachable throu
 here. Cribl's cert is verified against CRIBL_CA_FILE. Tokens and passwords are never
 logged. Standard library only, so it runs on a stock Python image.
 
+Tool results are redacted on the way back: Cribl returns some secrets in clear
+text (getSources includes HEC auth tokens), so any string value under a key that
+names a secret (SECRET_KEY below) is replaced with REDACTED, inside the JSON that
+tools return as text as well as in the JSON-RPC message itself.
+
 Environment:
   CRIBL_URL       Leader base URL, e.g. https://192.168.4.11:9000
   CRIBL_USERNAME  Cribl user
@@ -21,6 +26,7 @@ Environment:
 
 import base64
 import http.client
+import re
 import http.server
 import json
 import os
@@ -40,6 +46,11 @@ REFRESH_MARGIN = 300          # renew this many seconds before the token expires
 FALLBACK_TTL = 1800           # if the token's exp can't be read
 TIMEOUT = 300                 # seconds; search tools can be slow
 MAX_BODY = 4 * 1024 * 1024
+MAX_RESPONSE = 32 * 1024 * 1024
+# Key names whose string values are secrets, e.g. token, authToken, password,
+# secretKey, apiKey, privKey, passphrase. authType/tokenUrl-style names don't match.
+SECRET_KEY = re.compile(r"(token|password|passwd|secret|secretkey|passphrase|apikey|api_key|privkey|privatekey|private_key)$", re.I)
+REDACTED = "REDACTED"
 
 # Headers passed through in each direction. Everything else is dropped, notably
 # the client's Authorization (replaced) and any cookies.
@@ -112,6 +123,44 @@ class Session:
 SESSION = Session()
 
 
+def _redact(obj):
+    """obj with secret-named string values replaced. Returns (obj, changed)."""
+    changed = False
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, str) and v and v != REDACTED and SECRET_KEY.search(k):
+                obj[k] = REDACTED
+                changed = True
+            elif isinstance(v, str) and v[:1] in "{[":
+                # Tool results carry their JSON as a string (content[].text).
+                try:
+                    inner = json.loads(v)
+                except ValueError:
+                    continue
+                inner, c = _redact(inner)
+                if c:
+                    obj[k] = json.dumps(inner, separators=(",", ":"))
+                    changed = True
+            else:
+                obj[k], c = _redact(v)
+                changed |= c
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            obj[i], c = _redact(v)
+            changed |= c
+    return obj, changed
+
+
+def redact_json(data):
+    """A JSON-RPC message (bytes) with secrets redacted; unchanged if not JSON."""
+    try:
+        msg = json.loads(data)
+    except ValueError:
+        return data
+    msg, changed = _redact(msg)
+    return json.dumps(msg, separators=(",", ":")).encode() if changed else data
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     # HTTP/1.0: the connection closes after each response, so a streamed (SSE)
     # body needs no Content-Length or chunked encoding.
@@ -120,7 +169,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     sys_version = ""
 
     def do_GET(self):
-        if self.path == "/health":
+        # ToolHive's proxy runner health-checks GET / every few seconds.
+        if self.path in ("/", "/health"):
             return self._reply(200, b"ok\n")
         self._proxy()
 
@@ -159,17 +209,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 conn.close()
                 token = SESSION.token(stale=token)
 
+            ctype = (resp.getheader("Content-Type") or "").split(";")[0].strip().lower()
             self.send_response(resp.status)
             for k, v in resp.getheaders():
-                if k.lower() in RESPONSE_HEADERS:
+                # Redaction can change the length; HTTP/1.0 ends the body at close.
+                if k.lower() in RESPONSE_HEADERS and k.lower() != "content-length":
                     self.send_header(k, v)
             self.end_headers()
-            while True:
-                chunk = resp.read1(65536)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                self.wfile.flush()
+            if ctype == "application/json":
+                data = resp.read(MAX_RESPONSE + 1)
+                if len(data) > MAX_RESPONSE:
+                    raise ValueError("response too large to redact")
+                self.wfile.write(redact_json(data))
+            elif ctype == "text/event-stream":
+                # One JSON-RPC message per data: line; redact each as it arrives.
+                for line in resp:
+                    if line.startswith(b"data:"):
+                        line = b"data: " + redact_json(line[5:].strip()) + b"\n"
+                    self.wfile.write(line)
+                    self.wfile.flush()
+            else:
+                while True:
+                    chunk = resp.read1(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
         except (OSError, http.client.HTTPException, RuntimeError, ValueError) as exc:
             log(f"{self.command} /mcp failed: {type(exc).__name__}: {exc}")
             if not self.wfile.closed:
@@ -180,6 +245,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         finally:
             if conn is not None:
                 conn.close()
+
+    def log_request(self, code="-", size="-"):
+        # Successful requests aren't logged: health checks arrive every few
+        # seconds, and the vMCP's audit log already records every tool call.
+        try:
+            if int(code) < 400:
+                return
+        except (TypeError, ValueError):
+            pass
+        super().log_request(code, size)
 
     def log_message(self, fmt, *args):
         # Method, path and status only; never headers.
