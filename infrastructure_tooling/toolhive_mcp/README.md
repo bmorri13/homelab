@@ -392,8 +392,12 @@ Remove lines from `authz.writeTools` to tighten it.
 
 **Argo CD** (`mcpServers.argocd`) is the Argo project's MCP server
 (`argoproj-labs/mcp-for-argocd`). It calls `argocd-server` in-cluster over
-plain HTTP (`server.insecure`; TLS ends at Traefik), and its egress policy
-allows only the argocd-server pods. It is read-only twice over:
+HTTPS, and its egress policy allows only the argocd-server pods. Argo CD serves
+its own self-signed cert (from `argocd-secret`, `tls.crt`); the server trusts
+exactly that cert, copied to `files/argocd-server.crt`. **It expires
+2027-05-10.** When Argo CD's cert changes, copy the new one
+(`kubectl -n argocd get secret argocd-secret -o jsonpath='{.data.tls\.crt}' | base64 -d`)
+over that file and merge. It is read-only twice over:
 
 - It authenticates as the Argo CD account `mcp-gateway`, which has an API key
   only (no UI login) and `role:readonly`. Both are set in
@@ -408,22 +412,30 @@ Its 11 read tools carry no annotations, so they are listed in
 can read any application's logs and manifests (Argo CD masks Secret data).
 
 The API token lives in Vault at `kv/apiary/shared/argocd`, field `token`. To
-mint or rotate it (180 days), run this on k3s-01. The token goes from the
-argocd-server pod into Vault without being printed:
+mint or rotate it (180 days), run this on k3s-01 (`bash -s`). It logs in to
+the Argo CD API as admin, mints a token for `mcp-gateway` and writes it to
+Vault; nothing is printed. (`argocd account generate-token --core` doesn't work
+from inside the argocd-server pod: its ServiceAccount can't list Services.)
 
 ```bash
-kubectl -n argocd exec deploy/argocd-server -- \
-    argocd account generate-token --core --account mcp-gateway --expires-in 4320h |
-  { VT=$(kubectl -n default get secret vault-token -o jsonpath="{.data.token}" | base64 -d)
-    { printf "%s\n" "$VT"; cat; } | kubectl -n vault exec -i vault-0 -- sh -c \
-      'read -r VT; read -r T; export VAULT_TOKEN=$VT; printf %s "$T" | vault kv put kv/apiary/shared/argocd token=-'; }
+set -euo pipefail
+A=https://argocd-server.argocd.svc.cluster.local
+CA=$(mktemp); trap 'rm -f "$CA"' EXIT
+kubectl -n argocd get secret argocd-secret -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CA"
+C=(curl -sf --cacert "$CA" --resolve "argocd-server.argocd.svc.cluster.local:443:$(kubectl -n argocd get svc argocd-server -o jsonpath='{.spec.clusterIP}')")
+ADMIN=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d |
+  jq -Rr '{username:"admin",password:.}' | "${C[@]}" -H 'Content-Type: application/json' -d @- $A/api/v1/session | jq -r .token)
+TOK=$(jq -n --arg id "mcp-gateway-$(date +%Y%m%d)" '{id:$id, expiresIn:15552000}' |
+  "${C[@]}" -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' -d @- $A/api/v1/account/mcp-gateway/token | jq -r .token)
+VT=$(kubectl -n default get secret vault-token -o jsonpath='{.data.token}' | base64 -d)
+printf '%s\n%s\n' "$VT" "$TOK" | kubectl -n vault exec -i vault-0 -- sh -c \
+  'read -r VT; read -r T; export VAULT_TOKEN=$VT VAULT_ADDR=http://127.0.0.1:8200; printf %s "$T" | vault kv put kv/apiary/shared/argocd token=-'
 kubectl -n toolhive-mcp annotate externalsecret argocd-mcp force-sync=$(date +%s) --overwrite
-kubectl -n toolhive-mcp rollout restart sts argocd
 ```
 
-Old tokens stay valid until they expire. List and revoke them with
-`argocd account get --core --account mcp-gateway` and
-`argocd account delete-token --core --account mcp-gateway <id>` (same `exec`).
+Then restart the server (`kubectl -n toolhive-mcp rollout restart sts argocd`)
+once the Secret has updated. Old tokens stay valid until they expire; list and
+revoke them in the Argo CD UI under Settings > Accounts > mcp-gateway.
 
 ## Removing / updating / stopping a server
 
