@@ -1,0 +1,17 @@
+# Argo CD RBAC. Same adoption rules as argocd-cm (see that file): settings added
+# through the UI that aren't here are reverted on the next sync. Before this
+# chart managed it, argocd-rbac-cm was empty: the admin user only, no default
+# role, and that stays true.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  policy.csv: |
+    {{- range $name, $acct := .Values.apiAccounts }}
+    g, {{ $name }}, {{ $acct.role }}
+    {{- end }}
