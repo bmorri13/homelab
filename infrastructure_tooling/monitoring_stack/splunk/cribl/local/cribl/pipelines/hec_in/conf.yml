@@ -26,6 +26,35 @@ functions:
     description: >-
       MCP gateway audit records (who called which tool, outcome) to index=audit.
       Final, like the Vault audit rule. The rest of ToolHive's logs go to k8s.
+  - id: eval
+    filter: >-
+      __e['compose.project'] == 'bmosan-news' && __e['container.name'] == 'news-backend' && /^\{"time":/.test(_raw)
+    conf:
+      add:
+        - name: sourcetype
+          value: "'bmosan:news:json'"
+        - name: index
+          value: >-
+            /"event": ?"llm_call"/.test(_raw) ? 'ai_agents'
+            : /"event": ?"trigger_(invoked|denied)"/.test(_raw) ? 'security'
+            : 'apps'
+    final: true
+    description: >-
+      Daily news app backend (news.bmosan.com) JSON logs: Claude API calls to
+      ai_agents, admin trigger attempts to security, the rest to apps. The app
+      already skips successful health checks and keeps debug off.
+  - id: eval
+    filter: >-
+      __e['container.name'] == 'cloudflared-tunnel' && __e['container.image.name'] == 'cloudflare/cloudflared'
+    conf:
+      add:
+        - name: sourcetype
+          value: "'cloudflare:cloudflared'"
+        - name: index
+          value: "'network'"
+    description: >-
+      Cloudflare Tunnel connectors (news.bmosan.com, the Splunk stack) to network.
+      About 100 lines a week, and the INF lines show tunnel reconnects, so all are kept.
   - id: drop
     filter: __e['k8s.namespace.name'] == 'arc-runners'
     conf: {}

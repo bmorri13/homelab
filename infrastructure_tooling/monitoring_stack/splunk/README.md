@@ -72,6 +72,8 @@ kubectl -n vault exec -it vault-0 -- vault audit enable -path=stdout file file_p
 
 If every enabled audit device fails to write, Vault refuses requests. Stdout doesn't fail in practice, but keep that in mind before adding a second device that can.
 
+The daily news app's backend (`news-backend` in compose project `bmosan-news` on docker-compose-03) logs JSON. `hec_in` tags it `sourcetype=bmosan:news:json` and splits it by its `event` field: `llm_call` (every Claude API call, with tokens and latency) goes to `ai_agents`, `trigger_invoked`/`trigger_denied` go to `security`, and the rest goes to `apps`. Cloudflare Tunnel connectors (`cloudflared-tunnel` containers) go to `network` as `sourcetype=cloudflare:cloudflared`.
+
 `hec_in` receives the OTel collectors: the host agents in [`otel-agent/`](otel-agent/README.md) (journald and Docker containers on the VMs and Proxmox nodes) and the k3s-01 DaemonSet in `infrastructure_tooling/otel_collector_k3s`. It picks the index:
 
 1. Keep an index the collector set, if it is one of the indexes above.
@@ -128,7 +130,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 | Prefix | Use | Examples |
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
-| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit` |
+| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit`, `85_bmosan_news` |
 | none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
@@ -142,6 +144,7 @@ Current base apps:
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`).
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
+- `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 
