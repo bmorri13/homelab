@@ -12,7 +12,7 @@ Cribl Stream pack that converts Falco JSON alerts into [OCSF](https://schema.ocs
 | `proc.*`, `user.*` | `evidences[0].process` (with `file` and `parent_process`) |
 | `container.*` | `evidences[0].container` (image uid, name, labels) |
 | `fd.name` (a path) | `evidences[0].file` |
-| `hostname` | `device.hostname`, and the event's `host` |
+| `hostname` | `device.hostname`, `resources[0]` (type Host, role Affected), and the event's `host` |
 | everything | `unmapped.output_fields`, `unmapped.tags`, `unmapped.priority` |
 
 Falco only detects, so every finding has `action` Observed and `disposition` Detected. `sourcetype` is set to `falco:ocsf`. The internal field `__falco_alert` lets `hec_in` route the finding to `index=security`.

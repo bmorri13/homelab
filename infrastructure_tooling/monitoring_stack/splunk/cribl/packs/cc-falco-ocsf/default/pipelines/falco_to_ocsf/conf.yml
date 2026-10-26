@@ -98,6 +98,9 @@ functions:
               // process details stay in unmapped.output_fields only.
               evidences: procObj.pid !== undefined || fileObj ? [{ process: procObj.pid !== undefined ? procObj : undefined, container: container, file: fileObj }] : undefined,
               device: { type_id: 0, type: 'Unknown', hostname: d.hostname, name: d.hostname },
+              // The host the alert fired on, as the affected resource. The OCSF-CIM add-on
+              // maps a Detection Finding's resources[].name to CIM Alerts dest.
+              resources: d.hostname ? [{ name: d.hostname, hostname: d.hostname, uid: d.hostname, type: 'Host', role_id: 3, role: 'Affected' }] : undefined,
               metadata: {
                 version: OCSF_VERSION,
                 product: { name: 'Falco', vendor_name: 'The Falco Project' },
