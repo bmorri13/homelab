@@ -31,7 +31,8 @@
 # the runner's home and apt-install compilers, then run them, which is the job.
 # GuardRail's scan ran /home/runner/.cache/opengrep/.../opengrep-core about 350
 # times a minute, and a Rust build ran apt-installed gcc/cc1/as hundreds of times.
-# Only this rule is exempt in arc-runners; reverse shells, credential searches,
+# Only this rule is exempt in arc-runners; reverse shells, credential searches
+# (apart from one CI fixture check, below),
 # sensitive reads, container escapes and K8s API contact still alert there.
 # BuildKit probes for QEMU emulation by writing a tiny binary to /tmp/qemu-check*/check
 # and running it, once per build. Inside DinD the container has no k8s metadata, so
@@ -40,6 +41,18 @@
   condition: >-
     and not (k8s.ns.name = arc-runners or
     (proc.pname = buildkitd and proc.exepath glob "/tmp/qemu-check*/check"))
+  override:
+    condition: append
+
+# A CI test suite in arc-runners checks its own redaction fixtures with
+# `grep -q BEGIN PRIVATE KEY /tmp/tmp.<random>/...` (20 alerts 2026-10-23 to 10-25,
+# all from runner pods on k3s-01). Only that exact form is exempt: grep for keys
+# anywhere else, any other search tool, or the same command outside arc-runners
+# still alerts.
+- rule: Search Private Keys or Passwords
+  condition: >-
+    and not (k8s.ns.name = arc-runners and proc.name = grep and
+    proc.cmdline startswith "grep -q BEGIN PRIVATE KEY /tmp/tmp.")
   override:
     condition: append
 
