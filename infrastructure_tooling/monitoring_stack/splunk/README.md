@@ -157,12 +157,13 @@ Splunkbase apps are licensed by Splunk, so they are not committed here. Download
 | `Splunk_MCP_Server` (Splunk MCP Server) | 2.0.0 | The MCP endpoint the gateway on k3s-01 uses. See [MCP access](#mcp-access). |
 | `Splunk_SA_CIM` (Common Information Model) | 8.7.0 | CIM data models. Everything CIM-based (Security Essentials, detections) needs it. |
 | `ocsf_cim_addon_for_splunk` (OCSF-CIM Add-On) | 1.1.0 | Maps the OCSF sourcetypes onto CIM: `ubiquiti:unifi:ocsf` to Network Traffic, `falco:ocsf` to Alerts. |
+| `Splunk_Security_Essentials` (Security Essentials) | 3.8.3 | Detection library (Splunk Security Content), MITRE ATT&CK coverage, data inventory. Downloads content from `securitycontent.scs.splunk.com` when opened. Nothing is scheduled out of the box. About 290 MB, which also makes each nightly config backup larger. |
 
 To install or upgrade one, copy the app directory in and restart splunkd. From a Mac, set `COPYFILE_DISABLE=1` for `tar` so no `._*` AppleDouble files come along (splunkd tries to parse `._*.conf`):
 
 ```bash
 # On the Mac
-COPYFILE_DISABLE=1 tar -C <unpacked dir> -czf - <app_dir> | ssh root@security-tooling-01 \
+COPYFILE_DISABLE=1 tar --no-xattrs -C <unpacked dir> -czf - <app_dir> | ssh root@security-tooling-01 \
   'tar -xzf - -C /srv/splunk/etc/apps/ && chown -R 41812:41812 /srv/splunk/etc/apps/<app_dir>'
 # On security-tooling-01
 docker exec -u splunk splunk /opt/splunk/bin/splunk btool check   # should print nothing
