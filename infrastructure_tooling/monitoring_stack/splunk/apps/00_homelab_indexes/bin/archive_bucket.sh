@@ -5,7 +5,7 @@
 set -eu
 
 BUCKET="$1"
-ARCHIVE=/opt/splunk/archive
+ARCHIVE=/mnt/splunk-archive
 MARKER="$ARCHIVE/.splunk-archive"
 
 # The marker exists only on the Unraid share. Without it we are looking at the
