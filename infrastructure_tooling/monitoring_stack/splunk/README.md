@@ -177,6 +177,8 @@ docker exec -it splunk curl -sk -u admin https://127.0.0.1:8089/services/ocsf-ci
   -d name=homelab -d sourcetypes=ubiquiti:unifi:ocsf,falco:ocsf
 ```
 
+Security Essentials on Splunk 10.6 (it is certified up to 10.5): its automatic content updates break every SSE page with "A custom JavaScript error caused an issue loading your dashboard". The Splunk Research channels fail the app's own signature check ("Signed digest did not match"), and the MITRE ATT&CK download fails when SSE saves it to the KV store (`/services/pushJSON` resets the connection, so the handler returns HTTP 500). Those channels are switched off in `Splunk_Security_Essentials/local/essentials_updates.conf` (`disabled = 1` on `Splunk_Research_*` and `mitreattack`, the same as the toggles under SSE's **Configuration → Content Update**), so SSE uses the content bundled with 3.8.3. After upgrading SSE, turn them back on and check whether the banner returns. The MITRE ATT&CK overview page still throws a TypeError in Splunk's dashboard framework, which is an SSE incompatibility with 10.6 and can't be fixed here.
+
 Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expect `alert`) and `| datamodel Alerts Alerts search | search sourcetype=falco:ocsf`. Data model acceleration is off; turn it on per data model only when a dashboard or detection needs it.
 
 ## Prerequisites
