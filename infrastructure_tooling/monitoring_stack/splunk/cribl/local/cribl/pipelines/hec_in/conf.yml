@@ -55,6 +55,25 @@ functions:
     description: >-
       Cloudflare Tunnel connectors (news.bmosan.com, the Splunk stack) to network.
       About 100 lines a week, and the INF lines show tunnel reconnects, so all are kept.
+  - id: eval
+    filter: >-
+      sourcetype == 'linux:journald' && (
+      ['sshd', 'sshd-session', 'sudo', 'su', 'login', 'useradd', 'userdel', 'usermod', 'groupadd', 'groupdel', 'groupmod', 'passwd', 'chpasswd', 'chage', 'gpasswd'].includes(__e['syslog.identifier']) ||
+      (['pvedaemon', 'pveproxy'].includes(__e['syslog.identifier']) && /successful auth|authentication failure/.test(_raw)) ||
+      (__e['syslog.identifier'] == 'tailscaled' && /^audit: SSH login:/.test(_raw)))
+    conf:
+      add:
+        - name: _raw
+          value: >-
+            C.Time.strftime(_time, '%b %e %H:%M:%S') + ' ' + host + ' ' + __e['syslog.identifier'] +
+            (__e['process.pid'] ? '[' + __e['process.pid'] + ']' : '') + ': ' + _raw
+        - name: sourcetype
+          value: "'linux_secure'"
+    description: >-
+      Logins, sudo/su and account changes from journald, rewritten as classic auth.log
+      lines (sourcetype linux_secure) so the Splunk Add-on for Unix and Linux parses
+      them into CIM Authentication and Change. Tailscale SSH and Proxmox logins are
+      parsed by apps/85_linux_auth. The indexed journald fields are kept.
   - id: drop
     filter: __e['k8s.namespace.name'] == 'arc-runners'
     conf: {}
