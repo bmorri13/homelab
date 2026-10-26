@@ -131,7 +131,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
 | `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit`, `85_bmosan_news` |
-| none | Splunkbase apps, kept under their original names | `Splunk_TA_nix` |
+| none | Splunkbase apps, kept under their original names. Installed by hand, not stored in this repo (see [Splunkbase apps](#splunkbase-apps)) | `Splunk_SA_CIM`, `ocsf_cim_addon_for_splunk` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
 
@@ -147,6 +147,36 @@ Current base apps:
 - `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
+
+### Splunkbase apps
+
+Splunkbase apps are licensed by Splunk, so they are not committed here. Download them from Splunkbase and install them by hand. They live only in `/srv/splunk/etc/apps/`, where `deploy.sh` leaves them alone and the nightly backup includes them.
+
+| App | Version | Why |
+|---|---|---|
+| `Splunk_MCP_Server` (Splunk MCP Server) | 2.0.0 | The MCP endpoint the gateway on k3s-01 uses. See [MCP access](#mcp-access). |
+| `Splunk_SA_CIM` (Common Information Model) | 8.7.0 | CIM data models. Everything CIM-based (Security Essentials, detections) needs it. |
+| `ocsf_cim_addon_for_splunk` (OCSF-CIM Add-On) | 1.1.0 | Maps the OCSF sourcetypes onto CIM: `ubiquiti:unifi:ocsf` to Network Traffic, `falco:ocsf` to Alerts. |
+
+To install or upgrade one, copy the app directory in and restart splunkd. From a Mac, set `COPYFILE_DISABLE=1` for `tar` so no `._*` AppleDouble files come along (splunkd tries to parse `._*.conf`):
+
+```bash
+# On the Mac
+COPYFILE_DISABLE=1 tar -C <unpacked dir> -czf - <app_dir> | ssh root@security-tooling-01 \
+  'tar -xzf - -C /srv/splunk/etc/apps/ && chown -R 41812:41812 /srv/splunk/etc/apps/<app_dir>'
+# On security-tooling-01
+docker exec -u splunk splunk /opt/splunk/bin/splunk btool check   # should print nothing
+docker exec -u splunk splunk /opt/splunk/bin/splunk restart
+```
+
+The OCSF-CIM add-on applies its mappings only to the sourcetypes it is told are OCSF. After installing or upgrading it, set them through its REST endpoint. The endpoint regenerates the add-on's `local/props.conf` and the `ocsf_sourcetypes` macro. Add a sourcetype here whenever a Cribl pack starts emitting a new OCSF one.
+
+```bash
+docker exec -it splunk curl -sk -u admin https://127.0.0.1:8089/services/ocsf-cim/ocsf-sourcetypes \
+  -d name=homelab -d sourcetypes=ubiquiti:unifi:ocsf,falco:ocsf
+```
+
+Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expect `alert`) and `| datamodel Alerts Alerts search | search sourcetype=falco:ocsf`. Data model acceleration is off; turn it on per data model only when a dashboard or detection needs it.
 
 ## Prerequisites
 
@@ -185,7 +215,8 @@ The mount uses `soft` and `nofail` so a down Unraid never blocks boot or hangs s
 ```bash
 # On security-tooling-01, as root
 mkdir -p /opt/splunk-stack
-# copy this directory to /opt/splunk-stack (git archive from a checkout)
+# copy this directory to /opt/splunk-stack (git archive from a checkout; on a Mac
+# set COPYFILE_DISABLE=1 so tar adds no ._* files)
 cd /opt/splunk-stack
 cp .env-example .env    # set SPLUNK_PASSWORD, CRIBL_ADMIN_PASSWORD, CRIBL_HEC_TOKEN, CRIBL_DIST_TOKEN
 chmod 600 .env
