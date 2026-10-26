@@ -13,7 +13,7 @@ Other events pass through unchanged.
 
 | UniFi event | OCSF class | Notes |
 |---|---|---|
-| IDS/IPS "Threat Detected", "Threat Detected and Blocked" | Detection Finding (2004) | Signature in `finding_info.analytic` (`uid` is the Suricata SID). Endpoints are in `evidences[0]`. Detected-only events get disposition "Detected". |
+| IDS/IPS "Threat Detected", "Threat Detected and Blocked" | Detection Finding (2004) | Signature in `finding_info.analytic` (`uid` is the Suricata SID). Endpoints are in `evidences[0]`. The home-network side of the flow is `resources[0]` (type Host, role Affected), which the OCSF-CIM add-on maps to CIM Alerts `dest`. Detected-only events get disposition "Detected". |
 | Zone-based firewall CEF (`UNIFIpolicyType`, `UNIFIsrcZone`, `UNIFIdstZone`), kernel firewall lines | Network Activity (4001) | Activity Refuse (blocked) or Traffic (allowed), with `firewall_rule`. |
 | WiFi or wired client connected, disconnected, roamed | Network Activity (4001) | Activity Open, Close, or Other (`activity_name` "Roam"). The client is `src_endpoint`; the AP is `dst_endpoint`. |
 | Admin login or "accessed UniFi Network" | Authentication (3002) | |

@@ -178,6 +178,10 @@ functions:
               const riskSev = sevFromRisk(risk);
               const sev = riskSev !== undefined ? riskSev : sevFromCef(cefSev);
               const sig = g('UNIFIipsSignature');
+              // The home-network side of the flow is the affected host. The OCSF-CIM
+              // add-on maps a Detection Finding's resources[].name to CIM Alerts dest.
+              const isLan = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|f[cd]|fe80:)/i.test(ip || '');
+              const hit = isLan(dst_endpoint.ip) || !isLan(src_endpoint.ip) ? dst_endpoint : src_endpoint;
               ev = {
                 class_uid: 2004, class_name: 'Detection Finding', category_uid: 2, category_name: 'Findings',
                 activity_id: 1, activity_name: 'Create',
@@ -190,6 +194,7 @@ functions:
                   analytic: { type_id: 1, type: 'Rule', uid: g('UNIFIipsSignatureId'), name: sig || k.UNIFIpolicyName || name, category: k.UNIFIpolicyName },
                 },
                 evidences: [{ src_endpoint, dst_endpoint, connection_info }],
+                resources: hit.ip ? [{ name: hit.hostname || hit.ip, hostname: hit.hostname, ip: hit.ip, uid: hit.mac || hit.ip, type: 'Host', role_id: 3, role: 'Affected' }] : undefined,
                 risk_level: risk,
               };
               Object.assign(ev, action);
