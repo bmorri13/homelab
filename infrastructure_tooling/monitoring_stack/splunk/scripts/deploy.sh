@@ -56,8 +56,11 @@ sync_apps() {
         name=$(basename "$app")
         # Compare content only (no -t), and set ownership in the copy itself, so an
         # unchanged app reports nothing and does not trigger a splunkd restart.
+        # ._* are macOS AppleDouble files from copying off a Mac; splunkd tries to
+        # parse ._*.conf as config.
         changes+=$(rsync -rlp --chown="$owner" --delete --checksum --itemize-changes \
             --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
+            --exclude '._*' \
             "$app" "$DATA_DIR/etc/apps/$name/")
     done
     if [[ -n "$changes" ]]; then echo "apps changed:"; echo "$changes"; else echo "apps unchanged"; fi
