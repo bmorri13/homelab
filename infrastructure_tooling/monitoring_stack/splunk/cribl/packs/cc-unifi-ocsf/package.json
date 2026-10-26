@@ -1,6 +1,6 @@
 {
   "name": "cc-unifi-ocsf",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "spec": "1.0.0",
   "displayName": "UniFi to OCSF",
   "author": "bmorri13",
