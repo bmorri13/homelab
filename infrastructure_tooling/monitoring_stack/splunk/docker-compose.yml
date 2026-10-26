@@ -26,10 +26,12 @@ services:
       - splunk-var:/opt/splunk/var
       # Parent of the Unraid NFS mount. rslave lets an NFS mount that comes up
       # after the container started still propagate in; archive_bucket.sh only
-      # archives when the share's marker file is visible.
+      # archives when the share's marker file is visible. Kept outside
+      # /opt/splunk: the image chowns everything under it on start, the share
+      # refuses chown (all_squash), and splunkd would never start.
       - type: bind
         source: ${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}
-        target: /opt/splunk/archive
+        target: /mnt/splunk-archive
         bind:
           propagation: rslave
           create_host_path: true

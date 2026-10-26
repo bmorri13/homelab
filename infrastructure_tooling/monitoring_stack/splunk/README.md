@@ -18,18 +18,18 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 | What | Where | Notes |
 |---|---|---|
 | Splunk config (`/opt/splunk/etc`) | `/srv/splunk/etc` on the VM | Survives container recreation and upgrades |
-| Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes; the oldest data is deleted at the cap. |
+| Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes; at the cap the oldest data is frozen (archived, then deleted locally). |
 | Cribl Leader: settings, users, Worker Group config | `/srv/cribl` on the VM | Group config in `groups/default/` (a git repo the Leader commits to). Seeded from `cribl/` on first deploy. |
 | Cribl Worker: pulled config, persistent queue | `/srv/cribl-worker` on the VM | Nothing here that the Leader can't send again, except queued data |
 | TLS certs for 8089 and the Cribl API | `/root/homelab-ca` (CA), `/srv/splunk/etc/auth/homelab/`, `/srv/cribl/local/cribl/auth/homelab-tls/` | Issued and renewed by `scripts/tls-certs.sh`. See [MCP access](#mcp-access). |
-| Frozen archive | Not enabled yet (issue #165) | Planned: Unraid NFS share at `/mnt/unraid-splunk/frozen` |
-| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives. Skipped until the share exists. |
+| Frozen archive | Unraid NFS share at `/mnt/unraid-splunk/frozen/<index dir>/` | Raw data of every bucket that ages out, except `cribl` and `unrouted`. Kept forever; see [Frozen archive](#frozen-archive). |
+| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives (about 500 MB each, mostly Splunk's built-in apps). |
 | Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
 
 ### Indexes
 
-Cribl picks the index for every event. Data older than the retention below, or past the 350 GB cap, is deleted. Archiving comes later (issue #165).
+Cribl picks the index for every event. Data older than the retention below, or past the 350 GB cap, is frozen: copied to the Unraid share and then deleted locally. `cribl` and `unrouted` are deleted without archiving.
 
 | Index | Contents | Retention |
 |---|---|---|
@@ -137,7 +137,7 @@ In global context (index-time props, indexes, inputs, server settings) Splunk me
 
 Current base apps:
 
-- `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh` for when archiving is turned on.
+- `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh`, which archives frozen buckets to the Unraid share.
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
 - `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk.
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
@@ -164,7 +164,7 @@ Changing `cores` in the same apply reboots the VM, because the bpg provider defa
 
 ### 2. Unraid NFS share (one time)
 
-1. In Unraid, create a share (for example `splunk`) on the cache pool. Enable NFS export with the security rule limited to the VM's IP, for example `192.168.4.11(sec=sys,rw,all_squash,anonuid=99,anongid=100)`. Don't use `*`.
+1. In Unraid, create a share named `splunk` (cache or array storage both work). Under **NFS Security Settings**, set Export to Yes. Security `Private` with the rule `192.168.4.11(sec=sys,rw,all_squash,anonuid=99,anongid=100)` limits it to this VM; with `Public`, any host on the network can read the backups, which contain `splunk.secret`, `cribl.secret`, TLS keys, and password hashes. Turn SMB export off.
 2. On the VM:
 
 ```bash
@@ -176,9 +176,7 @@ mkdir -p /mnt/unraid-splunk/frozen /mnt/unraid-splunk/backups
 touch /mnt/unraid-splunk/.splunk-archive
 ```
 
-Until this share exists, nightly config backups are skipped. Archiving frozen data also needs `coldToFrozenScript` added back to each index in `apps/00_homelab_indexes/default/indexes.conf` (see the comment there).
-
-The `.splunk-archive` marker matters. `archive_bucket.sh` and `backup-etc.sh` write only when they can see it. If the share is not mounted, they see the empty local directory instead, so they skip the write rather than fill the root disk. Splunk keeps the bucket and retries later.
+The `.splunk-archive` marker matters. `archive_bucket.sh` and `backup-etc.sh` write only when they can see it. If the share is not mounted, they see the empty local directory instead, so they skip the write rather than fill the root disk. Splunk keeps the bucket and retries later. While the share is down, buckets due to freeze stay on local disk, so the 350 GB cap can be exceeded; `00_homelab_server` stops indexing before the disk fills. A failing archive shows up as `archive_bucket` errors in `index=_internal`.
 
 The mount uses `soft` and `nofail` so a down Unraid never blocks boot or hangs splunkd. Archives are copied to a `.tmp` name and renamed when complete, so an interrupted copy is retried.
 
@@ -220,6 +218,22 @@ Install the developer license in Splunk Web under **Settings > Licensing > Add l
 echo '15 3 * * * root /opt/splunk-stack/scripts/backup-etc.sh >> /var/log/splunk-etc-backup.log 2>&1' > /etc/cron.d/splunk-etc-backup
 ```
 
+### Frozen archive
+
+`archive_bucket.sh` copies only a bucket's `rawdata` (the compressed events) to `/mnt/unraid-splunk/frozen/<index dir>/<bucket>/`. The directory is the index's directory on disk, so the `audit` index archives to `frozen/homelab_audit/`. Nothing prunes the archive. At current volumes it grows by roughly 2 GB a year; delete old bucket directories by hand if it ever matters.
+
+To search archived data again, thaw it:
+
+```bash
+# On security-tooling-01, as root. Example: one bucket from the infra index.
+cp -R /mnt/unraid-splunk/frozen/infra/db_<newest>_<oldest>_<id> /srv/splunk/var/lib/splunk/infra/thaweddb/
+chown -R 41812:41812 /srv/splunk/var/lib/splunk/infra/thaweddb/
+docker exec -u splunk splunk /opt/splunk/bin/splunk rebuild /opt/splunk/var/lib/splunk/infra/thaweddb/db_<newest>_<oldest>_<id>
+docker restart splunk
+```
+
+Thawed buckets are searchable in their index and are never frozen again; delete them from `thaweddb/` when you are done.
+
 ## Upgrades
 
 Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./scripts/deploy.sh`. This applies to both Splunk and Cribl. Take a Proxmox snapshot of the VM first, and delete it afterwards.
@@ -235,7 +249,7 @@ Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./s
    ```
 3. `./scripts/deploy.sh`
 
-Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` to `toolhive_mcp/files/homelab-ca.crt`, and re-mint the Splunk MCP token (see below). Indexed data is lost; frozen buckets, once archiving is enabled, can be thawed.
+Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` to `toolhive_mcp/files/homelab-ca.crt`, and re-mint the Splunk MCP token (see below). Indexed data is lost; frozen buckets can be thawed (see [Frozen archive](#frozen-archive)).
 
 ## Host tuning
 

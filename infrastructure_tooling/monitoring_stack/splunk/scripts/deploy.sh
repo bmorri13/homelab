@@ -132,6 +132,6 @@ fi
 echo "cribl: healthy"
 
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
-    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups will be skipped until the Unraid share is mounted" >&2
+    echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups and frozen-bucket archiving will fail until the Unraid share is mounted" >&2
 fi
 echo "done: Splunk https://$(hostname):8000  Cribl https://$(hostname):9000"
