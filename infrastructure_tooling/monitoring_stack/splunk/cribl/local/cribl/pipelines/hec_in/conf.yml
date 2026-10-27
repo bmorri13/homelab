@@ -45,6 +45,20 @@ functions:
       already skips successful health checks and keeps debug off.
   - id: eval
     filter: >-
+      __e['container.name'] == 'opencanary' && /^\{"dst_host"/.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'security'"
+        - name: sourcetype
+          value: "'opencanary'"
+    final: true
+    description: >-
+      OpenCanary honeypot on docker-compose-02 (infrastructure_tooling/opencanary):
+      its JSON events to security. Nothing legitimate talks to it. Its Twisted
+      startup lines stay in apps.
+  - id: eval
+    filter: >-
       __e['container.name'] == 'cloudflared-tunnel' && __e['container.image.name'] == 'cloudflare/cloudflared'
     conf:
       add:
