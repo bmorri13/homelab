@@ -49,12 +49,29 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 | Search Private Keys or Passwords | In `arc-runners`, only `grep -q BEGIN PRIVATE KEY /tmp/tmp.*` | A CI test suite checks its own redaction fixtures this way (20 alerts in 3 days). Any other key search, in the runners or elsewhere, still alerts |
 | Clear Log Activities | `dockerd` under `/var/lib/docker/`, `buildkitd` under `/var/lib/buildkit/` | Unpacking image layers truncates `var/log/dpkg.log` inside snapshots (DinD and image builds in arc-runners) |
 | Packet socket created in container | `dockerd` in the `docker.io/library/docker` image | The DinD sidecar in arc-runners sets up networking for each CI job's containers |
-| Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault; `kubectl proxy` in toolhive-mcp | Controllers use the API by design. The kubectl MCP server's proxy reopens its pooled connection hourly, and Falco can't see the requests sent through it |
+| Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault; `kubectl proxy`, `thv-proxyrunner` and `vmcp` in toolhive-mcp; the runner hook `node /home/runner/k8s/index.js` in arc-runners | Controllers use the API by design. The kubectl MCP server's proxy reopens its pooled connection hourly, and Falco can't see the requests sent through it. ToolHive's proxy runner manages its MCP pod and vMCP discovers backends. ARC runners in Kubernetes mode run job steps as pods through the hook (1,858 alerts in two days) |
 
 Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that is in the k3s API audit log (`index=audit sourcetype=kube:apiserver:audit`), with Falco's Kubernetes audit rules running on it (`falco-k8saudit`).
 
+## AI agent rules (`rules.d/ai_agents.yaml`)
+
+Detections for anything an AI agent runs, issue #176. A process counts as an agent's if an ancestor is named `claude`, `codex`, `opencode`, `openclaw` or `hermes`, so the commands an agent runs are covered as well as the agent. Every rule is tagged `ai_agent`: `index=security sourcetype=falco:ocsf "AI agent"`.
+
+| Rule | Priority | Fires when an agent process |
+|---|---|---|
+| AI agent read credential file | Warning | opens SSH private keys, `.aws/credentials`, `gh` tokens, kubeconfig, Docker config, `.netrc`, `.git-credentials`, another agent's auth file, a `.pem`/`.key`, or `/etc/shadow`. Each tool reading its own credentials (ssh/git the SSH keys, kubectl the kubeconfig, ...) and CA bundles in packages are exempt |
+| AI agent printed a .env file | Warning | runs `cat`, `grep`, `head` and similar on a `.env` file. Code that loads `.env` is not matched |
+| AI agent piped a download into a shell | Warning | runs `curl`/`wget` piped into `sh`, `bash`, `sudo` or `python` |
+| AI agent wrote a persistence file | Warning | writes a shell startup file, crontab, systemd unit, `authorized_keys` or sudoers |
+| AI agent outbound connection on unusual port | Notice | connects to a public address on a port other than 22, 53, 80 or 443 |
+| AI agent ran a destructive command | Notice | runs `git push --force`, `terraform`/`tofu` apply or destroy, or `kubectl delete` |
+| AI agent started a reverse shell | Critical | runs `nc -e`/`-c`, `socat` with `exec:`/`system:`, or a shell using `/dev/tcp` |
+
+The rules are only on the VMs; no agents run on k3s. Agents on Falco hosts today: Hermes and OpenClaw on openclaw-claude-01. Claude Code and Codex run on coding-box, which has no Falco yet.
+
+To test, copy `/bin/bash` to a file named `claude` and run harmless versions of the commands through it, for example `./claude -c 'cat ~/.aws/credentials; true'`. The `; true` matters: bash runs a single command with exec, which drops the `claude` ancestor.
+
 ## Next
 
-- **Custom AI-agent rules:** issue #176, once the defaults are quiet.
-- **coding-box:** needs an Arch install path (no deb).
+- **coding-box:** needs an Arch install path (no deb). Most agent work happens there.
 - **Optional plugins:** `github`.

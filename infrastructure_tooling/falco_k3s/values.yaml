@@ -85,11 +85,19 @@ falco:
         # requests an agent sends through it, so the alert carried no signal. Any other
         # process in toolhive-mcp contacting the API still alerts. Agent API activity needs
         # the k3s audit log (Falco k8saudit plugin) instead.
+        # Also in toolhive-mcp: each MCP server's thv-proxyrunner manages its own pod, and
+        # vmcp discovers backends through the API (57 alerts 2026-10-23 to 10-27, at pod start).
+        # ARC runners in Kubernetes container mode run job steps as pods through the
+        # runner's hook, `node /home/runner/k8s/index.js` (1,858 alerts 2026-10-26/27).
+        # Other runner processes contacting the API still alert.
         - rule: Contact K8S API Server From Container
           condition: >-
             and not (k8s.ns.name in (argocd, otel-collector, kube-system, external-secrets,
             cert-manager, arc-systems, toolhive-system, falco, vault) or
-            (k8s.ns.name = toolhive-mcp and proc.name = kubectl and proc.cmdline startswith "kubectl proxy"))
+            (k8s.ns.name = toolhive-mcp and proc.name = kubectl and proc.cmdline startswith "kubectl proxy") or
+            (k8s.ns.name = toolhive-mcp and proc.exepath in (/ko-app/thv-proxyrunner, /ko-app/vmcp)) or
+            (k8s.ns.name = arc-runners and container.image.repository = ghcr.io/actions/actions-runner and
+            proc.cmdline = "node /home/runner/k8s/index.js"))
           override:
             condition: append
 
