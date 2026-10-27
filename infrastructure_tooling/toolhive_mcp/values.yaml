@@ -176,7 +176,7 @@ mcpServers:
       - cidr: 192.168.4.11/32
         ports: [9000]
     spec:
-      image: python:3.13.17-slim@sha256:fe14fd57a4c0361110eaa0c284112b189750bcb43fb04bb5d1ee7b7744027ccf
+      image: python:3.13.17-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 8080
