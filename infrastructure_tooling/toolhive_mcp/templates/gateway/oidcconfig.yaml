@@ -4,7 +4,7 @@ k3s-01 API server.
 
 Why inline + a localhost JWKS URL instead of type kubernetesServiceAccount:
 k3s only serves /openid/v1/jwks to authenticated callers, and at ToolHive
-v0.55.2 the vMCP's OIDC config has no field for a JWKS bearer token (that
+v0.57.0 the vMCP's OIDC config has no field for a JWKS bearer token (that
 useClusterAuth plumbing only reaches MCPServer proxies). The vMCP pod therefore
 runs a jwks-proxy sidecar (gateway/vmcp.yaml): `kubectl proxy` on 127.0.0.1,
 authenticated with the pod's own ServiceAccount, accepting only GET on the
