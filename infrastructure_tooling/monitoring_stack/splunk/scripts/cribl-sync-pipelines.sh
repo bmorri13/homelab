@@ -20,11 +20,12 @@ session=$(cribl_login admin CRIBL_ADMIN_PASSWORD)
 auth=(-H "Authorization: Bearer $session" -H 'Content-Type: application/json')
 base="$API/m/$GROUP"
 
-# same <live json> <repo json>: compare the fields the repo defines.
+# same <live json> <repo json>: compare the fields the repo defines. JSON goes
+# through stdin: secret_mask is larger than the kernel's per-argument limit.
 same() {
-    python3 -c 'import json, sys
-live, repo = json.loads(sys.argv[1]), json.loads(sys.argv[2])
-sys.exit(0 if all(live.get(k) == v for k, v in repo.items()) else 1)' "$1" "$2"
+    printf '%s\n%s\n' "$1" "$2" | python3 -c 'import json, sys
+live, repo = (json.loads(l) for l in sys.stdin.read().splitlines())
+sys.exit(0 if all(live.get(k) == v for k, v in repo.items()) else 1)'
 }
 yaml2json() { python3 -c 'import json, sys, yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1]))))' "$1"; }
 
@@ -32,13 +33,15 @@ changed=0
 for conf in cribl/local/cribl/pipelines/*/conf.yml; do
     id=$(basename "$(dirname "$conf")")
     repo=$(yaml2json "$conf")
-    live=$(ccurl -s "${auth[@]}" "$base/pipelines/$id" | jq -c '.items[0].conf // {}')
-    same "$live" "$repo" && continue
-    echo "pipeline $id: differs"
+    live=$(ccurl -s "${auth[@]}" "$base/pipelines/$id" | jq -c '.items[0].conf // empty')
+    [[ -n "$live" ]] && same "$live" "$repo" && continue
+    # new pipelines are created; secret_mask sorts before splunk_out, which chains to it
+    if [[ -z "$live" ]]; then echo "pipeline $id: new"; method=POST; url="$base/pipelines"
+    else echo "pipeline $id: differs"; method=PATCH; url="$base/pipelines/$id"; fi
     changed=1
     [[ $check -eq 1 ]] && continue
-    jq -nc --arg id "$id" --argjson conf "$repo" '{id: $id, conf: $conf}' |
-        ccurl -sf "${auth[@]}" -X PATCH "$base/pipelines/$id" --data @- >/dev/null ||
+    jq -c --arg id "$id" '{id: $id, conf: .}' <<<"$repo" |
+        ccurl -sf "${auth[@]}" -X "$method" "$url" --data @- >/dev/null ||
         { echo "cribl: updating pipeline $id failed" >&2; exit 1; }
 done
 

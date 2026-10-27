@@ -1,0 +1,24 @@
+# Ordinary homelab log lines that splunk_out must leave unchanged (false-positive
+# checks). Same template syntax as must-mask.txt; the output must equal the input.
+
+sudo command         | Oct 26 10:01:02 k3s-01 sudo[4411]:   ubuntu : TTY=pts/0 ; PWD=/home/ubuntu ; USER=root ; COMMAND=/usr/bin/systemctl restart k3s
+tailscale login      | Oct 26 10:01:02 k3s-01 tailscaled[812]: audit: SSH login: user=ubuntu uid=1000 from=100.101.102.103 ts_user=bryanmorrison017@gmail.com node=bmo-mba.tail1234.ts.net.
+pam session          | Oct 26 10:01:02 proxmox2 sshd-session[90]: pam_unix(sshd:session): session opened for user root(uid=0) by root(uid=0)
+pam auth failure     | Oct 26 10:01:02 proxmox2 sshd-session[90]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=192.168.4.60  user=root
+ssh publickey        | Oct 26 10:01:02 proxmox2 sshd-session[90]: Accepted publickey for root from 192.168.4.60 port 51234 ssh2: ED25519 SHA256:{B:43}
+systemd failure      | Failed to start k3s.service - Lightweight Kubernetes.
+k8s audit            | {"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Metadata","auditID":"{uuid}","verb":"get","user":{"username":"system:serviceaccount:argocd:argocd-application-controller"},"annotations":{"authorization.k8s.io/decision":"allow","authorization.k8s.io/reason":"RBAC: allowed by ClusterRoleBinding"}}
+container image      | Pulling image ghcr.io/stackloklabs/toolhive@sha256:{H:64}
+git commit           | Updated to commit {H:40} on branch main
+llm usage            | {"event":"llm_call","model":"claude-sonnet-5-5","input_tokens":1834,"output_tokens":412,"cache_read_input_tokens":0}
+falco alert          | {"hostname":"k3s-01","output":"Sensitive file opened for reading (file=/etc/shadow user=root command=cat /etc/shadow)","priority":"Warning","rule":"Read sensitive file untrusted"}
+argocd sync          | time="2026-10-26T10:01:02Z" level=info msg="Sync operation to {H:40} succeeded" application=argocd/toolhive-mcp
+vault audit hmac     | {"type":"response","auth":{"client_token":"hmac-sha256:{H:64}","accessor":"hmac-sha256:{H:64}"}}
+unifi flow           | src=192.168.4.11 dst=217.160.0.187 proto=TCP sport=51322 dport=80 action=allow
+http access          | 10.42.0.1 - - [26/Oct/2026:10:01:02 +0000] "GET /api/v1/health HTTP/1.1" 200 17 "-" "Go-http-client/1.1"
+url with port        | proxying to http://stirling-pdf-stirling-pdf-chart:8080/api/v1/convert
+ssh url no password  | cloning ssh://git@github.com/bmorri13/homelab.git
+uuid request id      | request_id={uuid} status=200 duration_ms=41
+masked marker        | password=[REDACTED] token=[REDACTED]
+argocd helm source   | Helm:&ApplicationSourceHelm{ValueFiles:[values.yaml],Values:,FileParameters:[]HelmFileParameter{},Version:,PassCredentials:false,IgnoreMissingValueFiles:false}
+ca cert injection    | {"logger":"hook-certs-updater","msg":"injecting ca certificate and service names","cacrt":"LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lRR{B:80}"}
