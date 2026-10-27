@@ -30,7 +30,7 @@ gha-runner-scale-set:
   # Org CI (GuardRail's scans in particular) builds images and runs `docker run`,
   # which kubernetes mode can't do. The chart's built-in dind container can't
   # take resource limits, and that sidecar is where all the Docker work
-  # actually runs, so this is the chart's dind render (0.13.1, k8s >= 1.29
+  # actually runs, so this is the chart's dind render (0.15.1, unchanged since 0.13.1; k8s >= 1.29
   # native sidecar) with limits and a real /var/lib/docker volume added.
   #
   # The dind sidecar is privileged: a job can reach the k3s-01 node. That's
