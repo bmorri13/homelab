@@ -1,0 +1,90 @@
+# Log lines that must come out of splunk_out with every generated value removed.
+# Templates, not secrets: scripts/cribl-test-mask.py fills each {X:n} with n random
+# characters at run time, so no token-shaped string is ever committed.
+#   A alnum   L lower alnum   a lower letters   U upper+digits   H hex   N digits
+#   B base64 chars   W word chars   Z [A-Z2-7]   E bech32   {uuid}
+#   {PRIVATE} is the literal word and {PEMB64} a base64 RSA key header; both are kept
+#   out of the file so secret scanners do not flag it.
+# A test passes when no filled-in value of 8+ characters is left in the output.
+# \n in a template is a newline (multi-line events).
+
+# --- already covered before #201 ---
+pem block            | -----BEGIN RSA {PRIVATE} KEY-----\n{B:64}\n{B:64}\n-----END RSA {PRIVATE} KEY-----
+openssh key          | -----BEGIN OPENSSH {PRIVATE} KEY-----\n{B:70}\n{B:70}\n-----END OPENSSH {PRIVATE} KEY-----
+aws key id           | Using credentials AKIA{Z:16} from env
+github classic pat   | git clone https://x:ghp_{A:36}@github.com/bmorri13/homelab
+github app token     | GITHUB_TOKEN=ghs_{A:36}
+slack bot            | slack token xoxb-{N:12}-{N:12}-{A:24}
+openai project       | OPENAI_API_KEY=sk-proj-{A:74}T3BlbkFJ{A:74}
+anthropic            | anthropic key sk-ant-api03-{W:93}AA set
+vault service token  | VAULT_TOKEN=hvs.{A:24}
+jwt                  | Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJ{A:40}.{W:43}
+splunk auth header   | curl -H "Authorization: Splunk {uuid}" https://splunk:8088/services/collector
+password kv          | {"user":"admin","password":"{A:16}"}
+
+# --- homelab formats added in #201 ---
+cloudflared token    | cloudflared tunnel run --token eyJhIjoi{B:180}
+tunnel token env     | TUNNEL_TOKEN=eyJhIjoi{B:180}==
+tunnel creds json    | {"AccountTag":"0123abcd","TunnelSecret":"{B:43}=","TunnelID":"tunnel-1"}
+tailscale auth key   | tailscale up --authkey=tskey-auth-k{A:11}CNTRL-{A:33}
+tailscale api key    | TS_API_KEY=tskey-api-k{A:11}CNTRL-{A:33}
+tailscale client     | oauth secret tskey-client-k{A:11}CNTRL-{A:33}
+github fine-grained  | export GH_TOKEN=github_pat_{A:22}_{A:59}
+aws secret env       | AWS_SECRET_ACCESS_KEY={A:40}
+aws secret ini       | aws_secret_access_key = {A:20}/{A:19}
+secret_key           | SECRET_KEY={A:50}
+private_key          | PRIVATE_KEY="{A:40}"
+credentials          | DB_CREDENTIALS={A:24}
+passphrase           | ssh-keygen passphrase: {A:20}
+postgres url         | DATABASE_URL=postgres://app:{A:20}@db.internal:5432/app
+mongo url            | connecting to mongodb+srv://svc:{A:16}@cluster0.example.net/db
+redis url            | redis://default:{A:24}@redis:6379/0
+http basic url       | GET https://admin:{A:14}@uptime.bmosan.com/api
+curl -u              | curl -u admin:{A:18} https://cribl:9000/api/v1/health
+proxmox token cli    | pvesh get /nodes --token root@pam!terraform={uuid}
+proxmox token header | Authorization: PVEAPIToken=root@pam!packer={uuid}
+vault batch token    | token hvb.{W:150}
+vault unseal         | Unseal Key 1: {B:44}
+vault recovery       | Recovery Key 3: {B:44}
+kubeconfig key data  | client-key-data: {PEMB64}{B:120}
+docker config auth   | {"auths":{"ghcr.io":{"auth":"{B:40}"}}}
+k8s secret yaml      | kind: Secret\nmetadata:\n  name: app\ndata:\n  apiPassword: {B:24}==
+pgp private key      | -----BEGIN PGP {PRIVATE} KEY BLOCK-----\n\n{B:64}\n{B:64}\n-----END PGP {PRIVATE} KEY BLOCK-----
+age key              | AGE-SECRET-KEY-1{E:58}
+slack webhook        | POST https://hooks.slack.com/services/T{U:8}/B{U:10}/{A:24}{A:24}
+discord webhook      | https://discord.com/api/webhooks/1234567/{W:68}
+teams webhook        | https://contoso.webhook.office.com/webhookb2/{uuid}@{uuid}/IncomingWebhook/{H:32}/{uuid}
+telegram bot         | TELEGRAM_BOT_TOKEN={N:10}:AA{W:33}
+
+# --- common providers (gitleaks parity) ---
+google api key       | key=AIza{W:35}
+azure storage        | DefaultEndpointsProtocol=https;AccountName=st1;AccountKey={B:86}==;EndpointSuffix=core.windows.net
+azure sas            | https://st1.blob.core.windows.net/c/f?sv=2022-11-02&se=2026-12-01&sp=r&sig={B:43}%3D
+azure ad secret      | client_secret {A:3}8Q~{A:34}
+stripe live          | stripe sk_live_{A:24}
+stripe restricted    | rk_live_{A:24}
+sendgrid             | SENDGRID SG.{W:22}.{W:43}
+twilio               | twilio SK{H:32}
+mailgun              | MAILGUN_KEY=key-{H:32}
+npm                  | //registry.npmjs.org/:_authToken=npm_{L:36}
+pypi                 | password = pypi-AgEIcHlwaS5vcmc{W:70}
+docker hub pat       | docker login -u bmo -p dckr_pat_{W:27}
+hugging face         | HF_TOKEN=hf_{a:34}
+groq                 | GROQ_API_KEY=gsk_{A:52}
+perplexity           | pplx-{A:48}
+gitlab pat           | glpat-{W:20}
+grafana sa           | glsa_{A:32}_{H:8}
+grafana cloud        | glc_{B:60}
+digitalocean         | dop_v1_{H:64}
+terraform cloud      | TFE_TOKEN={L:14}.atlasv1.{W:67}
+sentry user          | sntryu_{H:64}
+shopify              | shpat_{H:32}
+linear               | lin_api_{L:40}
+postman              | PMAK-{H:24}-{H:34}
+new relic            | NEW_RELIC_API_KEY=NRAK-{U:27}
+atlassian            | ATATT3{W:186}
+1password sa         | OP_SERVICE_ACCOUNT_TOKEN=ops_eyJ{B:260}
+doppler              | dp.pt.{L:43}
+gcp oauth access     | access token ya29.{W:120}
+gcp oauth header     | Authorization: Bearer ya29.{W:120}
+signed s3 url        | https://b.s3.amazonaws.com/k?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature={H:64}

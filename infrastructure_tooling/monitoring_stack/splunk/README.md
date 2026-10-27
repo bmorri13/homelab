@@ -93,7 +93,37 @@ Dropped before indexing:
 - debug-level lines and debug-severity syslog
 - Cribl's own info-level logs
 
-Cribl runs distributed: a Leader container (`cribl`) and one Worker container (`cribl-worker`) in the `default` Worker Group, on the free license. Distributed mode is only needed for Cribl's MCP server, which exists on a Leader and not on a single instance. The Worker runs 2 worker processes (`cribl/local/cribl/cribl.yml`). The default of one per CPU minus two did not fit the 2 GiB container limit and was OOM-killed. The Leader needs about 2.1 GiB and has a 3 GiB limit. The `splunk_out` pipeline runs on everything sent to Splunk and redacts private keys, AWS/GitHub/Slack/Vault/API keys, JWTs, `Authorization:` headers, and `password=`/`token=`-style values.
+Cribl runs distributed: a Leader container (`cribl`) and one Worker container (`cribl-worker`) in the `default` Worker Group, on the free license. Distributed mode is only needed for Cribl's MCP server, which exists on a Leader and not on a single instance. The Worker runs 2 worker processes (`cribl/local/cribl/cribl.yml`). The default of one per CPU minus two did not fit the 2 GiB container limit and was OOM-killed. The Leader needs about 2.1 GiB and has a 3 GiB limit. The `splunk_out` pipeline runs on everything sent to Splunk and redacts credentials before they are stored; see [Secret masking](#secret-masking).
+
+### Secret masking
+
+`splunk_out` masks `_raw` in two stages:
+
+1. **Its own rules**, for formats that matter here and that gitleaks has no rule for:
+   - Tailscale keys and Cloudflare tunnel tokens (base64 JSON);
+   - Vault tokens and unseal/recovery keys, and Proxmox API tokens;
+   - base64-wrapped private keys (kubeconfig `client-key-data`; certificates are left alone);
+   - passwords in URLs (`postgres://user:pass@…`) and signed-URL signatures;
+   - Docker Hub and Google OAuth tokens;
+   - `Authorization:` headers and key/value pairs whose name says secret (`password`, `secret_access_key`, `PRIVATE_KEY`, `"auth"` …).
+2. **gitleaks' default rules.** `splunk_out` chains to the `secret_mask` pipeline, which `scripts/gen-secret-mask.py` generates from gitleaks' 221 regex rules (MIT, version pinned in the script). Each rule is one Mask function whose filter is the rule's keyword list, so most events skip its regex. gitleaks' entropy thresholds and allowlists are kept.
+   - Do not edit `secret_mask/conf.yml` by hand: change the version in the script and rerun it.
+   - To make a rule case-insensitive, the script removes inline flags, which Cribl regexes don't support. A rule may therefore mask slightly more than gitleaks would report.
+
+Masked values become `[REDACTED]` or `[REDACTED <rule>]`. Indexed fields are not masked.
+
+The `85_secret_leaks` app is the backstop. Its hourly alert, *Secret leak - unmasked credential in indexed events*, looks for high-confidence credential formats that still reached Splunk unmasked. It reports the format, index, sourcetype and host, never the value, and appears under Triggered Alerts. If it fires:
+1. Rotate the credential.
+2. Add a Cribl rule and a must-mask case.
+3. Remove the events with `| delete`, which needs the `can_delete` role.
+
+`scripts/cribl-test-mask.py`, run on this VM from the stack directory, tests the masking with Cribl's own preview:
+- **`cribl/tests/secret-mask/must-mask.txt`:** 75 formats, each of which must be masked.
+- **`cribl/tests/secret-mask/must-keep.txt`:** ordinary log lines, which must pass through unchanged.
+
+The test files are templates: the fake values are generated at run time, so no token-shaped string is committed. Other options:
+- `--live` tests the deployed pipelines instead of the repo copy.
+- `--events file.jsonl` reports how many real events the rules would change, by rule name only, never printing values. Use it to check for false positives before deploying.
 
 Cribl's OpenTelemetry (OTLP) input is not used. In testing (Cribl 4.20.3) it accepted data with a missing or wrong token, so collectors send over HEC, which does enforce its token.
 
@@ -130,7 +160,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 | Prefix | Use | Examples |
 |---|---|---|
 | `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
-| `85_` | Props and transforms for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit`, `85_bmosan_news`, `85_linux_auth` |
+| `85_` | Props, transforms and searches for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit`, `85_bmosan_news`, `85_linux_auth`, `85_secret_leaks` |
 | none | Splunkbase apps, kept under their original names. Installed by hand, not stored in this repo (see [Splunkbase apps](#splunkbase-apps)) | `Splunk_SA_CIM`, `ocsf_cim_addon_for_splunk`, `Splunk_TA_nix` |
 
 In global context (index-time props, indexes, inputs, server settings) Splunk merges app directories in ASCII order and the earlier name wins: digits before uppercase before lowercase. So `00_` base config overrides anything a Splunkbase app ships, and `85_` props override a Splunkbase add-on's props for the same sourcetype. To change a Splunkbase app's behaviour, override it from a prefixed app rather than editing the vendor files, so upgrades stay a straight replace.
@@ -146,6 +176,7 @@ Current base apps:
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
 - `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
 - `85_linux_auth`: adds to the Unix and Linux add-on's `linux_secure` parsing: Tailscale SSH logins (`tailscaled` "audit: SSH login", how the Ubuntu VMs are reached), Proxmox web UI and API logins (`pvedaemon`/`pveproxy`), sudo sessions in the Ubuntu 24.04 log format, and the sudo command line. Each Tailscale SSH session's command (or login shell) is mapped to CIM Endpoint Processes, with `parent_process_name=tailscaled`, the local `user`, the tailnet identity `ts_user` and `src`.
+- `85_secret_leaks`: the hourly backstop alert for credentials that got past Cribl's masking (see [Secret masking](#secret-masking)).
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 

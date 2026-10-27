@@ -1,0 +1,7 @@
+# gitleaks config for this repo: the default rules plus a path allowlist.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Cribl secret_mask pipeline: generated from gitleaks' own rule patterns, which can match themselves"
+paths = ['''infrastructure_tooling/monitoring_stack/splunk/cribl/local/cribl/pipelines/secret_mask/conf\.yml''']
