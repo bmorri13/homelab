@@ -87,7 +87,7 @@ mcpServers:
       - cidr: 192.168.1.1/32
         ports: [443]
     spec:
-      # Newest published image (0.39.0 is on PyPI only). Runs as root by
+      # Pinned by digest. Runs as root by
       # default (no USER in its Dockerfile); forced non-root below.
       image: ghcr.io/sirkirby/unifi-network-mcp:0.40.0@sha256:e1830abb0ddc7a51f2dfd07ccb19ef61d361460e3225bc51baf796cfb8ac71ed
       # stdio: the server never opens an HTTP listener (avoids the upstream
