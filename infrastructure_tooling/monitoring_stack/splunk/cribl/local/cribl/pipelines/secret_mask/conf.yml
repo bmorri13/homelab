@@ -1306,7 +1306,7 @@
     "rules": [
      {
       "matchRegex": "/\\b(AIza[\\w-]{35})(?:[\\x60'\"\\s;]|\\\\[nr]|$)/g",
-      "replaceExpr": "(C.Text.entropy((g1||g0)) < 4 || /AIzaSyabcdefghijklmnopqrstuvwxyz1234567/.test((g1||g0)) || /AIzaSyAnLA7NfeLquW1tJFpx_eQCxoX-oo6YyIs/.test((g1||g0)) || /AIzaSyCkEhVjf3pduRDt6d1yKOMitrUEke8agEM/.test((g1||g0)) || /AIzaSyDMAScliyLx7F0NPDEJi1QmyCgHIAODrlU/.test((g1||g0)) || /AIzaSyD3asb-2pEZVqMkmL6M9N6nHZRR_znhrh0/.test((g1||g0)) || /AIzayDNSXIbFmlXbIE6mCzDLQAqITYefhixbX4A/.test((g1||g0)) || /AIzaSyAdOS2zB6NCsk1pCdZ4-P6GBdi_UUPwX7c/.test((g1||g0)) || /AIzaSyASWm6HmTMdYWpgMnjRBjxcQ9CKctWmLd4/.test((g1||g0)) || /AIzaSyANUvH9H9BsUccjsu2pCmEkOPjjaXeDQgY/.test((g1||g0)) || /AIzaSyA5_iVawFQ8ABuTZNUdcwERLJv_a_p4wtM/.test((g1||g0)) || /AIzaSyA4UrcGxgwQFTfaI3no3t7Lt1sjmdnP5sQ/.test((g1||g0)) || /AIzaSyDSb51JiIcB6OJpwwMicseKRhhrOq1cS7g/.test((g1||g0)) || /AIzaSyBF2RrAIm4a0mO64EShQfqfd2AFnzAvvuU/.test((g1||g0)) || /AIzaSyBcE-OOIbhjyR83gm4r2MFCu4MJmprNXsw/.test((g1||g0)) || /AIzaSyB8qGxt4ec15vitgn44duC5ucxaOi4FmqE/.test((g1||g0)) || /AIzaSyA8vmApnrHNFE0bApF4hoZ11srVL_n0nvY/.test((g1||g0))) ? g0 : (g1||g0) ? g0.replace((g1||g0), \"[REDACTED gcp-api-key]\") : \"[REDACTED gcp-api-key]\""
+      "replaceExpr": "(C.Text.entropy((g1||g0)) < 4) ? g0 : (g1||g0) ? g0.replace((g1||g0), \"[REDACTED gcp-api-key]\") : \"[REDACTED gcp-api-key]\""
      }
     ]
    },

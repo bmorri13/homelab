@@ -12,8 +12,9 @@ and allowlist regexes and stopwords are applied in the replace expression.
 Differences from gitleaks, all of which mask more rather than less:
   - Cribl regexes have no inline modifiers, so (?i:...) and (?-i:...) groups
     become plain groups and the whole rule is case-insensitive if any part was.
-  - The global allowlist, path-only rules and allowlists that test the whole
-    line or a file path are skipped.
+  - The global allowlist, path-only rules, allowlists that test the whole
+    line or a file path, and allowlist entries that are themselves literal
+    example keys are skipped.
 gitleaks is MIT licensed (https://github.com/gitleaks/gitleaks).
 """
 import json
@@ -21,6 +22,7 @@ import re
 import sys
 import tomllib
 import urllib.request
+import warnings
 from pathlib import Path
 
 GITLEAKS_VERSION = "8.30.1"
@@ -103,6 +105,12 @@ def rule_to_function(rule):
     else:
         secret = "g0"
 
+    try:
+        with warnings.catch_warnings():  # RE2 class syntax Python warns about
+            warnings.simplefilter("ignore", FutureWarning)
+            own = re.compile(rule["regex"].replace("(?-i:", "(?:").replace(r"\z", r"\Z"))
+    except re.error:
+        own = re.compile(r"(?!)")
     keep = []  # conditions under which gitleaks would not report the match
     if rule.get("entropy"):
         keep.append(f"C.Text.entropy({secret}) < {rule['entropy']}")
@@ -111,6 +119,10 @@ def rule_to_function(rule):
             continue  # needs the file path or whole line, which a log event lacks
         target = "g0" if allow.get("regexTarget") == "match" else secret
         for r in allow.get("regexes", []):
+            if own.search(r):
+                # A literal example key (gcp-api-key lists Firebase SDK keys): skip it,
+                # so the repo holds no key-shaped strings for secret scanning to flag.
+                continue
             p, f = to_js(r)
             keep.append(f"/{p}/{f.replace('g', '')}.test({target})")
         if allow.get("stopwords"):
