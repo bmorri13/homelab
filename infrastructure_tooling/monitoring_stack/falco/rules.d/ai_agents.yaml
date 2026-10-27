@@ -1,0 +1,169 @@
+# Detections for processes run by AI agents (issue #176). An agent can leave
+# something out of its own logs, but not out of the kernel's view. Every rule
+# is tagged ai_agent and reaches index=security as an OCSF Detection Finding
+# like any other Falco alert.
+#
+# An "agent process" is anything with an agent among its ancestors, so the
+# commands an agent runs (bash -c ..., git, curl) are covered as well as the
+# agent itself. Falco matches process names (comm, at most 15 characters).
+# Agents seen in the homelab: Hermes and OpenClaw on openclaw-claude-01;
+# Claude Code, Codex and OpenCode on coding-box.
+
+- list: ai_agent_procs
+  items: [claude, codex, opencode, openclaw, openclaw-gatewa, hermes]
+
+- macro: ai_agent_proc
+  condition: (proc.name in (ai_agent_procs) or proc.aname in (ai_agent_procs))
+
+# Credentials an agent has no reason to open: SSH private keys, cloud and
+# cluster credentials, other tools' tokens, private key files.
+# Exempt: each tool reading its own credentials (ssh/git the SSH keys, as git
+# over SSH is how agents push; kubectl the kubeconfig; gh its token, ...), each
+# agent its own auth file, and CA bundles shipped with Python or Node packages.
+- macro: ai_agent_secret_file
+  condition: >-
+    ((fd.name contains "/.ssh/" and not fd.name endswith ".pub" and
+      not fd.name endswith "/known_hosts" and not fd.name endswith "/config") or
+     fd.name endswith "/.aws/credentials" or
+     fd.name endswith "/.config/gh/hosts.yml" or
+     fd.name endswith "/.kube/config" or
+     fd.name endswith "/.docker/config.json" or
+     fd.name endswith "/.netrc" or
+     fd.name endswith "/.git-credentials" or
+     fd.name endswith "/.claude/.credentials.json" or
+     fd.name endswith "/.codex/auth.json" or
+     fd.name endswith ".pem" or fd.name endswith ".key" or
+     fd.name = /etc/shadow)
+
+- rule: AI agent read credential file
+  desc: >-
+    A process run by an AI agent opened a credential file outside the tool that
+    normally uses it.
+  condition: >-
+    open_read and ai_agent_proc and ai_agent_secret_file and
+    not (proc.name in (ssh, git, git-remote-http) and fd.name contains "/.ssh/") and
+    not (proc.name in (kubectl, helm, k9s) and fd.name endswith "/.kube/config") and
+    not (proc.name = gh and fd.name endswith "/.config/gh/hosts.yml") and
+    not (proc.name in (docker, docker-credent) and fd.name endswith "/.docker/config.json") and
+    not (proc.name = aws and fd.name endswith "/.aws/credentials") and
+    not (proc.name startswith git-credential and fd.name endswith "/.git-credentials") and
+    not (proc.name = claude and fd.name endswith "/.claude/.credentials.json") and
+    not (proc.name = codex and fd.name endswith "/.codex/auth.json") and
+    not ((fd.name endswith ".pem" or fd.name endswith ".key") and
+      (fd.name startswith /etc/ssl/ or fd.name startswith /etc/pki/ or
+       fd.name startswith /usr/ or fd.name contains "/site-packages/" or
+       fd.name contains "/node_modules/" or fd.name contains "/.local/share/uv/"))
+  output: >-
+    AI agent process read a credential file | file=%fd.name process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_credential_access, T1552]
+
+# Dumping a .env file prints every secret in it into the agent's context and
+# transcript. Code that loads .env (dotenv in a dev server the agent starts) is
+# normal and not matched: only tools that print or search file contents are.
+- rule: AI agent printed a .env file
+  desc: An AI agent ran a tool that prints or searches a .env file.
+  condition: >-
+    open_read and ai_agent_proc and
+    proc.name in (cat, less, more, head, tail, grep, rg, strings, base64, xxd, od, bat) and
+    (fd.name endswith "/.env" or fd.name contains "/.env.")
+  output: >-
+    AI agent process printed a .env file | file=%fd.name process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_credential_access, T1552.001]
+
+# Agents run commands as `bash -c "<pipeline>"`, so a download piped into an
+# interpreter shows up whole in the shell's command line.
+- rule: AI agent piped a download into a shell
+  desc: An AI agent ran curl or wget and piped the output into a shell or interpreter.
+  condition: >-
+    spawned_process and ai_agent_proc and proc.name in (bash, sh, dash, zsh) and
+    (proc.cmdline contains "curl " or proc.cmdline contains "wget ") and
+    (proc.cmdline contains "| sh" or proc.cmdline contains "|sh" or
+     proc.cmdline contains "| bash" or proc.cmdline contains "|bash" or
+     proc.cmdline contains "| sudo" or proc.cmdline contains "|sudo" or
+     proc.cmdline contains "| python" or proc.cmdline contains "|python")
+  output: >-
+    AI agent piped a download into a shell | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, process, mitre_execution, T1059.004]
+
+# Files that make something run later or grant access: shell startup files,
+# cron, systemd units, authorized_keys, sudoers.
+- macro: ai_agent_persistence_file
+  condition: >-
+    (fd.name endswith "/.bashrc" or fd.name endswith "/.bash_profile" or
+     fd.name endswith "/.profile" or fd.name endswith "/.zshrc" or
+     fd.name endswith "/.zprofile" or
+     fd.name endswith "/.ssh/authorized_keys" or
+     fd.name startswith /etc/cron or fd.name startswith /var/spool/cron/ or
+     fd.name startswith /etc/systemd/system/ or fd.name startswith /lib/systemd/system/ or
+     fd.name contains "/.config/systemd/user/" or
+     fd.name startswith /etc/sudoers or fd.name = /etc/profile or
+     fd.name startswith /etc/profile.d/)
+
+- rule: AI agent wrote a persistence file
+  desc: >-
+    An AI agent wrote a shell startup file, crontab, systemd unit,
+    authorized_keys or sudoers.
+  condition: open_write and ai_agent_proc and ai_agent_persistence_file
+  output: >-
+    AI agent process wrote a persistence file | file=%fd.name process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_persistence, T1546.004]
+
+# Model APIs, registries and git hosts are all HTTPS, SSH or DNS. Anything else
+# leaving the LAN is unusual for an agent. Falco sees addresses, not host names,
+# so this can't tell one HTTPS host from another.
+- rule: AI agent outbound connection on unusual port
+  desc: An AI agent connected to a public address on a port other than 22, 53, 80 or 443.
+  condition: >-
+    outbound and ai_agent_proc and
+    not fd.rport in (22, 53, 80, 443) and
+    not fd.rnet in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
+  output: >-
+    AI agent process connected out on an unusual port | connection=%fd.name
+    process=%proc.name command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, network, mitre_command_and_control, T1571]
+
+# Commands whose effects are hard to undo: force-pushing, applying or
+# destroying infrastructure, deleting cluster objects.
+- rule: AI agent ran a destructive command
+  desc: An AI agent ran git push --force, terraform apply/destroy, or kubectl delete.
+  condition: >-
+    spawned_process and ai_agent_proc and
+    ((proc.name = git and proc.args startswith "push" and
+      (proc.args contains "--force" or proc.args contains " -f")) or
+     (proc.name in (terraform, tofu) and
+      (proc.args startswith "apply" or proc.args startswith "destroy")) or
+     (proc.name = kubectl and proc.args startswith "delete"))
+  output: >-
+    AI agent ran a destructive command | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, process, mitre_impact, T1485]
+
+- rule: AI agent started a reverse shell
+  desc: An AI agent ran netcat or socat with a program attached, or used bash /dev/tcp.
+  condition: >-
+    spawned_process and ai_agent_proc and
+    ((proc.name in (nc, ncat, netcat, nc.traditional, nc.openbsd) and
+      (proc.args contains "-e" or proc.args contains "-c")) or
+     (proc.name = socat and (proc.args contains "exec:" or proc.args contains "EXEC:" or
+      proc.args contains "system:" or proc.args contains "SYSTEM:")) or
+     (proc.name in (bash, sh, dash, zsh) and
+      (proc.cmdline contains "/dev/tcp/" or proc.cmdline contains "/dev/udp/")))
+  output: >-
+    AI agent started a reverse shell | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: CRITICAL
+  tags: [ai_agent, host, container, process, network, mitre_execution, T1059]
