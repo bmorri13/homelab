@@ -16,3 +16,13 @@ ingress:
   tlsSecretName: stirling-pdf-bmosan-com
   # Upstream chart names its service <release>-stirling-pdf-chart.
   servicePort: 8080
+
+## Upstream chart values.
+stirling-pdf-chart:
+  envs:
+    # Stirling-PDF 3.x (chart 4.x) turns login on by default and seeds an admin
+    # with the published default credentials. Config lives on an emptyDir
+    # (/configs), so that default admin comes back on every restart. Keep the
+    # pre-3.x behaviour: no login, reachable only on the LAN via the ingress.
+    - name: SECURITY_ENABLELOGIN
+      value: "false"
