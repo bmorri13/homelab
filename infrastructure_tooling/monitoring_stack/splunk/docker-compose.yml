@@ -51,7 +51,7 @@ services:
   # default Worker Group) and serves the UI, API and MCP over HTTPS; the Worker
   # pulls the config from it and does all the data processing.
   cribl:
-    image: cribl/cribl:4.20.3@sha256:8c7ac510ef79c4c5952490efc709b6dcaa0aa1e528754a2edc3faebe4ec1145c
+    image: cribl/cribl:4.20.4@sha256:cb2b2e32933e492f439b5825b0c36f420df2fa986fe36d5f31fce6755190eb71
     container_name: cribl
     hostname: cribl-homelab
     restart: unless-stopped
@@ -92,7 +92,7 @@ services:
     logging: *logging
 
   cribl-worker:
-    image: cribl/cribl:4.20.3@sha256:8c7ac510ef79c4c5952490efc709b6dcaa0aa1e528754a2edc3faebe4ec1145c
+    image: cribl/cribl:4.20.4@sha256:cb2b2e32933e492f439b5825b0c36f420df2fa986fe36d5f31fce6755190eb71
     container_name: cribl-worker
     hostname: cribl-worker-homelab
     restart: unless-stopped
