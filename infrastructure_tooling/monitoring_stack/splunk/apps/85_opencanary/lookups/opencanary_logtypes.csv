@@ -1,0 +1,44 @@
+logtype,signature,service,category
+1000,Canary boot,opencanary,status
+1001,Canary message,opencanary,status
+1002,Canary debug,opencanary,status
+1003,Canary error,opencanary,status
+1004,Canary ping,opencanary,status
+1005,Canary config saved,opencanary,status
+2000,FTP login attempt,ftp,login
+2001,FTP authentication started,ftp,connection
+3000,HTTP GET,http,request
+3001,HTTP login attempt,http,login
+3002,HTTP unimplemented method,http,request
+3003,HTTP redirect,http,request
+4000,SSH new connection,ssh,connection
+4001,SSH client version sent,ssh,connection
+4002,SSH login attempt,ssh,login
+5000,SMB file open,smb,access
+5001,Port scan (SYN),portscan,scan
+5002,Port scan (nmap OS),portscan,scan
+5003,Port scan (nmap NULL),portscan,scan
+5004,Port scan (nmap XMAS),portscan,scan
+5005,Port scan (nmap FIN),portscan,scan
+6001,Telnet login attempt,telnet,login
+6002,Telnet connection,telnet,connection
+7001,HTTP proxy login attempt,httpproxy,login
+8001,MySQL login attempt,mysql,login
+9001,MSSQL login attempt (SQL auth),mssql,login
+9002,MSSQL login attempt (Windows auth),mssql,login
+9003,MySQL connection,mysql,connection
+10001,TFTP request,tftp,request
+11001,NTP monlist request,ntp,request
+12001,VNC login attempt,vnc,login
+13001,SNMP command,snmp,request
+14001,RDP connection,rdp,connection
+15001,SIP request,sip,request
+16001,Git clone request,git,request
+17001,Redis command,redis,request
+18001,TCP banner connection,tcpbanner,connection
+18002,TCP banner keep-alive connection,tcpbanner,connection
+18003,TCP banner keep-alive secret received,tcpbanner,request
+18004,TCP banner keep-alive data received,tcpbanner,request
+18005,TCP banner data received,tcpbanner,request
+19001,LLMNR query response,llmnr,request
+20001,MongoDB login attempt,mongodb,login
