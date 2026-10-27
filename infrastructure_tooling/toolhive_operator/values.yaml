@@ -1,6 +1,6 @@
 # values.yaml
 ## ToolHive operator on k3s-01. Upstream defaults are kept unless noted; see
-## charts/toolhive-operator-0.55.2.tgz for the full set.
+## charts/toolhive-operator-0.57.0.tgz for the full set.
 
 toolhive-operator:
   operator:

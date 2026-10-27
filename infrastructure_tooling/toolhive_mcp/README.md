@@ -43,8 +43,8 @@ Three ArgoCD Applications, one chart directory each (the repo's usual
 - `ingress/` — Traefik Ingress + tailnet-only Middleware
 - `security/` — client ServiceAccounts (namespace `toolhive-clients`) and NetworkPolicies
 
-Versions: ToolHive **v0.55.2** (operator, proxy runner and vMCP images; both
-charts 0.55.2). The chart tarballs are vendored under `charts/` and their
+Versions: ToolHive **v0.57.0** (operator, proxy runner and vMCP images; both
+charts 0.57.0). The chart tarballs are vendored under `charts/` and their
 `Chart.lock` digests match. Renovate is disabled for them (see Upgrading).
 
 ## Installation (from scratch)
@@ -463,7 +463,7 @@ stored in the cluster or in Git.
 ## Management UI options
 
 There is **no supported self-hosted web admin UI for open-source ToolHive on
-Kubernetes** (checked at v0.55.2):
+Kubernetes** (checked at v0.57.0):
 
 - `stacklok/toolhive-cloud-ui` is archived/retired. Not deployed.
 - **ToolHive Studio** is a desktop app for running servers locally. It can
@@ -564,7 +564,7 @@ Known limitations and residual risks:
   possible with the vMCP's embedded OAuth server (`authServerConfig`, OSS)
   plus an OAuth app; not set up.
 - **JWKS sidecar:** k3s serves `/openid/v1/jwks` only to authenticated
-  callers, and at v0.55.2 the vMCP can't send a token when fetching it (the
+  callers, and at v0.57.0 the vMCP can't send a token when fetching it (the
   `kubernetesServiceAccount` OIDC type's `useClusterAuth` only reaches
   MCPServer proxies). The vMCP pod therefore runs `kubectl proxy` on
   127.0.0.1, restricted to `GET /openid/v1/jwks`. That requires
