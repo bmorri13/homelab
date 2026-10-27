@@ -26,7 +26,7 @@ mcpServers:
     # Searches the ToolHive documentation. No credentials, no egress needed
     # (its vector DB is baked into the image), so it is a safe first backend.
     spec:
-      image: ghcr.io/stackloklabs/toolhive-doc-mcp:v0.0.21@sha256:4158e98cd76d58a068ab6cf0629e1261f05331cf61d51cafdaf20b59352ad9af
+      image: ghcr.io/stackloklabs/toolhive-doc-mcp:0.0.22@sha256:9d56bde409f030bdd5486d73b755cd7655f390b6bd9cf23df044cb4772471aca
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 8080
