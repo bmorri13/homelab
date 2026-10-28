@@ -4,5 +4,5 @@ description: ToolHive Kubernetes operator, namespace-scoped to toolhive-mcp. Mus
 version: 0.1.0
 dependencies:
   - name: toolhive-operator
-    version: "0.57.0"
+    version: "0.58.0"
     repository: oci://ghcr.io/stacklok/toolhive
