@@ -7,7 +7,7 @@ Cribl Stream pack that converts Falco JSON alerts into [OCSF](https://schema.ocs
 | `rule` | `finding_info.title`, `finding_info.analytic.name` (type Rule) |
 | `output` | `message`, `finding_info.desc` |
 | `priority` | `severity_id`: Emergency/Alert/Critical → Critical, Error → High, Warning → Medium, Notice → Low, Info/Debug → Informational |
-| `tags`: `T1555`, `T1059.004`, `mitre_execution`, ... | `finding_info.attacks[]` (technique uid, tactic uid and name, ATT&CK v15) |
+| `tags`: `T1555`, `T1059.004`, `mitre_execution`, ... | `finding_info.attacks[]` (technique uid, tactic uid and name, ATT&CK v20; Falco's pre-v19 ids such as T1562.001 and T1070.002 are mapped to their replacements T1685, T1685.006, and the Defense Evasion tactic to Stealth or Defense Impairment) |
 | other `tags` (container, filesystem, shell) | `finding_info.types` |
 | `proc.*`, `user.*` | `evidences[0].process` (with `file` and `parent_process`) |
 | `container.*` | `evidences[0].container` (image uid, name, labels) |

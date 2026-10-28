@@ -43,21 +43,33 @@ functions:
             const severity_id = SEV[String(d.priority || '').toLowerCase()] || 0;
             const t = Date.parse(d.time || '') || Math.round((__e._time || Date.now() / 1000) * 1000);
 
-            // MITRE ATT&CK from Falco tags: T#### technique ids and mitre_<tactic> tags.
+            // MITRE ATT&CK v20 from Falco tags: T#### technique ids and mitre_<tactic> tags.
+            // Falco's rules still use pre-v19 ids. v19 split Defense Evasion into Stealth
+            // (TA0005) and Defense Impairment (TA0112) and revoked these techniques; map
+            // them to their replacements (revoked-by relationships in ATT&CK v20 data).
+            const REVOKED = {
+              'T1562': 'T1685', 'T1562.001': 'T1685', 'T1562.012': 'T1685.004', 'T1070.002': 'T1685.006',
+              'T1562.004': 'T1686', 'T1562.013': 'T1686.002', 'T1562.003': 'T1690',
+            };
+            const IMPAIRMENT = ['TA0112', 'Defense Impairment'];
             const TACTICS = {
               mitre_reconnaissance: ['TA0043', 'Reconnaissance'], mitre_resource_development: ['TA0042', 'Resource Development'],
               mitre_initial_access: ['TA0001', 'Initial Access'], mitre_execution: ['TA0002', 'Execution'],
               mitre_persistence: ['TA0003', 'Persistence'], mitre_privilege_escalation: ['TA0004', 'Privilege Escalation'],
-              mitre_defense_evasion: ['TA0005', 'Defense Evasion'], mitre_credential_access: ['TA0006', 'Credential Access'],
+              mitre_defense_evasion: ['TA0005', 'Stealth'], mitre_credential_access: ['TA0006', 'Credential Access'],
               mitre_discovery: ['TA0007', 'Discovery'], mitre_lateral_movement: ['TA0008', 'Lateral Movement'],
               mitre_collection: ['TA0009', 'Collection'], mitre_command_and_control: ['TA0011', 'Command and Control'],
               mitre_exfiltration: ['TA0010', 'Exfiltration'], mitre_impact: ['TA0040', 'Impact'],
             };
             const tags = Array.isArray(d.tags) ? d.tags : [];
             const tactics = tags.filter((x) => TACTICS[x]).map((x) => ({ uid: TACTICS[x][0], name: TACTICS[x][1] }));
-            const techniques = tags.filter((x) => /^T\d{4}(\.\d{3})?$/.test(x));
-            const attacks = techniques.map((tid) => ({ technique: { uid: tid }, tactic: tactics.length ? tactics[0] : undefined, version: '15' }));
-            if (!techniques.length && tactics.length) tactics.forEach((ta) => attacks.push({ tactic: ta, version: '15' }));
+            const techniques = tags.filter((x) => /^T\d{4}(\.\d{3})?$/.test(x)).map((x) => REVOKED[x] || x);
+            const attacks = techniques.map((tid) => ({
+              technique: { uid: tid },
+              tactic: /^T(1685|1686|1690)/.test(tid) ? { uid: IMPAIRMENT[0], name: IMPAIRMENT[1] } : (tactics.length ? tactics[0] : undefined),
+              version: '20',
+            }));
+            if (!techniques.length && tactics.length) tactics.forEach((ta) => attacks.push({ tactic: ta, version: '20' }));
 
             const container = has(f['container.id']) && f['container.id'] !== 'host' ? {
               uid: f['container.id'],
