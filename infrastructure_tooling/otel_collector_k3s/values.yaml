@@ -1,4 +1,4 @@
-# Pod logs and Kubernetes events from k3s-01 -> Cribl HEC on security-tooling-01
+# Pod logs, Kubernetes events and Kubernetes metrics from k3s-01 -> Cribl HEC on security-tooling-01
 # (http://192.168.4.11:8088). Cribl picks the Splunk index from k8s.namespace.name
 # (cribl/local/cribl/pipelines/hec_in): k8s, apps, or audit. The Kubernetes API audit
 # log is tailed from the host and sent with index=audit already set. The HEC token comes
@@ -30,6 +30,13 @@ opentelemetry-collector:
     kubernetesEvents:
       enabled: true
       useK8sEventsReceiver: true
+    # Metrics presets: these add the kubeletstats and k8s_cluster receivers and their
+    # RBAC (nodes/stats; read on workloads). Their settings are overridden below.
+    kubeletMetrics:
+      enabled: true
+    clusterMetrics:
+      enabled: true
+      disableLeaderElection: true   # one node, one collector: nothing to elect
 
   extraEnvs:
     - name: CRIBL_HEC_TOKEN
@@ -100,6 +107,22 @@ opentelemetry-collector:
           - type: remove
             field: attributes.ts
             if: 'attributes.ts != nil'
+      # Kubelet usage metrics (OTel k8s.* names): node, pod and container CPU, memory
+      # working set against requests and limits, filesystem and network.
+      kubeletstats:
+        collection_interval: 60s
+        metric_groups: [node, pod, container, volume]
+        metrics:
+          k8s.container.cpu_limit_utilization: {enabled: true}
+          k8s.container.memory_limit_utilization: {enabled: true}
+          k8s.pod.cpu_limit_utilization: {enabled: true}
+          k8s.pod.memory_limit_utilization: {enabled: true}
+      # Cluster state, the kube-state-metrics equivalent: pod phase, container
+      # restarts and readiness, desired vs available replicas, node conditions.
+      k8s_cluster:
+        collection_interval: 60s
+        node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+        allocatable_types_to_report: [cpu, memory, pods]
     processors:
       memory_limiter:
         check_interval: 1s
@@ -107,6 +130,7 @@ opentelemetry-collector:
         spike_limit_percentage: 25
       batch:
         timeout: 5s
+      cumulativetodelta: {}      # counters as per-interval deltas, as on the host agents
       # Without this every k3s record reaches Splunk with host=unknown.
       resource/host:
         attributes:
@@ -140,6 +164,18 @@ opentelemetry-collector:
         retry_on_failure:
           enabled: true
           max_elapsed_time: 0
+      splunk_hec/metrics:
+        token: ${env:CRIBL_HEC_TOKEN}
+        endpoint: http://192.168.4.11:8088/services/collector
+        source: k3s-01
+        sourcetype: otel:metrics
+        index: metrics           # Cribl's hec_in sends these to the metric index
+        splunk_app_name: homelab-otel-k3s
+        sending_queue:
+          enabled: true
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
     service:
       extensions: [health_check]
       telemetry:
@@ -154,3 +190,7 @@ opentelemetry-collector:
           receivers: [filelog/k8s_audit]
           processors: [memory_limiter, resource/host, transform/k8s_audit, batch]
           exporters: [splunk_hec]
+        metrics:
+          receivers: [kubeletstats, k8s_cluster]
+          processors: [memory_limiter, resource/host, cumulativetodelta, batch]
+          exporters: [splunk_hec/metrics]

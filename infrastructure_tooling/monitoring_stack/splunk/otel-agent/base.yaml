@@ -1,4 +1,5 @@
-# OTel collector, base role: journald from this host -> Cribl HEC on security-tooling-01.
+# OTel collector, base role: journald and host metrics from this host -> Cribl HEC on
+# security-tooling-01.
 # Installed to /etc/otelcol-contrib/ by install.sh. CRIBL_HEC_TOKEN comes from
 # /etc/otelcol-contrib/hec.env (root only), never from this file.
 extensions:
@@ -11,6 +12,51 @@ receivers:
     start_at: end          # first run starts now, no history replay
     priority: info         # debug and below stay on the host
     storage: file_storage  # cursor survives restarts: no gaps, no duplicates
+  # Host metrics for the USE method (utilization, saturation, errors per resource),
+  # with OTel semantic-convention names (system.*). 60 s is plenty for dashboards and
+  # keeps volume small. Utilization gauges are switched on where the default is only
+  # a raw counter.
+  hostmetrics:
+    collection_interval: 60s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.time: {enabled: false}
+          system.cpu.utilization: {enabled: true}
+          system.cpu.logical.count: {enabled: true}
+      load: {}                       # saturation: run queue
+      memory:
+        metrics:
+          system.memory.utilization: {enabled: true}
+          system.memory.limit: {enabled: true}
+      paging:
+        metrics:
+          system.paging.utilization: {enabled: true}
+      disk:
+        # Physical disks only: loop devices, device-mapper and Proxmox ZFS zvols (one
+        # per VM disk) would multiply the series for nothing.
+        exclude:
+          devices: ['^loop\d+$', '^ram\d+$', '^dm-\d+$', '^zd\d+$', '^sr\d+$']
+          match_type: regexp
+      filesystem:
+        exclude_fs_types:
+          fs_types: [autofs, binfmt_misc, iso9660, udf, bpf, cgroup, cgroup2, configfs, debugfs, devpts, devtmpfs, efivarfs, fuse.lxcfs, fusectl, hugetlbfs, mqueue, nsfs, overlay, proc, pstore, ramfs, rpc_pipefs, securityfs, squashfs, sysfs, tmpfs, tracefs]
+          match_type: strict
+        exclude_mount_points:
+          mount_points: ['^/var/lib/(docker|kubelet|containerd)/.*', '^/run/.*', '^/snap/.*', '^/boot/efi$']
+          match_type: regexp
+        metrics:
+          system.filesystem.utilization: {enabled: true}
+      network:
+        # Real interfaces and bridges only, not per-container veths or the per-VM tap
+        # and firewall-bridge devices on Proxmox (VM traffic comes from Proxmox itself).
+        exclude:
+          interfaces: ['^lo$', '^veth.*', '^br-.*', '^docker\d+$', '^cni\d+$', '^flannel.*', '^kube-.*', '^tap.*', '^fwbr.*', '^fwpr.*', '^fwln.*', '^tailscale\d+$']
+          match_type: regexp
+      processes: {}                  # running/blocked counts, forks
+      system:
+        metrics:
+          system.uptime: {enabled: true}
 
 processors:
   memory_limiter:
@@ -33,6 +79,9 @@ processors:
           - set(body, body["MESSAGE"]) where body["MESSAGE"] != nil
   batch:
     timeout: 5s
+  # Counters (bytes, operations, packets) leave as per-interval deltas, so in Splunk
+  # sum() over a span is the amount in that span and no rate maths is needed.
+  cumulativetodelta: {}
 
 exporters:
   splunk_hec/journald:
@@ -48,9 +97,27 @@ exporters:
       enabled: true
       max_elapsed_time: 0    # keep retrying; the disk queue bounds it
 
+  splunk_hec/metrics:
+    token: ${env:CRIBL_HEC_TOKEN}
+    endpoint: http://192.168.4.11:8088/services/collector
+    source: otel
+    sourcetype: otel:metrics
+    index: metrics           # Cribl's hec_in sends these to the metric index unchanged
+    splunk_app_name: homelab-otel-agent
+    sending_queue:
+      enabled: true
+      storage: file_storage
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0
+
 service:
   extensions: [file_storage]
   pipelines:
+    metrics/host:
+      receivers: [hostmetrics]
+      processors: [memory_limiter, resourcedetection, cumulativetodelta, batch]
+      exporters: [splunk_hec/metrics]
     logs/journald:
       receivers: [journald]
       processors: [memory_limiter, resourcedetection, transform/journald, batch]

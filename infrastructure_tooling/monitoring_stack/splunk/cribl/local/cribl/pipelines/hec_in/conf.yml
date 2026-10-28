@@ -1,5 +1,16 @@
 functions:
   - id: eval
+    filter: __criblMetrics || index == 'metrics'
+    conf:
+      add:
+        - name: index
+          value: "'metrics'"
+    final: true
+    description: >-
+      OTel collector metrics (HEC metric events) to the metric index. First and final:
+      the log rules below don't apply, and the last rule would move them to an event
+      index, where Splunk drops metric data.
+  - id: eval
     filter: >-
       __e['k8s.namespace.name'] == 'vault' && /^\{/.test(_raw) && /"type":"(request|response)"/.test(_raw) && /"request":\{/.test(_raw)
     conf:

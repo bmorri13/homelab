@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install or update the OTel collector on a Debian/Ubuntu host (VMs, Proxmox nodes).
-#   install.sh base     journald only
-#   install.sh docker   journald + container logs
+#   install.sh base     journald + host metrics
+#   install.sh docker   base + container logs and metrics
+#   install.sh pve      base + Proxmox's own node, guest and storage metrics (Proxmox nodes)
 # Run as root from a copy of this directory. On first install the Cribl HEC token is
 # read from stdin (one line, CRIBL_HEC_TOKEN=<token>) and stored in
 # /etc/otelcol-contrib/hec.env, root-only. It is never passed as an argument.
@@ -10,8 +11,8 @@ set -euo pipefail
 
 VERSION=0.163.2
 SHA256=5a175c93c5a560368c1bdbf0ec25fdc06e7b7d852f424bf7dbc36da6fd495db7
-ROLE="${1:?usage: install.sh base|docker}"
-[[ "$ROLE" == base || "$ROLE" == docker ]] || { echo "role must be base or docker" >&2; exit 1; }
+ROLE="${1:?usage: install.sh base|docker|pve}"
+[[ "$ROLE" == base || "$ROLE" == docker || "$ROLE" == pve ]] || { echo "role must be base, docker or pve" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 cd "$(dirname "$0")"
 ETC=/etc/otelcol-contrib
@@ -36,11 +37,10 @@ chmod 600 "$ETC/hec.env"
 
 install -m 644 base.yaml "$ETC/base.yaml"
 opts="--config=$ETC/base.yaml"
-if [[ "$ROLE" == docker ]]; then
-    install -m 644 docker.yaml "$ETC/docker.yaml"
-    opts="$opts --config=$ETC/docker.yaml"
-else
-    rm -f "$ETC/docker.yaml"
+rm -f "$ETC/docker.yaml" "$ETC/pve.yaml"
+if [[ "$ROLE" != base ]]; then
+    install -m 644 "$ROLE.yaml" "$ETC/$ROLE.yaml"
+    opts="$opts --config=$ETC/$ROLE.yaml"
 fi
 printf '# Managed by otel-agent/install.sh (role: %s)\nOTELCOL_OPTIONS="%s"\n' "$ROLE" "$opts" > "$ETC/otelcol-contrib.conf"
 
