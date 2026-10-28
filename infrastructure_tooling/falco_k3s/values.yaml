@@ -150,12 +150,21 @@ falco-k8saudit:
   fullnameOverride: falco-k8saudit
   # k3s control-plane identities missing from the rules' allowed_k8s_users list
   # ("Disallowed K8s User" fired every minute for the embedded cloud controller).
+  # k3s's local-path provisioner runs a short-lived helper pod in kube-system for
+  # every volume it creates or deletes (18 alerts 2026-10-26/27). The audit policy
+  # logs pods at Metadata level, so the rule's image allow-list never matches; the
+  # exception is by identity instead. Any other user creating a kube-system pod
+  # still alerts.
   customRules:
     homelab_k8saudit.yaml: |-
       - list: allowed_k8s_users
         items: ["k3s-cloud-controller-manager", "system:k3s-supervisor", "system:k3s-controller"]
         override:
           items: append
+      - rule: Pod Created in Kube Namespace
+        condition: and not ka.user.name = "system:serviceaccount:kube-system:local-path-provisioner-service-account"
+        override:
+          condition: append
   driver:
     enabled: false
   collectors:
