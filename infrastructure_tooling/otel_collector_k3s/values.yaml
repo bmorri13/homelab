@@ -108,15 +108,14 @@ opentelemetry-collector:
             field: attributes.ts
             if: 'attributes.ts != nil'
       # Kubelet usage metrics (OTel k8s.* names): node, pod and container CPU, memory
-      # working set against requests and limits, filesystem and network.
+      # working set, filesystem and network, from the kubelet's stats summary.
+      # The *_limit_utilization metrics are left off: they make the receiver call the
+      # kubelet's /pods endpoint, which needs nodes/proxy, and nodes/proxy can be used
+      # to run commands in pods through the kubelet. Limits come from k8s_cluster
+      # (k8s.container.memory_limit) instead.
       kubeletstats:
         collection_interval: 60s
         metric_groups: [node, pod, container, volume]
-        metrics:
-          k8s.container.cpu_limit_utilization: {enabled: true}
-          k8s.container.memory_limit_utilization: {enabled: true}
-          k8s.pod.cpu_limit_utilization: {enabled: true}
-          k8s.pod.memory_limit_utilization: {enabled: true}
       # Cluster state, the kube-state-metrics equivalent: pod phase, container
       # restarts and readiness, desired vs available replicas, node conditions.
       k8s_cluster:

@@ -167,8 +167,11 @@ S["k8s_workloads"] = (
 )
 S["k8s_top_pods"] = (
     "| mstats latest(k8s.pod.cpu.usage) as cpu latest(k8s.pod.memory.working_set) as mem "
-    "latest(k8s.pod.memory_limit_utilization) as meml where index=metrics earliest=-10m by k8s.namespace.name k8s.pod.name "
-    f"| eval \"CPU (millicores)\"=round(cpu*1000), \"Memory MB\"=round(mem/{MIB}), \"% of memory limit\"=round(meml*100,1) "
+    "where index=metrics earliest=-10m by k8s.namespace.name k8s.pod.name "
+    "| join type=left k8s.namespace.name k8s.pod.name [| mstats latest(k8s.container.memory_limit) as lim "
+    "where index=metrics earliest=-10m by k8s.namespace.name k8s.pod.name k8s.container.name "
+    "| stats sum(lim) as lim by k8s.namespace.name k8s.pod.name] "
+    f"| eval \"CPU (millicores)\"=round(cpu*1000), \"Memory MB\"=round(mem/{MIB}), \"% of memory limit\"=if(lim>0, round(mem/lim*100,1), null()) "
     "| rename k8s.namespace.name as Namespace k8s.pod.name as Pod | sort - \"Memory MB\" | head 25 "
     "| table Namespace Pod \"CPU (millicores)\" \"Memory MB\" \"% of memory limit\""
 )
