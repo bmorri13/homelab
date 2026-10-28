@@ -40,7 +40,7 @@ inputs:
     streamtags: []
     maxBufferSize: 1000
     ipWhitelistRegex: /.*/
-    timestampTimezone: local
+    timestampTimezone: America/New_York  # the gateway sends local time without a zone
     singleMsgUdpPackets: false
     enableProxyHeader: false
     keepFieldsList: []
