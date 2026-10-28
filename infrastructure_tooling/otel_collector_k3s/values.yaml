@@ -14,7 +14,7 @@ opentelemetry-collector:
   mode: daemonset
   image:
     repository: otel/opentelemetry-collector-contrib   # splunk_hec exporter lives in contrib
-    tag: "0.163.2"
+    tag: "0.164.0"
   command:
     name: otelcol-contrib
 
