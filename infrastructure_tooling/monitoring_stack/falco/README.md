@@ -63,15 +63,16 @@ Detections for anything an AI agent runs, issue #176. A process counts as an age
 | AI agent printed a .env file | Warning | runs `cat`, `grep`, `head` and similar on a `.env` file. Code that loads `.env` is not matched |
 | AI agent piped a download into a shell | Warning | runs `curl`/`wget` piped into `sh`, `bash`, `sudo` or `python` |
 | AI agent wrote a persistence file | Warning | writes a shell startup file, crontab, systemd unit, `authorized_keys` or sudoers |
-| AI agent outbound connection on unusual port | Notice | connects to a public address on a port other than 22, 53, 80 or 443 |
+| AI agent outbound connection on unusual port | Notice | connects to a public address on a port other than 22, 53, 80 or 443. UDP to port 0 is excluded: that is getaddrinfo sorting candidate addresses, and nothing is sent |
 | AI agent ran a destructive command | Notice | runs `git push --force`, `terraform`/`tofu` apply or destroy, or `kubectl delete` |
 | AI agent started a reverse shell | Critical | runs `nc -e`/`-c`, `socat` with `exec:`/`system:`, or a shell using `/dev/tcp` |
 
-The rules are only on the VMs; no agents run on k3s. Agents on Falco hosts today: Hermes and OpenClaw on openclaw-claude-01. Claude Code and Codex run on coding-box, which has no Falco yet.
+The rules are only on the VMs; no agents run on k3s. Agents on Falco hosts today: Hermes and OpenClaw on openclaw-claude-01. coding-box, where Claude Code, Codex and OpenCode run, is deliberately not monitored.
+
+The Splunk alert *Falco - AI agent finding* (app `85_falco`) runs every 5 minutes, appears under Triggered Alerts, and is suppressed per host and rule for an hour.
 
 To test, copy `/bin/bash` to a file named `claude` and run harmless versions of the commands through it, for example `./claude -c 'cat ~/.aws/credentials; true'`. The `; true` matters: bash runs a single command with exec, which drops the `claude` ancestor.
 
 ## Next
 
-- **coding-box:** needs an Arch install path (no deb). Most agent work happens there.
 - **Optional plugins:** `github`.

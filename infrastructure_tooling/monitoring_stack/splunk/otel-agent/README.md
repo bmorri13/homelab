@@ -43,5 +43,5 @@ Behaviour notes:
 
 Not yet covered:
 
-- coding-box: Arch Linux, which needs the tarball rather than the `.deb`.
+- coding-box: excluded deliberately (the user's own agent workstation).
 - siem-agent-test-vm: excluded deliberately, because it is a fixed test environment.
