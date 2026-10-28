@@ -122,11 +122,15 @@
 # Model APIs, registries and git hosts are all HTTPS, SSH or DNS. Anything else
 # leaving the LAN is unusual for an agent. Falco sees addresses, not host names,
 # so this can't tell one HTTPS host from another.
+# UDP "connects" to port 0 are excluded: glibc's getaddrinfo makes one to each
+# candidate address to sort them (RFC 6724) and sends nothing. They were 40 of the
+# first 42 alerts (hermes, and npm run by hermes, on 2026-10-27).
 - rule: AI agent outbound connection on unusual port
   desc: An AI agent connected to a public address on a port other than 22, 53, 80 or 443.
   condition: >-
     outbound and ai_agent_proc and
     not fd.rport in (22, 53, 80, 443) and
+    not (fd.l4proto = udp and fd.rport = 0) and
     not fd.rnet in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16")
   output: >-
     AI agent process connected out on an unusual port | connection=%fd.name
