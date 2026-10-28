@@ -1,6 +1,7 @@
 {{- /*
-Client identities. One ServiceAccount per machine; nothing runs here. Tokens
-are minted out of band (see README) with audience {{ .Values.auth.audience }},
+Client identities. One ServiceAccount per machine (auth.clients) and per agent
+(auth.agents); nothing runs here. Tokens are minted out of band (see README)
+with audience {{ .Values.auth.audience }},
 which the Kubernetes API server itself rejects, so a leaked MCP token is not
 a cluster credential. These SAs are bound to no Roles.
 */}}
@@ -13,7 +14,7 @@ metadata:
     {{- include "toolhive-mcp.labels" . | nindent 4 }}
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/enforce-version: latest
-{{- range .Values.auth.clients }}
+{{- range concat .Values.auth.clients (keys .Values.auth.agents | sortAlpha) }}
 ---
 apiVersion: v1
 kind: ServiceAccount
