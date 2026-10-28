@@ -1,0 +1,39 @@
+# OTel collector, pve role (layered on base.yaml, Proxmox nodes only): receives
+# Proxmox's own metrics and forwards them to Cribl HEC.
+# Proxmox VE 9.2's built-in OpenTelemetry metric server (Datacenter -> Metric Server,
+# /etc/pve/status.cfg) is set to 127.0.0.1:4318 over http. The config is cluster-wide,
+# so every node's pvestatd pushes to its own local collector: node, per-guest (VM and
+# LXC: CPU, memory, disk and network I/O) and storage-pool metrics, about every 10 s.
+# The listener is bound to localhost, so nothing on the network can write to it.
+receivers:
+  otlp/pve:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+
+processors:
+  # Proxmox also emits each NIC and storage as its own metric name
+  # (proxmox_node_nics_tap100i0_netin, proxmox_node_storages_local_used). The same
+  # values arrive as proxmox_node_network_* and proxmox_node_storage_* with a
+  # device/storage dimension, so the per-name copies are dropped: one series name per
+  # VM interface would grow without bound. Per-device block statistics
+  # (proxmox_vm_blockstat_scsi0_*) go too: proxmox_vm_diskread/diskwrite carry the
+  # totals, and the host agent already covers the node's own disks.
+  filter/pve:
+    error_mode: ignore
+    metrics:
+      metric:
+        - IsMatch(name, "^proxmox_node_(nics|storages)_")
+        - IsMatch(name, "^proxmox_(vm|node)_blockstat_")
+  # pvestatd pushes every ~10 s; one point a minute is enough for the dashboards. It
+  # runs before cumulativetodelta because it only thins cumulative and gauge series.
+  interval/pve:
+    interval: 60s
+
+service:
+  pipelines:
+    metrics/pve:
+      receivers: [otlp/pve]
+      # resourcedetection sets host to the node that collected it, as for host metrics.
+      processors: [memory_limiter, resourcedetection, filter/pve, interval/pve, cumulativetodelta, batch]
+      exporters: [splunk_hec/metrics]

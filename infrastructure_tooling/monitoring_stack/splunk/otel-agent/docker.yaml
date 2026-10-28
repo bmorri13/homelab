@@ -1,4 +1,5 @@
-# OTel collector, docker role (layered on base.yaml): container logs -> Cribl HEC.
+# OTel collector, docker role (layered on base.yaml): container logs and container
+# metrics -> Cribl HEC.
 # One filelog receiver per running container, created from the Docker API, so each
 # record carries container.name, container.image.name and the compose service.
 # include_all_containers + "port == 0" is the documented way to get exactly one
@@ -30,6 +31,16 @@ receivers:
           compose.project: "`labels[\"com.docker.compose.project\"]`"
           compose.service: "`labels[\"com.docker.compose.service\"]`"
 
+  # Per-container CPU, memory (against its limit), network, block I/O and restarts,
+  # tagged container.name / container.image.name. Splunk and Cribl are included here:
+  # their resource use is worth watching even though their logs are excluded above.
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+    collection_interval: 60s
+    metrics:
+      container.restarts: {enabled: true}
+      container.uptime: {enabled: true}
+
 exporters:
   splunk_hec/docker:
     token: ${env:CRIBL_HEC_TOKEN}
@@ -52,3 +63,7 @@ service:
       receivers: [receiver_creator/docker]
       processors: [memory_limiter, resourcedetection, batch]
       exporters: [splunk_hec/docker]
+    metrics/docker:
+      receivers: [docker_stats]
+      processors: [memory_limiter, resourcedetection, cumulativetodelta, batch]
+      exporters: [splunk_hec/metrics]

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: otel-collector-k3s
-description: OpenTelemetry Collector DaemonSet on k3s-01 - pod logs and Kubernetes events to Cribl HEC
+description: OpenTelemetry Collector DaemonSet on k3s-01 - pod logs, Kubernetes events and metrics to Cribl HEC
 version: 0.1.0
 dependencies:
   - name: opentelemetry-collector
