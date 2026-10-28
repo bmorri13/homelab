@@ -37,6 +37,13 @@ ssh root@<host> /root/falco-install/install.sh
 - **`webserver.enabled: false`.** Its default `0.0.0.0:8765` collided with rea-bridge on security-tooling-01, and nothing polls it. Falco opens no ports on the VMs.
 - **`append_output` adds `proc.pid`, `proc.ppid` and `container.image.id`** to every syscall alert. OCSF requires process PIDs and an image ID, and Falco only emits them when a rule's output mentions them.
 
+## Splunk alerts (`splunk/apps/85_falco`)
+
+Both run every 5 minutes, appear under Triggered Alerts, and are suppressed per host and rule for an hour.
+
+- *Falco - AI agent finding*: any finding from the AI agent rules (below).
+- *Falco - runtime finding*: any other finding at Warning or above (OCSF severity medium, high or critical), from the VMs, k3s-01 and the k8saudit rules. Notice-level findings stay searchable in `index=security` without alerting.
+
 ## Tuning (`rules.d/homelab_exceptions.yaml`)
 
 Each exception is scoped to a known-good image, process or namespace. The rule still fires for everything else. Record the evidence for every new exception in the file.
@@ -50,6 +57,8 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 | Clear Log Activities | `dockerd` under `/var/lib/docker/`, `buildkitd` under `/var/lib/buildkit/` | Unpacking image layers truncates `var/log/dpkg.log` inside snapshots (DinD and image builds in arc-runners) |
 | Packet socket created in container | `dockerd` in the `docker.io/library/docker` image | The DinD sidecar in arc-runners sets up networking for each CI job's containers |
 | Contact K8S API Server From Container | Infrastructure namespaces: argocd, otel-collector, kube-system, external-secrets, cert-manager, arc-systems, toolhive-system, falco, vault; `kubectl proxy`, `thv-proxyrunner` and `vmcp` in toolhive-mcp; the runner hook `node /home/runner/k8s/index.js` in arc-runners | Controllers use the API by design. The kubectl MCP server's proxy reopens its pooled connection hourly, and Falco can't see the requests sent through it. ToolHive's proxy runner manages its MCP pod and vMCP discovers backends. ARC runners in Kubernetes mode run job steps as pods through the hook (1,858 alerts in two days) |
+
+The k8saudit rules (`falco-k8saudit` in `falco_k3s/values.yaml`) have their own exceptions: k3s's control-plane identities are allowed users, and *Pod Created in Kube Namespace* ignores the local-path provisioner's helper pods. The audit log records pods at Metadata level, so that rule's image allow-list can never match, and the exception is by service account.
 
 Application namespaces (apiary, alexprinter, stirling-pdf, uptime-kuma) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that is in the k3s API audit log (`index=audit sourcetype=kube:apiserver:audit`), with Falco's Kubernetes audit rules running on it (`falco-k8saudit`).
 

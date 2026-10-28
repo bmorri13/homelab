@@ -62,6 +62,8 @@ Routes match on the input.
 
 `syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
 
+Firewall blocks are only logged if UniFi is told to. The site has no custom firewall policies, only UniFi's built-in ones, and the Network API rejects changes to those (404), so their logging is switched on in the UniFi UI: the SIEM / activity logging settings for the syslog server, with the firewall default-policy category ticked. The pack already parses the gateway's kernel firewall lines.
+
 Falco alerts arriving through `hec_in` (journald identifier `falco`, or the `falco` namespace on k3s) are chained to the [`cc-falco-ocsf`](cribl/packs/cc-falco-ocsf) pack and sent to `security`; see [`../falco/`](../falco/README.md).
 
 Vault's audit log arrives through `hec_in` too. Vault writes it to stdout (a `file` audit device at path `stdout/`), so it shares the pod log with Vault's server log. `hec_in` recognises the audit entries, tags them `sourcetype=hashicorp_vault_audit_log` and sends them to `audit`, before any drop rule can see them. Vault HMACs tokens and secret values in the entries. To recreate the device after a Vault rebuild, run as a token with `sudo` on `sys/audit`:
@@ -177,7 +179,7 @@ Current base apps:
 - `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
 - `85_linux_auth`: adds to the Unix and Linux add-on's `linux_secure` parsing: Tailscale SSH logins (`tailscaled` "audit: SSH login", how the Ubuntu VMs are reached), Proxmox web UI and API logins (`pvedaemon`/`pveproxy`), sudo sessions in the Ubuntu 24.04 log format, and the sudo command line. Each Tailscale SSH session's command (or login shell) is mapped to CIM Endpoint Processes, with `parent_process_name=tailscaled`, the local `user`, the tailnet identity `ts_user` and `src`.
 - `85_secret_leaks`: the hourly backstop alert for credentials that got past Cribl's masking (see [Secret masking](#secret-masking)).
-- `85_falco`: an alert, run every 5 minutes, on any Falco finding from the AI agent rules (`falco/rules.d/ai_agents.yaml`).
+- `85_falco`: two alerts, run every 5 minutes: one on any Falco finding from the AI agent rules (`falco/rules.d/ai_agents.yaml`), one on every other Falco finding at Warning or above.
 - `85_opencanary`: the OpenCanary honeypot (`infrastructure_tooling/opencanary`) as CIM Intrusion Detection, and an alert, run every 5 minutes, on any connection to it.
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
