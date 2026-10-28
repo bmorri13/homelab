@@ -62,7 +62,9 @@ Routes match on the input.
 
 `syslog_network` (UniFi, port 5514) hands each event to the [`cc-unifi-ocsf`](cribl/packs/cc-unifi-ocsf/README.md) pack. The pack converts UniFi CEF and kernel firewall lines into OCSF 1.9.0 JSON with `sourcetype=ubiquiti:unifi:ocsf`. Authentication (3002) and Device Config State Change (5019) events go to `audit`; every other class goes to `network`.
 
-Firewall blocks are only logged if UniFi is told to. The site has no custom firewall policies, only UniFi's built-in ones, and the Network API rejects changes to those (404), so their logging is switched on in the UniFi UI: the SIEM / activity logging settings for the syslog server, with the firewall default-policy category ticked. The pack already parses the gateway's kernel firewall lines.
+Firewall blocks are only logged if UniFi is told to, in two places. CyberSecure → Traffic Logging → Activity Logging (SIEM Server) needs the **Gateway** and **Firewall Default Policy** contents ticked (on since 2026-10-28). That only forwards; each policy also needs its own logging flag. The site has only UniFi's built-in policies, and the Network API rejects changes to them (404), so per-policy logging is set in the UI. The pack already parses the gateway's kernel firewall lines.
+
+With Gateway ticked, the gateway's own system log (systemd, mcad, DPI, ulogd, about 6,500 lines a day) arrives too, as `sourcetype=syslog` with `host=Bmo-Adams-Point-Ter`. Those lines carry local time without a zone, so the `syslog_network` input sets `timestampTimezone: America/New_York`; with `local` (UTC in the container) they landed 4 hours early.
 
 Falco alerts arriving through `hec_in` (journald identifier `falco`, or the `falco` namespace on k3s) are chained to the [`cc-falco-ocsf`](cribl/packs/cc-falco-ocsf) pack and sent to `security`; see [`../falco/`](../falco/README.md).
 
