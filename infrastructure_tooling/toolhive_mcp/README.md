@@ -100,6 +100,24 @@ synced dotfile.
 - These tokens are useless against the Kubernetes API (wrong audience), and
   the ServiceAccounts have no RoleBindings.
 
+### Agents
+
+The security and operations agents on coding-box (`agent-sec`, `agent-ops`)
+are also ServiceAccounts in `toolhive-clients`, listed under `auth.agents` in
+`values.yaml` with an explicit tool list each. They get none of the client
+rules: an agent sees and can call only its own list (everything else is
+**403** and missing from `tools/list`), never a `writeTools` entry. Their
+Splunk tools come from a separate backend, `splunk-agent` (see
+[Splunk and Cribl](#splunk-and-cribl)), which only agents can use.
+
+```bash
+# Short-lived token for one agent run
+infrastructure_tooling/toolhive_mcp/mint-client-token.sh agent-sec 1h
+```
+
+Adding a tool for an agent means adding its aggregated name to that agent's
+list. Revoking works as for clients: remove the agent from `auth.agents`.
+
 ## Connecting coding agents
 
 All examples assume `TOOLHIVE_MCP_TOKEN` is set in the environment the agent
@@ -364,6 +382,18 @@ ssh root@security-tooling-01 /opt/splunk-stack/scripts/splunk-mcp-token.sh |
 Or paste a token into Apiary. Then delete the old token in Splunk under
 Settings > Tokens.
 
+**Splunk for agents** (`remoteServers.splunk-agent`) is the same app as the user
+`mcp-agent`, role `mcp_agent` (`00_homelab_roles`). That role imports no other
+role and switches off the write capabilities Splunk gives every role by default,
+so SPL that writes fails in Splunk itself: `collect`, `mcollect`, `outputlookup`,
+`outputcsv`, `sendalert` and `dump` were each tested and refused. It also caps
+the agents at 4 concurrent searches of at most 5 minutes, with no real-time
+searches. Cedar hides its tools (`splunk-agent_splunk_*`) from every caller
+except the agents in `auth.agents`. Vault: `kv/apiary/shared/splunk-agent`,
+field `token`. Rotate it as above, with
+`MCP_USER=mcp-agent MCP_ROLE=mcp_agent` in front of `splunk-mcp-token.sh`
+and `kv/apiary/shared/splunk-agent` as the Vault path.
+
 **Cribl** (`mcpServers.cribl`) is Cribl's MCP server on the Leader. It needs a
 session token that expires hourly, so the "server" is
 [`scripts/cribl_mcp_auth.py`](scripts/cribl_mcp_auth.py) on a stock Python
@@ -543,7 +573,9 @@ Layers, outermost first. Each one was tested against a live request:
 4. **Authorization (Cedar):** a valid-audience token for any ServiceAccount
    not in `auth.clients`, including a deleted client's, can complete
    `initialize` but gets an empty tool list and **403** on every call. Tools
-   not marked read-only or allowlisted → **403** for everyone.
+   not marked read-only or allowlisted → **403** for everyone. Agents
+   (`auth.agents`) get only their own tool list; clients get **403** on the
+   agents' `splunk-agent_*` tools.
 5. **Kubernetes:** the operator is namespace-scoped (its write access to
    Secrets/RBAC/Deployments is limited to `toolhive-mcp`); Pod Security
    `restricted` is enforced in `toolhive-system`, `toolhive-mcp` and
