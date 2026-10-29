@@ -33,6 +33,9 @@ jobs:
   validate:
     name: Validate Packer Template
     runs-on: arc-k3s-homelab
+    # Public repo: never run a pull request from a fork on the self-hosted runners
+    # (fork PRs get no secrets, but would still run their code inside the homelab).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     container:
       image: ubuntu:26.04
     environment: prod
@@ -332,6 +335,9 @@ jobs:
   validate-desktop:
     name: Validate Desktop Packer Template
     runs-on: arc-k3s-homelab
+    # Public repo: never run a pull request from a fork on the self-hosted runners
+    # (fork PRs get no secrets, but would still run their code inside the homelab).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     container:
       image: ubuntu:26.04
     environment: prod
