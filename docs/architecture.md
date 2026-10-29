@@ -8,44 +8,7 @@ Proxmox nodes and their VMs, the k3s-01 cluster, the logging and security box, t
 ## How it's deployed
 CI (GitHub-hosted, ARC and VM runners), Argo CD, and secrets from Vault through External Secrets. Splunk and Cribl on security-tooling-01 are deployed by hand, not by Argo CD.
 
-```mermaid
-flowchart LR
-    dev["Developer<br/>gitleaks before push"] -->|PR, merge to main| repo["GitHub<br/>bmorri13/homelab (public)<br/>Renovate PRs"]
-
-    subgraph ci["CI: GitHub Actions"]
-        img["homelab-agents-image<br/>GitHub-hosted runner<br/>Chainguard multi-stage build"]
-        packer["proxmox-packer-builder<br/>ARC runners on k3s-01<br/>weekly + on change"]
-        tf["terraform plan / apply<br/>VM runner (github-action-runner)"]
-    end
-
-    repo -->|image/**| img -->|push :main| ghcr[("GHCR (private)<br/>homelab-agents")]
-    repo -->|packer/**| packer --> pve["Proxmox<br/>VM templates"]
-    repo -->|terraform/**| tf --> vms["Proxmox VMs"]
-    tf -.->|state| consul[("Consul on Unraid")]
-
-    subgraph k3s["k3s-01 (GitOps)"]
-        argo["Argo CD<br/>~20 apps, auto-sync + prune"]
-        apps["Workloads"]
-        agents["Agent CronJobs<br/>pull :main every run"]
-        vault["Vault"]
-        eso["External Secrets"]
-        cm["cert-manager"]
-    end
-
-    repo -->|Argo CD polls main| argo --> apps
-    argo --> agents
-    ghcr -.->|pull| agents
-    vault --> eso -->|Kubernetes Secrets| apps
-    vault -.->|pod-token login| agents
-    cm -->|DNS-01| cf["Cloudflare DNS<br/>Let's Encrypt certs"]
-
-    subgraph st["security-tooling-01 (not GitOps)"]
-        splunk["Splunk apps<br/>scripts/deploy.sh"]
-        cribl["Cribl pipelines<br/>API sync scripts"]
-    end
-    repo -.->|deployed by hand| splunk
-    repo -.->|deployed by hand| cribl
-```
+![How it's deployed](images/deployment.drawio.svg)
 
 ## Data flow
 Every source sends to Cribl's one HEC input; Cribl masks secrets, normalizes and routes to the Splunk indexes, and Splunk turns the data into detections, alerts and dashboards. The agents triage what the detections and alerts find.
@@ -89,5 +52,5 @@ flowchart LR
 The run flow of the two triage agents and the watchdog that checks on them are in the [homelab agents README](../infrastructure_tooling/homelab_agents/README.md#how-a-run-works).
 
 ## Editing the diagrams
-- **Infrastructure** is a draw.io diagram saved as `images/infrastructure.drawio.svg`: the SVG GitHub shows also contains the editable diagram. Open it in [draw.io Desktop](https://www.drawio.com/) (`brew install --cask drawio`) or the VS Code *Draw.io Integration* extension, edit, and save it under the same name. When exporting from the desktop app, use the light theme (`drawio -x -f svg --embed-diagram --theme light --embed-svg-fonts false --border 12 -o docs/images/infrastructure.drawio.svg <file>`); the default adaptive theme turns the background dark in GitHub's dark mode. Icons are from [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons), embedded in the file.
-- **Deployment, data flow and the agents** are Mermaid, written in the Markdown. GitHub draws them; edit the text in the same PR as the change they describe.
+- **Infrastructure and deployment** are draw.io diagrams saved as `images/infrastructure.drawio.svg` and `images/deployment.drawio.svg`: the SVG GitHub shows also contains the editable diagram. Open it in [draw.io Desktop](https://www.drawio.com/) (`brew install --cask drawio`) or the VS Code *Draw.io Integration* extension, edit, and save it under the same name. When exporting from the desktop app, use the light theme (`drawio -x -f svg --embed-diagram --theme light --embed-svg-fonts false --border 12 -o docs/images/<name>.drawio.svg <file>`); the default adaptive theme turns the background dark in GitHub's dark mode. Icons are from [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons), embedded in the file.
+- **Data flow and the agents** are Mermaid, written in the Markdown. GitHub draws them; edit the text in the same PR as the change they describe.
