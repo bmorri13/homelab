@@ -1,6 +1,12 @@
 tailscale-operator:
   operatorConfig:
     hostname: "k8s-operator-docker-compose-03"
+  # Proxies (Ingress/LoadBalancer/egress) run Tailscale Serve; pin them to the
+  # client release with the Tailworm Serve fixes (TS-2026-016/017). No
+  # k8s-operator image exists past v1.104.2, so the operator follows the chart.
+  proxyConfig:
+    image:
+      tag: "v1.104.4"
   oauth:
     clientId: ""
     clientSecret: ""

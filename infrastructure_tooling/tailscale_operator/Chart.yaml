@@ -1,8 +1,8 @@
 apiVersion: v2
 name: tailscale-operator
 description: Tailscale Kubernetes Operator for homelab
-version: 0.1.0
+version: 0.2.0
 dependencies:
   - name: tailscale-operator
-    version: ">=1.78.0"
+    version: "1.104.2"
     repository: https://pkgs.tailscale.com/helmcharts
