@@ -1,0 +1,4 @@
+<nav search_view="search">
+  <view name="homelab_security" default="true" />
+  <view name="search" />
+</nav>
