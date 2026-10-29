@@ -624,11 +624,8 @@ auth:
         - cribl_cribl_getSources
         - cribl_cribl_getDestinations
         - cribl_cribl_getPipelines
-  # The runner that starts the agents (infrastructure_tooling/homelab_agents on
-  # coding-box). Its ServiceAccount may only mint tokens for the agents above and
-  # for itself (Vault login, audience "vault"); see templates/security/agent-runner.yaml.
-  # It is in no Cedar policy, so it can't use the gateway itself.
-  agentRunner: agent-runner
+  # The agents run as CronJobs in clientNamespace (infrastructure_tooling/homelab_agents)
+  # under these ServiceAccounts, with kubelet-projected tokens; nothing mints tokens for them.
 
 # ---------------------------------------------------------------------------
 # Authorization (Cedar, enforced by the vMCP on every list/call).
@@ -718,6 +715,10 @@ ingress:
 # ---------------------------------------------------------------------------
 networkPolicy:
   enabled: true
+  # Pods (in auth.clientNamespace) allowed to reach the vMCP Service directly: the
+  # homelab agents' CronJobs.
+  agentPods:
+    app.kubernetes.io/name: homelab-agents
   # The vMCP and proxy runners talk to the API server (JWKS, MCPGroup
   # discovery). After kube-proxy DNAT the ClusterIP 10.43.0.1:443 becomes the
   # node's own address on 6443, so that is what egress has to allow.

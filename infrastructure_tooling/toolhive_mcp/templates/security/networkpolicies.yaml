@@ -94,6 +94,34 @@ spec:
       ports:
         - {protocol: TCP, port: 4483}
 {{- end }}
+{{- with .Values.networkPolicy.agentPods }}
+---
+# The homelab agents (infrastructure_tooling/homelab_agents) run as CronJob pods in
+# the client namespace and call the vMCP Service directly (the public name is
+# tailnet-only). They still authenticate like every client; this only lets the
+# packets in.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agents
+  labels:
+    {{- include "toolhive-mcp.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: virtualmcpserver
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Values.auth.clientNamespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 4483}
+{{- end }}
 {{- range $name, $server := .Values.mcpServers }}
 {{- if and $server.enabled $server.egress }}
 ---

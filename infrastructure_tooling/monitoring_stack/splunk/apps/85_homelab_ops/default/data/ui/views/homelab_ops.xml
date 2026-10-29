@@ -403,7 +403,7 @@
     "viz_h_agents": {
       "type": "splunk.markdown",
       "options": {
-        "markdown": "## Agents (coding-box, last 24 h)",
+        "markdown": "## Agents (CronJobs on k3s-01, last 24 h)",
         "fontSize": "large"
       }
     },

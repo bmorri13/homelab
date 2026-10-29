@@ -1,11 +1,9 @@
-"""Clients for everything the runner talks to: the k3s API (token minting), Vault,
-the MCP gateway, Slack and Cribl HEC. Standard library only.
+"""Clients for everything the runner talks to: Vault, the MCP gateway, Slack and
+Cribl HEC. Standard library only.
 
 Every URL here is a fixed endpoint from config.py, never data from Splunk or the model.
 """
-import base64
 import json
-import ssl
 import urllib.error
 import urllib.request
 
@@ -17,7 +15,7 @@ class ClientError(Exception):
 
 
 def _http(method, url, body=None, headers=None, context=None, timeout=60, raw_body=None):
-    if not url.startswith(("https://", "http://192.168.4.11:")):
+    if not url.startswith(("https://", config.GATEWAY_URL, config.VAULT_ADDR + "/", config.HEC_URL)):
         raise ClientError(f"refusing URL scheme/host: {url[:40]}")
     data = raw_body if raw_body is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(url, data=data, method=method)
@@ -31,34 +29,20 @@ def _http(method, url, body=None, headers=None, context=None, timeout=60, raw_bo
         return e.code, dict(e.headers), e.read().decode(errors="replace")
 
 
-# ---- Kubernetes: mint short-lived ServiceAccount tokens ---------------------------------
-
-def mint_token(runner_token, service_account, audience, seconds):
-    """TokenRequest for a ServiceAccount in the client namespace. The runner's own
-    ServiceAccount may only do this for the agents and itself (Role agent-runner-mint)."""
-    ctx = ssl.create_default_context(cafile=config.K8S_CA)
-    url = f"{config.K8S_API}/api/v1/namespaces/{config.CLIENT_NAMESPACE}/serviceaccounts/{service_account}/token"
-    body = {"apiVersion": "authentication.k8s.io/v1", "kind": "TokenRequest",
-            "spec": {"audiences": [audience], "expirationSeconds": seconds}}
-    status, _, text = _http("POST", url, body, {"Authorization": f"Bearer {runner_token}"}, ctx)
-    if status != 201:
-        raise ClientError(f"token request for {service_account} failed: HTTP {status} {text[:200]}")
-    return json.loads(text)["status"]["token"]
-
-
-def jwt_expiry(token):
-    payload = token.split(".")[1]
-    payload += "=" * (-len(payload) % 4)
-    return json.loads(base64.urlsafe_b64decode(payload))["exp"]
+def read_token(path):
+    """A projected ServiceAccount token (the kubelet keeps the file fresh)."""
+    with open(path) as f:
+        return f.read().strip()
 
 
 # ---- Vault --------------------------------------------------------------------------------
 
 class Vault:
-    """Kubernetes-auth login as the runner (audience "vault"), read-only KV access."""
+    """Kubernetes-auth login with the pod's projected token (audience "vault"),
+    read-only KV access (role homelab-agents)."""
 
-    def __init__(self, runner_token):
-        jwt = mint_token(runner_token, config.RUNNER_SA, "vault", 600)
+    def __init__(self):
+        jwt = read_token(config.VAULT_TOKEN_FILE)
         status, _, text = _http("POST", f"{config.VAULT_ADDR}/v1/auth/kubernetes/login",
                                 {"role": config.VAULT_ROLE, "jwt": jwt})
         if status != 200:

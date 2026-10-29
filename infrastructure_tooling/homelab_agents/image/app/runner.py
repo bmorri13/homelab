@@ -3,10 +3,12 @@
 
     runner.py sec|ops [--dry-run] [--local-login] [--limit N]
 
-Each run: mint a fresh 1-hour gateway token for the agent's ServiceAccount, collect
-the agent's queue (queues.py) through the gateway, drop what was already reported
-(state.py), have Claude triage each new item with read-only gateway tools only, then
-post one Slack message and send the run log to Splunk (index=ai_agents).
+Runs as a Kubernetes CronJob pod under the agent's own ServiceAccount (agent-sec or
+agent-ops). Each run: read the pod's projected tokens (gateway, Vault), collect the
+agent's queue (queues.py) through the gateway, drop what was already reported
+(state.py), have Claude triage each new item with read-only gateway tools and the
+Splunk agent skills, then post to Slack and send the run log to Splunk
+(index=ai_agents).
 
 The model never decides what gets reported: every new item is posted, with the
 runner's own facts first and the agent's triage after them.
@@ -66,13 +68,6 @@ def read(path):
         return f.read()
 
 
-def runner_token():
-    cred_dir = os.environ.get("CREDENTIALS_DIRECTORY")
-    path = os.path.join(cred_dir, "runner.token") if cred_dir else "/etc/homelab-agents/runner.token"
-    with open(path) as f:
-        return f.read().strip()
-
-
 async def triage(agent, item, gateway_token, claude_env):
     runbook_path = os.path.join("runbooks", item["runbook"])
     runbook = read(runbook_path) if os.path.exists(os.path.join(config.APP_DIR, runbook_path)) else ""
@@ -89,13 +84,17 @@ async def triage(agent, item, gateway_token, claude_env):
         mcp_servers={"homelab": {"type": "http", "url": config.GATEWAY_URL,
                                  "headers": {"Authorization": f"Bearer {gateway_token}"}}},
         strict_mcp_config=True,
-        tools=[],                          # no built-in tools: no shell, files or web
-        allowed_tools=["mcp__homelab__*"],  # the gateway decides which of these exist
-        permission_mode="dontAsk",          # anything not allowed above is denied, not asked
-        setting_sources=[],                 # ignore any user/project Claude settings
+        # Built-in tools: only Skill, Read and WebFetch. No shell, no writes.
+        tools=["Skill", "Read", "WebFetch"],
+        allowed_tools=["mcp__homelab__*", "Skill"]               # the gateway decides which MCP tools exist
+                      + [f"WebFetch(domain:{d})" for d in config.DOC_DOMAINS],
+        permission_mode="dontAsk",   # anything not allowed is denied, never asked; Read works only
+                                     # inside cwd, which holds nothing but the skills
+        setting_sources=["project"],  # loads <cwd>/.claude/skills; the image ships no settings or CLAUDE.md
+        skills=config.AGENTS[agent]["skills"],
         max_turns=config.MAX_TURNS,
         output_format={"type": "json_schema", "schema": schema(agent)},
-        cwd=config.STATE_DIR,
+        cwd=config.WORKSPACE,
         env=claude_env,
     )
     result = None
@@ -293,12 +292,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False):
     events, notes, hec_token, status = [], [], None, "ok"
     vault, webhook = None, None
     try:
-        rtoken = runner_token()
-        days_left = (clients.jwt_expiry(rtoken) - time.time()) / 86400
-        if days_left < config.WARN_TOKEN_DAYS:
-            notes.append(f"The runner's Kubernetes token expires in {days_left:.0f} days: re-run deploy.sh --mint-token.")
-
-        vault = clients.Vault(rtoken)
+        vault = clients.Vault()
         webhook = vault.kv(config.VAULT_SLACK).get("webhook_url")
         hec_token = vault.kv(config.VAULT_HEC).get("token")
         claude_env = {}
@@ -306,12 +300,11 @@ async def run(agent, dry_run, local_login, limit, collect_only=False):
             oauth = vault.kv(config.VAULT_AGENTS).get("claude_oauth_token")
             if not oauth:
                 raise RuntimeError("no claude_oauth_token in Vault kv/homelab-agents")
-            claude_env = {"CLAUDE_CODE_OAUTH_TOKEN": oauth, "CLAUDE_CONFIG_DIR": os.path.join(config.STATE_DIR, "claude")}
+            claude_env = {"CLAUDE_CODE_OAUTH_TOKEN": oauth}
         vault.close()
         vault = None
 
-        gtoken = clients.mint_token(rtoken, config.AGENTS[agent]["service_account"],
-                                    config.GATEWAY_AUDIENCE, config.GATEWAY_TOKEN_SECONDS)
+        gtoken = clients.read_token(config.GATEWAY_TOKEN_FILE)
         items = queues.COLLECTORS[agent](clients.Gateway(gtoken))
         if collect_only:
             print(json.dumps(items, indent=2, default=str))

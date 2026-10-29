@@ -1,0 +1,7 @@
+# Build context is this directory; send only what the Dockerfile copies.
+*
+!Dockerfile
+!requirements.txt
+!select_skills.py
+!app/
+app/__pycache__

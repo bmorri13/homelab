@@ -60,7 +60,7 @@ S["alerts_fired"] = (
     "| table Alert App Severity Fired When"
 )
 
-# --- the security agent (homelab_agents on coding-box) --------------------------------
+# --- the security agent (homelab_agents, CronJobs on k3s-01) --------------------------------
 AGENT = "index=ai_agents sourcetype=homelab:agent agent=sec"
 AGENT_ITEMS = (f"{AGENT} kind=item | rename triage.verdict as verdict triage.confidence as confidence "
                "triage.headline as headline triage.summary as summary triage.severity as agent_severity")
@@ -272,7 +272,7 @@ place("viz_alerts", 0, 1200, 300)
 y += 300
 
 heading("viz_h_agent", "Security agent",
-        "The triage agent on coding-box (`homelab_agents`), every 30 minutes. Cost is the API-equivalent the SDK reports; "
+        "The triage agent (`homelab_agents`, a CronJob on k3s-01), every 30 minutes. Cost is the API-equivalent the SDK reports; "
         "on the subscription it counts against usage limits. If it stops running, the *Agents - not running or failing* alert posts to Slack.")
 agent_tiles = [
     ("viz_ag_t_runs", "ds_ag_t_runs", "Runs", None),

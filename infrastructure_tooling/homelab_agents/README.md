@@ -1,43 +1,63 @@
 # Homelab agents
 
-Two triage agents on coding-box, each run every 30 minutes by systemd:
+Two triage agents, run as Kubernetes CronJobs on k3s-01 every 30 minutes:
 
-| Agent | Timer | Looks at | Gateway identity |
+| Agent | CronJob (UTC) | Looks at | Gateway identity |
 |---|---|---|---|
-| Security (`sec`) | :00 and :30 | HL - detection findings (`index=security sourcetype=homelab:detection`) and the Falco, honeypot and secret-leak alerts that fired | `agent-sec`, 15 read-only tools |
-| Operations (`ops`) | :15 and :45 | Capacity (filesystems, Proxmox storage, CPU, memory), Kubernetes workloads, pods and restarts, Docker restarts, Splunk scheduler skips/failures, Argo CD app health and sync | `agent-ops`, 23 read-only tools |
+| Security (`sec`) | `homelab-agent-sec`, :00 and :30 | HL - detection findings (`index=security sourcetype=homelab:detection`) and the Falco, honeypot and secret-leak alerts that fired | `agent-sec`, 15 read-only tools |
+| Operations (`ops`) | `homelab-agent-ops`, :15 and :45 | Capacity (filesystems, Proxmox storage, CPU, memory), Kubernetes workloads, pods and restarts, Docker restarts, Splunk scheduler skips/failures, Argo CD app health and sync | `agent-ops`, 23 read-only tools |
 
-Results go to Slack as one message per run, and every run and item is logged to Splunk `index=ai_agents sourcetype=homelab:agent`.
+Results go to Slack as Block Kit cards, and every run and item is logged to Splunk `index=ai_agents sourcetype=homelab:agent`.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `image/` | The container: `app/` (runner, queues, state, prompts, runbooks), `requirements.txt` (hash-locked, from `requirements.in` with `uv pip compile --generate-hashes`), `select_skills.py`, `Dockerfile` |
+| `Chart.yaml`, `values.yaml`, `templates/` | Helm chart: the two CronJobs, the state volume, the NetworkPolicy, the GHCR pull secret |
+| `application.yaml` | Argo CD Application (applied once by hand) |
+| `.github/workflows/homelab-agents-image.yml` | Builds the image on GitHub-hosted runners and pushes `ghcr.io/bmorri13/homelab-agents` (`:main` from main, `:<branch>` from branches, `:sha-<commit>` always) |
 
 ## How a run works
 
-`app/runner.py` is deterministic; the model only triages.
+`image/app/runner.py` is deterministic; the model only triages.
 
-1. **Credentials.** The runner holds one secret: a 90-day token for the `agent-runner` ServiceAccount (systemd credential from `/etc/homelab-agents/runner.token`). That ServiceAccount can do exactly one thing: create tokens for `agent-sec`, `agent-ops` and itself (`toolhive_mcp/templates/security/agent-runner.yaml`).
-   - It mints itself a 10-minute `audience=vault` token, logs in to Vault (role `homelab-agents`), reads the Slack webhook, the Cribl HEC token and the Claude subscription token, and revokes the Vault token.
-   - It mints the agent a fresh **1-hour** gateway token (`audience=https://mcp.bmosan.com`). The Splunk detection *HL - Kubernetes service account token minted* excludes exactly these mints.
+1. **Credentials.** The pod runs as the agent's own ServiceAccount (`agent-sec` or `agent-ops`, in `toolhive-clients`, created by the `toolhive_mcp` chart) with no Kubernetes API token. The kubelet projects two tokens into it, bound to the pod and rotated automatically:
+   - audience `https://mcp.bmosan.com`, 1 hour: the gateway token;
+   - audience `vault`, 10 minutes: logs in to Vault (role `homelab-agents`), reads the Slack webhook, the Cribl HEC token and the Claude subscription token, and revokes the Vault token.
+
+   Nothing long-lived is stored anywhere: no token file, and no Kubernetes Secret with the Claude, Slack or HEC values (they stay in Vault and in the run's memory). The only Kubernetes Secret is the GHCR pull credential.
 2. **Queue.** `app/queues.py` runs fixed Splunk searches (and the Argo CD application list) through the gateway as the agent's own identity, over the last 2 hours. Each row becomes an item with a stable key: the detection plus host/user/source/object, or an alert's own suppression fields (alerts are read back with `| loadjob` from `_audit action=alert_fired`).
-3. **Dedupe.** `app/state.py` (SQLite in `/var/lib/homelab-agents/state.db`) skips items already posted inside the renotify window (24 h security, 12 h ops). An item triaged but not posted (Slack down or unset) is posted on the next run without re-triaging.
+3. **Dedupe.** `app/state.py` (SQLite on the `homelab-agents-state` volume) skips items already posted inside the renotify window (24 h security, 12 h ops). An item triaged but not posted (Slack down or unset) is posted on the next run without re-triaging.
 4. **Triage.** For each new item, up to 10 per run, the Claude Agent SDK runs `claude-opus-5-5` (effort medium, 40 turns max) with:
-   - no built-in tools (`tools=[]`: no shell, files or web), only the gateway as MCP server `homelab` (`allowed_tools=mcp__homelab__*`, `permission_mode=dontAsk`, `strict_mcp_config`), and no local Claude settings, hooks or plugins (`setting_sources=[]`);
-   - the agent's system prompt (`app/prompts/<agent>.md`) and the item's runbook (`app/runbooks/`), with the item's data marked as untrusted;
-   - a JSON schema for the result: verdict, confidence, severity, summary, evidence, next steps.
-   What the agent can call is enforced by the gateway's Cedar allowlist and the Splunk `mcp_agent` role, not by the prompt.
+   - the gateway as MCP server `homelab` (`allowed_tools=mcp__homelab__*`): what each agent can call is enforced by the gateway's Cedar allowlist and the Splunk `mcp_agent` role, not by the prompt;
+   - built-in tools limited to `Skill`, `Read` and `WebFetch` (no shell, no writes) with `permission_mode=dontAsk` (anything not allowed is denied, never asked). `Read` works only inside the agent's working directory, which holds nothing but the skills; `WebFetch` is allowed only for Splunk documentation sites (`config.DOC_DOMAINS`);
+   - the **Splunk agent skills** (below), the agent's system prompt (`app/prompts/<agent>.md`) and the item's runbook (`app/runbooks/`), with the item's data marked as untrusted;
+   - a JSON schema for the result: verdict, confidence, severity, headline, summary, evidence, next steps.
 5. **Report.** Every new item is posted, whatever the verdict, as Slack Block Kit cards:
    - one **alert card** per item the agent doesn't call routine (or couldn't triage), most severe first: header with severity, title and the agent's one-line headline, a field grid (severity, verdict and confidence, host, and up to three facts such as source, user or object), *Recommended Action*, and **View Dashboard** / **View Analysis** links (plain links, not Block Kit buttons, which need an interactive Slack app; the analysis link opens that item's full triage in Splunk);
    - one **digest card** per run for everything routine (one line each, repeats collapsed) and anything over the per-run limit.
+
    Severity uses one scheme everywhere: red critical, orange high, yellow warning (medium), blue info (low). Text from logs or the model is escaped, so it can't add mentions or links. If a run fails, a card says so.
 
-## Install and update
+## Splunk agent skills
 
-From a workstation with root SSH to coding-box and k3s-01:
+The image bakes in a selection of [Splunk's agent skills](https://github.com/splunk/splunk-agent-skills) (Apache-2.0), pinned to one commit (`SKILLS_COMMIT` in the Dockerfile), at `/app/workspace/.claude/skills`. `select_skills.py`:
+- copies only the advisory and diagnostic skills that work from read-only evidence (searches, health, ingestion and HEC, indexes and storage, CIM, alerting, Splunk advisories);
+- drops scripts and other non-Markdown files;
+- strips each skill's `allowed-tools` frontmatter, so no skill can pre-approve a tool.
+
+Skills that need a shell or write files (`splunk-search` via `splunkctl`, the visualization and setup-page builders, Splunk Cloud admin) are left out. Each agent gets its own list (`config.AGENTS[...]["skills"]`).
+
+To update the skills: change `SKILLS_COMMIT`, read the diff of the skills you ship (they become part of the agents' instructions), and push.
+
+## Deploy
 
 ```bash
-./deploy.sh --mint-token   # first install, or token rotation (the runner warns in Slack 14 days before expiry)
-./deploy.sh                # code changes
+kubectl apply -f infrastructure_tooling/homelab_agents/application.yaml
 ```
 
-`deploy.sh` copies `app/`, the units and `install.sh` to coding-box, installs the k3s CA, optionally pipes a new runner token from k3s-01 straight to coding-box, and runs `install.sh` (system user `homelab-agents`, venv in `/opt/homelab-agents/venv` with the pinned `claude-agent-sdk`, units, timers). The SDK bundles its own Claude Code binary; nothing is installed into anyone's Claude Code.
+Image changes deploy themselves: CronJob pods are new every run and pull `:main` (`imagePullPolicy: Always`), so the run after the workflow finishes uses the new image. Chart changes go through Argo CD as usual. To stop both agents, set `suspend: true` in `values.yaml`.
 
 ### Secrets in Vault (once)
 
@@ -46,6 +66,7 @@ From a workstation with root SSH to coding-box and k3s-01:
 | `kv/homelab-agents` | `claude_oauth_token` | Subscription token from `claude setup-token` (valid one year) |
 | `kv/slack-alerts` | `webhook_url` | Slack incoming webhook |
 | `kv/cribl-hec` | `token` | Already there (OTel collector on k3s) |
+| `kv/apiary-ghcr-pull` | `username`, `token` | GHCR `read:packages` credential, shared with Apiary |
 
 Store them without the value touching shell history or a terminal echo, for example:
 
@@ -73,15 +94,45 @@ path "kv/data/cribl-hec"      { capabilities = ["read"] }
 path "kv/data/homelab-agents" { capabilities = ["read"] }
 EOF
 vault write auth/kubernetes/role/homelab-agents \
-  bound_service_account_names=agent-runner bound_service_account_namespaces=toolhive-clients \
+  bound_service_account_names=agent-sec,agent-ops bound_service_account_namespaces=toolhive-clients \
   audience=vault token_policies=homelab-agents-read token_ttl=10m token_max_ttl=15m
 ```
 
-Vault is reached at `https://vault.bmosan.com`, its tailnet-only ingress ([`vault_ingress`](../vault_ingress/README.md)).
+### Network
+
+The pods accept no connections. They can reach:
+- DNS;
+- the vMCP Service (`vmcp-homelab.toolhive-mcp:4483`), which admits them through the gateway's `allow-agents` NetworkPolicy;
+- Vault (`vault.vault:8200`);
+- Splunk HEC (`192.168.4.11:8088`);
+- HTTPS on the public internet (Anthropic API, Slack, Splunk docs), with private ranges excluded.
+
+Claude Code's telemetry and update checks are off (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`).
 
 ## Operating it
 
-**Watchdog and dashboards.** A runner that has stopped (coding-box off, timer broken) can't post its own failure, so Splunk watches the run log: *Agents - not running or failing* (app `85_homelab_ops`, at :05 and :35) posts a card to Slack through the `homelab_slack` action when an agent hasn't run for 75 minutes, or every run or every triage in the last hour failed (an expired Claude token shows up as the last one). It's suppressed per agent and problem for 6 hours. The webhook it uses is a copy of the Vault one in Splunk's credential store; after changing `kv/slack-alerts`, refresh it:
+```bash
+kubectl -n toolhive-clients get cronjobs,jobs,pods -l app.kubernetes.io/name=homelab-agents
+kubectl -n toolhive-clients logs job/<job>                                        # one run's summary line
+kubectl -n toolhive-clients create job --from=cronjob/homelab-agent-ops ops-now   # run now
+```
+
+To look at a queue without triaging or posting, run a one-off job with `--collect-only`. Use `--dry-run` instead to triage and print the Slack cards without posting:
+
+```bash
+kubectl -n toolhive-clients create job --from=cronjob/homelab-agent-sec sec-look --dry-run=client -o json |
+  jq '.spec.template.spec.containers[0].args += ["--collect-only"]' | kubectl create -f -
+```
+
+In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time source status collected new triaged cost_usd error`. Cost is the API-equivalent figure the SDK reports; on the subscription it counts against usage limits, not a bill. Pod logs are also in `index=k8s` (namespace `toolhive-clients`).
+
+**Watchdog.** A run that never starts can't report itself, so Splunk watches instead. *Agents - not running or failing* (app `85_homelab_ops`, at :05 and :35) posts a card to Slack through the `homelab_slack` action when an agent:
+- hasn't run for 75 minutes;
+- had every run in the last hour fail;
+- had every triage in the last hour fail (this is how an expired Claude token shows up);
+- got Kubernetes warnings for its CronJob, Jobs or pods (failed job, image pull, scheduling, deadline).
+
+It's suppressed per agent and problem type for 6 hours. Splunk runs on security-tooling-01, so it still fires if k3s-01 is down. The webhook it uses is a copy of the Vault one in Splunk's credential store; after changing `kv/slack-alerts`, refresh it:
 
 ```bash
 ssh root@k3s-01 'kubectl -n default get secret vault-token -o jsonpath={.data.token} | base64 -d |
@@ -89,19 +140,6 @@ ssh root@k3s-01 'kubectl -n default get secret vault-token -o jsonpath={.data.to
   ssh root@security-tooling-01 /opt/splunk-stack/scripts/set-slack-webhook.sh
 ```
 
-The *Homelab Security* dashboard has a **Security agent** section (runs, failures, items triaged, items not routine, cost, verdicts, the triaged items and the run log); *Homelab Operations* has an **Agents** section with the health of both agents (what the watchdog checks) and the ops agent's items.
+**Dashboards.** *Homelab Security* has a **Security agent** section (runs, failures, items triaged, items not routine, cost, verdicts, the triaged items and the run log). *Homelab Operations* has an **Agents** section with the health of both agents and the ops agent's items.
 
-```bash
-systemctl list-timers 'homelab-agent-*'
-journalctl -u homelab-agent@sec -n 50
-systemctl start homelab-agent@ops          # run now
-
-# Look without triaging or posting (no model, no state changes):
-systemd-run --wait --pipe -q -p User=homelab-agents -p StateDirectory=homelab-agents \
-  -p LoadCredential=runner.token:/etc/homelab-agents/runner.token -p Environment=HOME=/var/lib/homelab-agents \
-  /opt/homelab-agents/venv/bin/python /opt/homelab-agents/app/runner.py sec --collect-only
-```
-
-`--dry-run` triages and prints the Slack message instead of posting. In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time source status collected new triaged cost_usd error` (cost is the API-equivalent figure the SDK reports; on the subscription it counts against usage limits, not a bill).
-
-To add an ops check, add a row to `OPS_CHECKS` in `app/queues.py`; to change what the security agent reads, edit `security()` there. Runbooks are plain Markdown, matched by detection or alert name.
+**Changing what they look at.** To add an ops check, add a row to `OPS_CHECKS` in `image/app/queues.py`; to change what the security agent reads, edit `security()` there. Runbooks are plain Markdown, matched by detection or alert name.

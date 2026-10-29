@@ -224,7 +224,7 @@
     "viz_h_agent": {
       "type": "splunk.markdown",
       "options": {
-        "markdown": "## Security agent\nThe triage agent on coding-box (`homelab_agents`), every 30 minutes. Cost is the API-equivalent the SDK reports; on the subscription it counts against usage limits. If it stops running, the *Agents - not running or failing* alert posts to Slack.",
+        "markdown": "## Security agent\nThe triage agent (`homelab_agents`, a CronJob on k3s-01), every 30 minutes. Cost is the API-equivalent the SDK reports; on the subscription it counts against usage limits. If it stops running, the *Agents - not running or failing* alert posts to Slack.",
         "fontSize": "default"
       }
     },

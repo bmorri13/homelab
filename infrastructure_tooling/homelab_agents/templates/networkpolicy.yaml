@@ -1,0 +1,58 @@
+# The agent pods accept no connections and can reach only: DNS, the vMCP gateway,
+# Vault, Splunk HEC, and HTTPS on the public internet (Anthropic API, Slack, Splunk
+# docs). The gateway side admits them with its own policy (toolhive_mcp
+# networkpolicies.yaml, allow-agents).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: homelab-agents
+  labels:
+    {{- include "homelab-agents.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: homelab-agents
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: toolhive-mcp
+          podSelector:
+            matchLabels:
+              app: virtualmcpserver
+      ports:
+        - {protocol: TCP, port: 4483}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+              component: server
+      ports:
+        - {protocol: TCP, port: 8200}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.hec.cidr }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.networkPolicy.hec.port }}}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.internetExcept | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 443}
