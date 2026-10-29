@@ -1,0 +1,24 @@
+# Argo CD Application for the homelab agents. Applied by hand once (no app-of-apps):
+#   kubectl apply -f infrastructure_tooling/homelab_agents/application.yaml
+# Deploys into toolhive-clients, where the agents' ServiceAccounts live (the
+# toolhive_mcp chart owns that namespace and the ServiceAccounts).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homelab-agents
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/homelab_agents
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-clients
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

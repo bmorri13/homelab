@@ -1,0 +1,17 @@
+# Dedupe state (SQLite): which items were already triaged and posted. Kept if the app
+# is deleted, so a reinstall doesn't re-post a day of findings.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homelab-agents-state
+  labels:
+    {{- include "homelab-agents.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.state.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.state.size }}

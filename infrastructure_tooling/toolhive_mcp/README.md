@@ -110,11 +110,12 @@ rules: an agent sees and can call only its own list (everything else is
 Splunk tools come from a separate backend, `splunk-agent` (see
 [Splunk and Cribl](#splunk-and-cribl)), which only agents can use.
 
-The runner in [`homelab_agents`](../homelab_agents/README.md) mints each
-agent's token itself, for one hour, every run. It authenticates as a third
-ServiceAccount, `agent-runner` (`auth.agentRunner`), whose only permission is
-creating tokens for the two agents and for itself (a Vault login); it is in no
-Cedar policy, so it can't use the gateway directly.
+The agents themselves ([`homelab_agents`](../homelab_agents/README.md)) run
+as CronJob pods in `toolhive-clients` under these ServiceAccounts. Each pod
+gets a kubelet-projected token with the gateway audience (one hour, bound to
+the pod), so nothing mints tokens for them, and calls the vMCP Service
+in-cluster; the `allow-agents` NetworkPolicy (`networkPolicy.agentPods`) lets
+only those pods reach port 4483.
 
 ```bash
 # Short-lived token for one agent run, by hand

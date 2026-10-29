@@ -1,0 +1,104 @@
+{{- range $agent, $cfg := .Values.agents }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: homelab-agent-{{ $agent }}
+  labels:
+    {{- include "homelab-agents.labels" $ | nindent 4 }}
+    homelab-agents/agent: {{ $agent }}
+spec:
+  schedule: {{ $cfg.schedule | quote }}
+  timeZone: Etc/UTC
+  suspend: {{ $.Values.suspend }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "homelab-agents.labels" $ | nindent 8 }}
+        homelab-agents/agent: {{ $agent }}
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ $.Values.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "homelab-agents.labels" $ | nindent 12 }}
+            homelab-agents/agent: {{ $agent }}
+        spec:
+          serviceAccountName: {{ $cfg.serviceAccount }}
+          # No Kubernetes API token: the agents have no API permissions and need none.
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          enableServiceLinks: false
+          imagePullSecrets:
+            - name: homelab-agents-ghcr-pull
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: agent
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              args: [{{ $agent | quote }}]
+              env:
+                {{- range $k, $v := $.Values.env }}
+                - name: {{ $k }}
+                  value: {{ $v | quote }}
+                {{- end }}
+                - name: STATE_DIRECTORY
+                  value: /state
+                - name: HOME
+                  value: /home/agent
+                - name: CLAUDE_CONFIG_DIR
+                  value: /home/agent/.claude
+                - name: TMPDIR
+                  value: /tmp
+                # No telemetry, error reporting or update checks from Claude Code.
+                - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                {{- toYaml $.Values.resources | nindent 16 }}
+              volumeMounts:
+                - {name: state, mountPath: /state}
+                - {name: home, mountPath: /home/agent}
+                - {name: tmp, mountPath: /tmp}
+                - {name: gateway-token, mountPath: /var/run/secrets/homelab-agents/gateway, readOnly: true}
+                - {name: vault-token, mountPath: /var/run/secrets/homelab-agents/vault, readOnly: true}
+          volumes:
+            - name: state
+              persistentVolumeClaim:
+                claimName: homelab-agents-state
+            - name: home
+              emptyDir: {sizeLimit: 512Mi}
+            - name: tmp
+              emptyDir: {sizeLimit: 512Mi}
+            # Bound to this pod, issued and rotated by the kubelet: nothing long-lived to steal.
+            - name: gateway-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      audience: {{ $.Values.tokens.gatewayAudience }}
+                      expirationSeconds: {{ $.Values.tokens.gatewaySeconds }}
+            - name: vault-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      audience: vault
+                      expirationSeconds: {{ $.Values.tokens.vaultSeconds }}
+{{- end }}

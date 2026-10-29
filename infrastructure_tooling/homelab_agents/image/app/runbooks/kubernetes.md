@@ -5,7 +5,7 @@ Source: `index=audit` k3s API audit. Platform controllers' reads aren't audited,
 Who is who:
 - `system:admin` from 127.0.0.1 with a kubectl user agent: the owner (or an agent they run) on k3s-01 over SSH. Check `index=infra eventtype=homelab_tailscale_ssh_command host=k3s-01` around the same time for the session and commands.
 - `system:serviceaccount:argocd:*`: Argo CD syncing; correlate with Argo CD application events.
-- `system:serviceaccount:toolhive-clients:agent-runner`: the agent runner. Its own token mints are excluded from the detection; anything else it does is unexpected.
+- `system:serviceaccount:toolhive-clients:agent-sec` / `agent-ops`: these agents. Their tokens come from the kubelet (not audited) and they have no Kubernetes API permissions, so any audited API request by them is unexpected.
 - `system:serviceaccount:toolhive-mcp:homelab-vmcp`: the MCP gateway; about ten 403s a week listing configmaps is a known harmless RBAC gap.
 - 401s carry no username (anonymous auth is off); group them by sourceIPs{}.
 

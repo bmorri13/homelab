@@ -1,0 +1,64 @@
+# Homelab agents: two CronJobs in the gateway's client namespace, each running as its
+# own ServiceAccount (agent-sec, agent-ops; created by the toolhive_mcp chart, which
+# also holds their Cedar tool allowlists). See README.md.
+
+image:
+  # Built by .github/workflows/homelab-agents-image.yml from image/ on every push to
+  # main that touches it. CronJob pods are new every run, so with pullPolicy Always
+  # each run uses the newest main build.
+  repository: ghcr.io/bmorri13/homelab-agents
+  tag: main
+  pullPolicy: Always
+  # Private GHCR package: same read:packages credential as Apiary (Vault kv/apiary-ghcr-pull).
+  pullSecretVaultPath: kv/apiary-ghcr-pull
+
+# Set true to stop both agents without deleting anything.
+suspend: false
+
+agents:
+  sec:
+    serviceAccount: agent-sec
+    schedule: "0,30 * * * *"
+  ops:
+    serviceAccount: agent-ops
+    schedule: "15,45 * * * *"
+
+# Hard stop for one run (a run normally takes seconds, or a few minutes when it triages).
+activeDeadlineSeconds: 1500
+
+env:
+  GATEWAY_URL: http://vmcp-homelab.toolhive-mcp.svc.cluster.local:4483/mcp
+  VAULT_ADDR: http://vault.vault.svc.cluster.local:8200
+  HEC_URL: http://192.168.4.11:8088/services/collector/event
+
+# Projected ServiceAccount tokens. The gateway validates audience
+# https://mcp.bmosan.com; Vault role homelab-agents expects audience "vault".
+tokens:
+  gatewayAudience: https://mcp.bmosan.com
+  gatewaySeconds: 3600
+  vaultSeconds: 600
+
+state:
+  storageClass: local-path
+  size: 1Gi
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+networkPolicy:
+  # Splunk HEC (Cribl on security-tooling-01).
+  hec:
+    cidr: 192.168.4.11/32
+    port: 8088
+  # Everything else the pods talk to outside the cluster is HTTPS on the internet:
+  # the Anthropic API, Slack's webhook, Splunk documentation. Private ranges are
+  # excluded so the pods can't reach the LAN or tailnet beyond the HEC rule.
+  internetExcept:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10

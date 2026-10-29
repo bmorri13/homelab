@@ -187,7 +187,7 @@ S["k8s_node"] = (
     f"| eval \"CPU (cores)\"=round(cpu,2), \"Memory GB\"=round(mem/{GIB},2) | fields _time \"CPU (cores)\" \"Memory GB\""
 )
 
-# The ops agent (homelab_agents on coding-box), and the health of both agents.
+# The ops agent (homelab_agents, CronJobs on k3s-01), and the health of both agents.
 AGENT = "index=ai_agents sourcetype=homelab:agent agent=ops"
 AGENT_ITEMS = (f"{AGENT} kind=item | rename triage.verdict as verdict triage.confidence as confidence "
                "triage.headline as headline triage.summary as summary triage.severity as agent_severity")
@@ -339,7 +339,7 @@ table("viz_k8s_restarts", "ds_k8s_restarts", "Containers that restarted (24 h)")
 place("viz_k8s_restarts", 0, 1200, 220)
 y += 220
 
-heading("viz_h_agents", "Agents (coding-box, last 24 h)")
+heading("viz_h_agents", "Agents (CronJobs on k3s-01, last 24 h)")
 table("viz_agents_health", "ds_agents_health",
       "Agent health: both agents run every 30 min; the Agents - not running or failing alert posts to Slack when this isn't ok")
 place("viz_agents_health", 0, 1200, 130)
