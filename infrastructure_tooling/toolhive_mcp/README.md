@@ -20,6 +20,7 @@ vMCP "homelab"  (VirtualMCPServer, Service vmcp-homelab:4483, path /mcp)
 MCPServer toolhive-docs (proxy runner → server pod)
 MCPServer cribl (proxy runner → login shim → https://192.168.4.11:9000/api/v1/mcp)
 MCPRemoteProxy excalidraw (proxy pod → https://mcp.excalidraw.com/mcp)
+MCPRemoteProxy drawio (proxy pod → https://mcp.draw.io/mcp)
 MCPRemoteProxy splunk (proxy pod → https://192.168.4.11:8089/services/mcp)
 more added via values.yaml
 ```
@@ -365,6 +366,18 @@ uploads the diagram to a public excalidraw.com link; add
 `excalidraw_export_to_excalidraw` to `authz.readOnlyTools` to enable it.
 Diagram content is sent to Excalidraw's hosted service either way.
 
+**draw.io** (draw.io's official hosted MCP App server, jgraph/drawio-mcp):
+`create_diagram` (renders an editable diagram inline in hosts that support
+MCP Apps, from draw.io XML or Mermaid), `search_shapes` (exact style strings
+from draw.io's shape library) and `get_drawio_reference` are all annotated
+read-only. Because the read-only rule trusts the server's own annotation, an
+`authz.extraPolicies` `forbid` pins the gateway to exactly these three
+`drawio_*` tools; a tool draw.io adds later is denied until it's reviewed
+and added there. The agents can't call any of them (their allowlists are
+explicit). Diagram content is sent to draw.io's hosted service. For diagrams
+committed to the repo, see `docs/architecture.md` (draw.io Desktop exports
+the `.drawio.svg` files).
+
 ## Splunk and Cribl
 
 Both run on security-tooling-01 (`infrastructure_tooling/monitoring_stack/splunk/`)
@@ -549,6 +562,7 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 | toolhive-docs proxy runner | operator default | operator default | ~2m, ~14Mi |
 | toolhive-docs server | 50m / 500m | 256Mi / 768Mi | ~5m idle, ~290Mi (embedded vector DB) |
 | excalidraw remote proxy | 10m / 200m | 32Mi / 128Mi | ~1m, ~15Mi |
+| drawio remote proxy | 10m / 200m | 32Mi / 128Mi | not measured yet |
 | splunk remote proxy | 10m / 200m | 32Mi / 128Mi | ~2m, ~23Mi |
 | cribl proxy runner | operator default | operator default | ~5m, ~39Mi |
 | cribl login shim | 10m / 200m | 32Mi / 128Mi | ~6m, ~18Mi |
