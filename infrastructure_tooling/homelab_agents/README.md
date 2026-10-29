@@ -23,7 +23,10 @@ Results go to Slack as one message per run, and every run and item is logged to 
    - the agent's system prompt (`app/prompts/<agent>.md`) and the item's runbook (`app/runbooks/`), with the item's data marked as untrusted;
    - a JSON schema for the result: verdict, confidence, severity, summary, evidence, next steps.
    What the agent can call is enforced by the gateway's Cedar allowlist and the Splunk `mcp_agent` role, not by the prompt.
-5. **Report.** Every new item is posted, whatever the verdict: the runner's facts first, the agent's triage after. Items the agent calls routine (expected activity, benign, transient) are grouped at the bottom. Text from logs or the model is escaped, so it can't add mentions or links. If a run fails, the failure is posted instead.
+5. **Report.** Every new item is posted, whatever the verdict, as Slack Block Kit cards:
+   - one **alert card** per item the agent doesn't call routine (or couldn't triage), most severe first: header with severity, title and the agent's one-line headline, a field grid (severity, verdict and confidence, host, and up to three facts such as source, user or object), *Recommended Action*, and **View Dashboard** / **View Analysis** buttons (the analysis button opens that item's full triage in Splunk);
+   - one **digest card** per run for everything routine (one line each, repeats collapsed) and anything over the per-run limit.
+   Severity uses one scheme everywhere: red critical, orange high, yellow warning (medium), blue info (low). Text from logs or the model is escaped, so it can't add mentions or links. If a run fails, a card says so.
 
 ## Install and update
 

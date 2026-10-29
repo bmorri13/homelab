@@ -112,108 +112,170 @@ async def triage(agent, item, gateway_token, claude_env):
     return result.structured_output, stats
 
 
-SEV_EMOJI = {"critical": ":red_circle:", "high": ":large_orange_circle:", "medium": ":large_yellow_circle:",
-             "low": ":white_circle:"}
+SEVERITY = {  # emoji, label (the scheme used for every Bmo Homelab Bot alert)
+    "critical": (":red_circle:", "Critical"),
+    "high": (":large_orange_circle:", "High"),
+    "medium": (":large_yellow_circle:", "Warning"),
+    "low": (":large_blue_circle:", "Info"),
+}
 QUIET_VERDICTS = {"expected_activity", "benign", "transient"}
 VERDICT_LABEL = {"expected_activity": "Expected activity", "benign": "Benign", "suspicious": "Suspicious",
                  "likely_malicious": "Likely malicious", "inconclusive": "Inconclusive", "transient": "Transient",
                  "needs_attention": "Needs attention", "urgent": "Urgent"}
-AGENT_ICON = {"sec": ":shield:", "ops": ":gear:"}
+CARD = {  # header icon, header noun, footer icon, footer label, dashboard
+    "sec": (":rotating_light:", "Security Alert", ":shield:", "Security Monitoring", "85_homelab_security/homelab_security"),
+    "ops": (":warning:", "Ops Alert", ":gear:", "Operations Monitoring", "85_homelab_ops/homelab_ops"),
+}
+# Facts worth a field in the card, in order of preference (first two that the item has).
+FACT_FIELDS = [("src", "Source"), ("src_host", "Source"), ("user", "User"), ("object", "Object"),
+               ("rule", "Rule"), ("namespace", "Namespace"), ("workload", "Workload"), ("pod", "Pod"),
+               ("container", "Container"), ("mountpoint", "Mount"), ("storage", "Storage"),
+               ("used_pct", "Used %"), ("busy_pct", "CPU busy %"), ("restarts", "Restarts"),
+               ("count", "Count"), ("app", "App"), ("health", "Health"), ("sync", "Sync")]
 
 
 def _short(title):
     return title[5:] if title.startswith("HL - ") else title
 
 
+def _clip(text, n):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1].rstrip() + "…"
+
+
 def _headline(t):
     """The agent's one-line headline; items triaged before that field existed fall back
     to the first sentence of the summary."""
-    if t.get("headline"):
-        return t["headline"]
-    first = t.get("summary", "").split(". ")[0].rstrip(".")
-    return first[:157] + "..." if len(first) > 160 else first
+    return t.get("headline") or t.get("summary", "").split(". ")[0].rstrip(".")
 
 
-def _grouped(items):
-    """Collapse items with the same title into one line with a count, keeping order."""
-    groups = {}
-    for i in items:
-        groups.setdefault(_short(i["title"]), []).append(i)
-    return groups
+def _text(text):
+    return {"type": "mrkdwn", "text": text[:2900]}
 
 
-def _section(text):
-    return {"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}}
+def _code(value):
+    return "`" + clients.slack_escape(_clip(value, 60)).replace("`", "'") + "`"
 
 
-def _context(text):
-    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text[:2900]}]}
+def _splunk(path, params):
+    query = urllib.parse.urlencode(params)
+    return f"{config.SPLUNK_WEB}/en-US/app/{path}" + (f"?{query}" if query else "")
 
 
-def splunk_link(agent, run_id):
-    q = f'search index={config.HEC_INDEX} sourcetype={config.HEC_SOURCETYPE} run_id="{run_id}" kind=item ' \
-        "| table title severity target_host triage.verdict triage.summary triage.evidence{} triage.next_steps{}"
-    return f"{config.SPLUNK_WEB}/en-US/app/search/search?" + urllib.parse.urlencode({"q": q, "earliest": "-24h"})
+def _analysis_url(run_id, key=None):
+    q = f'search index={config.HEC_INDEX} sourcetype={config.HEC_SOURCETYPE} run_id="{run_id}" kind=item'
+    if key:
+        q += f' key="{key.replace(chr(34), "")}"'
+    q += " | table _time title severity target_host triage.verdict triage.summary triage.evidence{} triage.next_steps{}"
+    return _splunk("search/search", {"q": q, "earliest": "-7d"})[:2900]
 
 
-def slack_message(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
-    """One message per run. Items that need a look come first, each with the agent's
-    headline, verdict and next steps; routine and untriaged items are one line each,
-    repeats collapsed. The full analysis is in Splunk, linked at the bottom.
-    Everything from logs or the model goes through slack_escape."""
+def _buttons(agent, run_id, key=None):
+    dashboard = CARD[agent][4]
+    elements = [{"type": "button", "text": {"type": "plain_text", "text": "View Dashboard"},
+                 "url": _splunk(dashboard, {})}]
+    if run_id:
+        elements.append({"type": "button", "text": {"type": "plain_text", "text": "View Analysis"},
+                         "url": _analysis_url(run_id, key)})
+    return {"type": "actions", "elements": elements}
+
+
+def _footer(agent, extra=None):
+    _, _, icon, label, _ = CARD[agent]
+    parts = [f"{icon} Bmo Homelab Bot", label] + ([extra] if extra else [])
+    return {"type": "context", "elements": [_text(" • ".join(parts))]}
+
+
+def alert_card(agent, item, run_id):
+    """One card for an item the agent thinks needs a look (or couldn't triage)."""
     esc = clients.slack_escape
-    title = config.AGENTS[agent]["title"]
-    loud = [i for i in items if (i.get("triage") or {}).get("verdict") not in QUIET_VERDICTS]
-    quiet = [i for i in items if i not in loud]
-    total = len(items) + len(untriaged)
+    t = item.get("triage") or {}
+    severity = t.get("severity") or item["severity"]
+    emoji, label = SEVERITY.get(severity, SEVERITY["medium"])
+    icon, noun = CARD[agent][0], CARD[agent][1]
+    title = _short(item["title"])
+    description = _headline(t) if t else f"Couldn't triage: {item.get('triage_error', 'unknown error')}"
 
-    if total:
-        parts = [f"{len(loud)} to look at" if loud else "nothing needs attention",
-                 f"{len(quiet)} routine" if quiet else None,
-                 f"{len(untriaged)} not triaged" if untriaged else None]
-        headline = f"{title}: " + ", ".join(p for p in parts if p)
-    else:
-        headline = title
-    blocks = [{"type": "header", "text": {"type": "plain_text", "text": f"{headline}"[:150], "emoji": True}}]
+    fields = [_text(f"*Severity*\n{emoji} {label}")]
+    if t:
+        fields.append(_text(f"*Verdict*\n{esc(VERDICT_LABEL.get(t['verdict'], t['verdict']))} "
+                            f"({esc(t['confidence'])} confidence)"))
+    fields.append(_text(f"*Host*\n{esc(item['host'] or '-')}"))
+    facts = item.get("facts") or {}
+    for key, name in FACT_FIELDS:
+        if len(fields) >= 6:
+            break
+        value = facts.get(key)
+        if isinstance(value, list):
+            value = ", ".join(map(str, value[:3]))
+        if value not in (None, "", "0") and not (key == "count" and str(value) == "1"):
+            fields.append(_text(f"*{name}*\n{_code(value)}"))
 
-    for i in loud:
-        t = i.get("triage") or {}
-        if t:
-            label = VERDICT_LABEL.get(t["verdict"], t["verdict"])
-            text = (f"{SEV_EMOJI.get(t['severity'], '')} *{esc(_short(i['title']))}*\n{esc(_headline(t))}")
-            if t.get("next_steps"):
-                text += "\n" + "\n".join(f"→ {esc(n)}" for n in t["next_steps"][:3])
-            blocks.append(_section(text))
-            blocks.append(_context(f"*{esc(label)}* · {esc(t['confidence'])} confidence · "
-                                   f"agent says {esc(t['severity'])} · detection: {esc(i['severity'])} · "
-                                   f"{esc(i['host'] or '-')}"))
-        else:
-            blocks.append(_section(f"{SEV_EMOJI.get(i['severity'], '')} *{esc(_short(i['title']))}*\n"
-                                   f"Couldn't triage: {esc(i.get('triage_error', 'unknown error')[:200])}"))
-            blocks.append(_context(f"detection: {esc(i['severity'])} · {esc(i['host'] or '-')}"))
-        blocks.append({"type": "divider"})
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": _clip(f"{icon} {noun} — {label}", 150), "emoji": True}},
+        {"type": "section", "text": _text(f"*{esc(_clip(title, 150))}*\n{esc(_clip(description, 400))}")},
+        {"type": "divider"},
+        {"type": "section", "fields": fields},
+    ]
+    if t.get("next_steps"):
+        steps = "\n".join(f"• {esc(_clip(n, 200))}" for n in t["next_steps"][:3])
+        blocks.append({"type": "section", "text": _text(f"*Recommended Action*\n{steps}")})
+    blocks.append(_buttons(agent, run_id, item["key"]))
+    blocks.append(_footer(agent, f"detection rated {item['severity']}"))
+    return {"text": f"{label}: {title}", "blocks": blocks}
 
-    if quiet:
-        lines = []
-        for name, group in _grouped(quiet).items():
-            count = f" ×{len(group)}" if len(group) > 1 else ""
-            lines.append(f"• *{esc(name)}*{count} · {esc(_headline(group[0]['triage']))}")
-        blocks.append(_section(":white_check_mark: *Routine*\n" + "\n".join(lines)))
 
+def digest_card(agent, routine, untriaged, cap, run_id, notes):
+    """One card per run for everything that looked routine or wasn't triaged."""
+    esc = clients.slack_escape
+    counts = [f"{len(routine)} routine" if routine else None, f"{len(untriaged)} not triaged" if untriaged else None]
+    summary = ", ".join(c for c in counts if c)
+    blocks = [{"type": "header", "text": {"type": "plain_text", "emoji": True,
+                                          "text": _clip(f":white_check_mark: {CARD[agent][1].split()[0]} Digest — {summary}"
+                                                        if summary else f":warning: {config.AGENTS[agent]['title']}", 150)}}]
+    if routine:
+        groups = {}
+        for i in routine:
+            groups.setdefault(_short(i["title"]), []).append(i)
+        lines = [f"• *{esc(_clip(name, 70))}*{f' ×{len(g)}' if len(g) > 1 else ''} — "
+                 f"{esc(_clip(_headline(g[0]['triage']), 110))}" for name, g in groups.items()]
+        blocks.append({"type": "section", "text": _text("*Looked routine*\n" + "\n".join(lines))})
     if untriaged:
+        groups = {}
+        for i in untriaged:
+            groups.setdefault(_short(i["title"]), []).append(i)
         lines = []
-        for name, group in _grouped(untriaged).items():
-            count = f" ×{len(group)}" if len(group) > 1 else ""
-            sev = max((g["severity"] for g in group), key=queues.SEV_RANK.get)
-            lines.append(f"• {SEV_EMOJI.get(sev, '')} {esc(name)}{count}")
-        blocks.append(_section(f":hourglass: *Not triaged* (over {cap} this run, listed only)\n" + "\n".join(lines)))
+        for name, g in groups.items():
+            sev = max((x["severity"] for x in g), key=queues.SEV_RANK.get)
+            lines.append(f"• {SEVERITY[sev][0]} {esc(_clip(name, 80))}{f' ×{len(g)}' if len(g) > 1 else ''}")
+        if routine:
+            blocks.append({"type": "divider"})
+        blocks.append({"type": "section", "text": _text(f"*Not triaged* (over {cap} this run)\n" + "\n".join(lines))})
+    if notes:
+        blocks.append({"type": "section", "text": _text("\n".join(f":warning: {esc(n)}" for n in notes))})
+    if routine or untriaged:
+        blocks.append(_buttons(agent, run_id))
+    blocks.append(_footer(agent))
+    return {"text": f"{config.AGENTS[agent]['title']}: {summary or 'notice'}", "blocks": blocks}
 
-    footer = [esc(n) for n in notes]
-    if run_id and items:
-        footer.append(f"<{splunk_link(agent, run_id)}|Full analysis in Splunk>")
-    if footer:
-        blocks.append(_context(" · ".join(footer)))
-    return {"text": headline, "blocks": blocks[:50]}
+
+def slack_messages(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
+    """Cards for one run: one per item that needs a look, most severe first, then one
+    digest. Everything from logs or the model goes through slack_escape."""
+    loud = [i for i in items if (i.get("triage") or {}).get("verdict") not in QUIET_VERDICTS]
+    routine = [i for i in items if i not in loud]
+    loud.sort(key=lambda i: -queues.SEV_RANK.get((i.get("triage") or {}).get("severity") or i["severity"], 0))
+    messages = [alert_card(agent, i, run_id) for i in loud]
+    if routine or untriaged or notes:
+        messages.append(digest_card(agent, routine, untriaged, cap, run_id, notes))
+    return messages
+
+
+def post_all(webhook, messages):
+    for n, m in enumerate(messages):
+        if n:
+            time.sleep(1.1)   # incoming webhooks allow about one message a second
+        clients.slack_post(webhook, m)
 
 
 def hec_event(agent, kind, **fields):
@@ -276,25 +338,25 @@ async def run(agent, dry_run, local_login, limit, collect_only=False):
 
         report = [i for i in triage_now + to_repost if i.get("triage") or i.get("triage_error")]
         if report or untriaged:
-            message = slack_message(agent, report, untriaged, notes, cap, run_id)
+            messages = slack_messages(agent, report, untriaged, notes, cap, run_id)
             if dry_run:
-                print(json.dumps(message, indent=2))
+                print(json.dumps(messages, indent=2))
             elif not webhook:
                 notes.append("Slack not configured (Vault kv/slack-alerts webhook_url); will post next run.")
                 status = "no_slack"
             else:
-                clients.slack_post(webhook, message)
+                post_all(webhook, messages)
                 state.mark_notified([i["key"] for i in report + untriaged])
                 summary["posted"] = True
         elif notes and webhook and not dry_run:
-            clients.slack_post(webhook, slack_message(agent, [], [], notes))
+            post_all(webhook, slack_messages(agent, [], [], notes))
     except Exception as e:
         status = "error"
         summary["error"] = f"{type(e).__name__}: {e}"[:500]
         traceback.print_exc()
         if webhook and not dry_run:
             try:
-                clients.slack_post(webhook, slack_message(agent, [], [], notes + [f"Run failed: {summary['error']}"]))
+                post_all(webhook, slack_messages(agent, [], [], notes + [f"Run failed: {summary['error']}"]))
             except Exception:
                 pass
     finally:
