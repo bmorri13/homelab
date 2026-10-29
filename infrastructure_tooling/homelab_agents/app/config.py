@@ -24,7 +24,8 @@ VAULT_AGENTS = "homelab-agents"
 HEC_URL = "http://192.168.4.11:8088/services/collector/event"
 HEC_INDEX = "ai_agents"
 HEC_SOURCETYPE = "homelab:agent"
-SPLUNK_WEB = "https://security-tooling-01:8000"   # for links in Slack messages
+# For links in Slack messages: the full MagicDNS name resolves on any tailnet device (phones too).
+SPLUNK_WEB = "https://security-tooling-01.tail25c6fe.ts.net:8000"
 
 STATE_DIR = os.environ.get("STATE_DIRECTORY", "/var/lib/homelab-agents")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -170,14 +170,14 @@ def _analysis_url(run_id, key=None):
     return _splunk("search/search", {"q": q, "earliest": "-7d"})[:2900]
 
 
-def _buttons(agent, run_id, key=None):
-    dashboard = CARD[agent][4]
-    elements = [{"type": "button", "text": {"type": "plain_text", "text": "View Dashboard"},
-                 "url": _splunk(dashboard, {})}]
+def _links(agent, run_id, key=None):
+    """Plain mrkdwn links, not buttons: Block Kit buttons send the click back to the
+    Slack app, and a webhook-only app has nowhere to receive it (Slack shows a warning
+    and may not open the URL)."""
+    links = [f"<{_splunk(CARD[agent][4], {})}|View Dashboard ↗>"]
     if run_id:
-        elements.append({"type": "button", "text": {"type": "plain_text", "text": "View Analysis"},
-                         "url": _analysis_url(run_id, key)})
-    return {"type": "actions", "elements": elements}
+        links.append(f"<{_analysis_url(run_id, key)}|View Analysis ↗>")
+    return {"type": "section", "text": _text("     ".join(links))}
 
 
 def _footer(agent, extra=None):
@@ -220,7 +220,7 @@ def alert_card(agent, item, run_id):
     if t.get("next_steps"):
         steps = "\n".join(f"• {esc(_clip(n, 200))}" for n in t["next_steps"][:3])
         blocks.append({"type": "section", "text": _text(f"*Recommended Action*\n{steps}")})
-    blocks.append(_buttons(agent, run_id, item["key"]))
+    blocks.append(_links(agent, run_id, item["key"]))
     blocks.append(_footer(agent, f"detection rated {item['severity']}"))
     return {"text": f"{label}: {title}", "blocks": blocks}
 
@@ -254,7 +254,7 @@ def digest_card(agent, routine, untriaged, cap, run_id, notes):
     if notes:
         blocks.append({"type": "section", "text": _text("\n".join(f":warning: {esc(n)}" for n in notes))})
     if routine or untriaged:
-        blocks.append(_buttons(agent, run_id))
+        blocks.append(_links(agent, run_id))
     blocks.append(_footer(agent))
     return {"text": f"{config.AGENTS[agent]['title']}: {summary or 'notice'}", "blocks": blocks}
 
