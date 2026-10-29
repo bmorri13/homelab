@@ -34,6 +34,7 @@ MODEL = "claude-opus-5-5"
 EFFORT = "medium"
 MAX_TURNS = 40            # per item
 MAX_ITEMS_PER_RUN = 10    # the rest are posted untriaged, as a list
+TRIAGE_ATTEMPTS = 3       # runs that try a failing item before it's posted with the error
 
 # Splunk documentation the skills cite; the only sites WebFetch may reach. All
 # Splunk-owned, so a prompt injected through log data can't send anything to a host

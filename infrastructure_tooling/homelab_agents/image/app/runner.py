@@ -336,12 +336,19 @@ def hec_event(agent, kind, **fields):
             "event": {"agent": agent, "kind": kind, **fields}}
 
 
+def error_at(e):
+    """Where a run failed: our own frames in the traceback, outermost first, e.g.
+    "runner.py:364 run > clients.py:80 __init__ > clients.py:27 _http"."""
+    frames = [f for f in traceback.extract_tb(e.__traceback__) if f.filename.startswith(config.APP_DIR)]
+    return " > ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}" for f in frames)[:300] or None
+
+
 async def run(agent, dry_run, local_login, limit, collect_only=False, test=False):
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
     state = State(agent)
     summary = {"collected": 0, "new": 0, "reposted": 0, "quiet": 0, "triaged": 0, "triage_errors": 0,
-               "cost_usd": 0.0, "posted": False}
+               "retrying": 0, "cost_usd": 0.0, "posted": False}
     events, notes, hec_token, status = [], [], None, "ok"
     vault, webhook = None, None
     try:
@@ -380,12 +387,17 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 item["triage"], stats = None, {}
                 item["triage_error"] = str(e)[:300]
                 summary["triage_errors"] += 1
-            state.save_triage(item["key"], item["triage"])
+            if item["triage"] is None and state.triage_failed(item["key"]) < config.TRIAGE_ATTEMPTS:
+                item["retry"] = True  # not posted or marked; the next run tries again
+                summary["retrying"] += 1
+            else:
+                state.save_triage(item["key"], item["triage"])
             events.append(hec_event(agent, "item", run_id=run_id, key=item["key"], title=item["title"], severity=item["severity"],
                                     target_host=item["host"], origin=item["source"], triage=item["triage"],
                                     error=item.get("triage_error"), **stats))
 
-        report = [i for i in triage_now + to_repost if i.get("triage") or i.get("triage_error")]
+        report = [i for i in triage_now + to_repost
+                  if (i.get("triage") or i.get("triage_error")) and not i.get("retry")]
         if report or untriaged:
             messages = slack_messages(agent, report, untriaged, notes, cap, run_id)
             if dry_run:
@@ -402,6 +414,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
     except Exception as e:
         status = "error"
         summary["error"] = f"{type(e).__name__}: {e}"[:500]
+        summary["error_at"] = error_at(e)
         traceback.print_exc()
         if webhook and not dry_run:
             try:

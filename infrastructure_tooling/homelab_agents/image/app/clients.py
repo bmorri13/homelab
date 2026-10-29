@@ -4,6 +4,7 @@ Cribl HEC. Standard library only.
 Every URL here is a fixed endpoint from config.py, never data from Splunk or the model.
 """
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -70,8 +71,17 @@ class Gateway:
         self.token = token
         self.session = None
         self._id = 0
-        self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
-                                 "clientInfo": {"name": "homelab-agents-runner", "version": "1"}})
+        # A new pod's IP joins the toolhive-mcp NetworkPolicy allow rules a moment after
+        # the pod starts; until then kube-router rejects the connection. Wait it out.
+        for attempt in range(5):
+            try:
+                self._rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                         "clientInfo": {"name": "homelab-agents-runner", "version": "1"}})
+                break
+            except urllib.error.URLError as e:
+                if attempt == 4 or not isinstance(e.reason, ConnectionRefusedError):
+                    raise
+                time.sleep(2 * (attempt + 1))  # 2+4+6+8 s
         self._rpc("notifications/initialized", notify=True)
 
     def _rpc(self, method, params=None, notify=False):
