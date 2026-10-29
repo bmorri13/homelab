@@ -24,6 +24,9 @@ jobs:
   terraform-plan:
     name: Terraform Validate and Plan
     runs-on: [self-hosted, Linux, X64]
+    # Public repo: never run a pull request from a fork on the self-hosted runners
+    # (fork PRs get no secrets, but would still run their code inside the homelab).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     environment: prod
     steps:
       - name: Checkout Repository
