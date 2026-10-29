@@ -47,8 +47,10 @@ From a workstation with root SSH to coding-box and k3s-01:
 Store them without the value touching shell history or a terminal echo, for example:
 
 ```bash
-claude setup-token   # on any machine with Claude Code; copy the token it prints
+claude setup-token   # on any machine with Claude Code; copy the whole token (108 chars; it may wrap)
 ssh -t root@k3s-01 'read -rsp "Claude token: " T; echo
+  case "$T" in sk-ant-oat01-*) ;; *) echo "wrong prefix, not saved"; exit 1;; esac
+  [ ${#T} -ge 100 ] || { echo "only ${#T} chars, looks truncated, not saved"; exit 1; }
   { kubectl -n default get secret vault-token -o jsonpath={.data.token} | base64 -d; echo; printf %s "$T"; } |
   kubectl -n vault exec -i vault-0 -- sh -c "read -r VAULT_TOKEN; export VAULT_TOKEN; vault kv put kv/homelab-agents claude_oauth_token=-"'
 
