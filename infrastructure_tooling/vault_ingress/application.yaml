@@ -1,0 +1,20 @@
+# Argo CD Application for Vault's tailnet-only ingress. Applied by hand once
+# (no app-of-apps): kubectl apply -f infrastructure_tooling/vault_ingress/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/vault_ingress/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

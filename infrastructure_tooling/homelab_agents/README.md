@@ -62,7 +62,7 @@ ssh -t root@k3s-01 'read -rsp "Slack webhook URL: " T; echo
   kubectl -n vault exec -i vault-0 -- sh -c "read -r VAULT_TOKEN; export VAULT_TOKEN; vault kv put kv/slack-alerts webhook_url=-"'
 ```
 
-(The Vault UI works too: `http://k3s-01:31080/ui`, KV v2 engine `kv`.) A new value is picked up on the next run.
+(The Vault UI works too: `https://vault.bmosan.com/ui` from the tailnet, KV v2 engine `kv`.) A new value is picked up on the next run.
 
 The Vault side (runtime, not GitOps; already applied):
 
@@ -77,7 +77,7 @@ vault write auth/kubernetes/role/homelab-agents \
   audience=vault token_policies=homelab-agents-read token_ttl=10m token_max_ttl=15m
 ```
 
-Vault is reached at `http://k3s-01.tail25c6fe.ts.net:31080` (the NodePort; the MagicDNS name keeps the traffic inside Tailscale).
+Vault is reached at `https://vault.bmosan.com`, its tailnet-only ingress ([`vault_ingress`](../vault_ingress/README.md)).
 
 ## Operating it
 

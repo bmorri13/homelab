@@ -17,7 +17,7 @@ class ClientError(Exception):
 
 
 def _http(method, url, body=None, headers=None, context=None, timeout=60, raw_body=None):
-    if not url.startswith(("https://", "http://192.168.4.11:", config.VAULT_ADDR + "/")):
+    if not url.startswith(("https://", "http://192.168.4.11:")):
         raise ClientError(f"refusing URL scheme/host: {url[:40]}")
     data = raw_body if raw_body is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(url, data=data, method=method)

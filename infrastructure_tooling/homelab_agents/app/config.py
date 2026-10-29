@@ -11,10 +11,8 @@ GATEWAY_URL = "https://mcp.bmosan.com/mcp"
 GATEWAY_AUDIENCE = "https://mcp.bmosan.com"
 GATEWAY_TOKEN_SECONDS = 3600
 
-# Vault on k3s-01 is only exposed as NodePort 31080 (plain HTTP). The MagicDNS name keeps
-# the connection inside Tailscale (WireGuard) end to end; vault.bmosan.com has no live
-# ingress on k3s-01.
-VAULT_ADDR = "http://k3s-01.tail25c6fe.ts.net:31080"
+# Tailnet-only ingress on k3s-01 (infrastructure_tooling/vault_ingress), Let's Encrypt cert.
+VAULT_ADDR = "https://vault.bmosan.com"
 VAULT_ROLE = "homelab-agents"
 # kv/slack-alerts: webhook_url. kv/cribl-hec: token. kv/homelab-agents: claude_oauth_token.
 VAULT_SLACK = "slack-alerts"
