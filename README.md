@@ -10,7 +10,7 @@
 
 ## Architecture
 
-![Infrastructure Overview](docs/images/infrastructure_overview.png)
+![Homelab infrastructure](docs/images/infrastructure.drawio.svg)
 
 More diagrams (deployment, data flow, the agents) are in [docs/architecture.md](docs/architecture.md).
 
