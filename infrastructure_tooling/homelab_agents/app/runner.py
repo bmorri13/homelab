@@ -13,6 +13,7 @@ runner's own facts first and the agent's triage after them.
 
 --dry-run      print instead of posting to Slack; state is not marked as notified
 --local-login  use this user's own Claude Code login instead of the Vault token (testing)
+--collect-only build the queue and print it; no model, no Slack, no state changes
 """
 import argparse
 import asyncio
@@ -110,7 +111,7 @@ SEV_EMOJI = {"critical": ":red_circle:", "high": ":large_orange_circle:", "mediu
 QUIET_VERDICTS = {"expected_activity", "benign", "transient"}
 
 
-def slack_message(agent, items, untriaged, notes):
+def slack_message(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN):
     esc = clients.slack_escape
     title = config.AGENTS[agent]["title"]
     blocks = [{"type": "header", "text": {"type": "plain_text", "text": f"{title}: {len(items) + len(untriaged)} new"}}]
@@ -132,7 +133,7 @@ def slack_message(agent, items, untriaged, notes):
             f"• {esc(i['title'])} ({esc(i['host'] or '-')}): {esc(i['triage']['summary'])}" for i in quiet)
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}})
     if untriaged:
-        text = f"*Not triaged (over {config.MAX_ITEMS_PER_RUN} this run):*\n" + "\n".join(
+        text = f"*Not triaged (over {cap} this run):*\n" + "\n".join(
             f"• {SEV_EMOJI.get(i['severity'], '')} {esc(i['title'])} ({esc(i['host'] or '-')})" for i in untriaged)
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}})
     for n in notes:
@@ -140,13 +141,13 @@ def slack_message(agent, items, untriaged, notes):
     return {"text": f"{title}: {len(items) + len(untriaged)} new", "blocks": blocks[:50]}
 
 
-def hec_event(agent, event, **fields):
+def hec_event(agent, kind, **fields):
     return {"time": time.time(), "host": socket.gethostname(), "index": config.HEC_INDEX,
             "sourcetype": config.HEC_SOURCETYPE, "source": f"homelab-agents:{agent}",
-            "event": {"agent": agent, "event": event, **fields}}
+            "event": {"agent": agent, "kind": kind, **fields}}
 
 
-async def run(agent, dry_run, local_login, limit):
+async def run(agent, dry_run, local_login, limit, collect_only=False):
     started = time.time()
     state = State(agent)
     summary = {"collected": 0, "new": 0, "reposted": 0, "quiet": 0, "triaged": 0, "triage_errors": 0,
@@ -163,7 +164,7 @@ async def run(agent, dry_run, local_login, limit):
         webhook = vault.kv(config.VAULT_SLACK).get("webhook_url")
         hec_token = vault.kv(config.VAULT_HEC).get("token")
         claude_env = {}
-        if not local_login:
+        if not local_login and not collect_only:
             oauth = vault.kv(config.VAULT_AGENTS).get("claude_oauth_token")
             if not oauth:
                 raise RuntimeError("no claude_oauth_token in Vault kv/homelab-agents")
@@ -174,6 +175,10 @@ async def run(agent, dry_run, local_login, limit):
         gtoken = clients.mint_token(rtoken, config.AGENTS[agent]["service_account"],
                                     config.GATEWAY_AUDIENCE, config.GATEWAY_TOKEN_SECONDS)
         items = queues.COLLECTORS[agent](clients.Gateway(gtoken))
+        if collect_only:
+            print(json.dumps(items, indent=2, default=str))
+            print(json.dumps({"collected": len(items)}))
+            return 0
         to_triage, to_repost, quiet = state.classify(items)
         summary.update(collected=len(items), new=len(to_triage), reposted=len(to_repost), quiet=len(quiet))
 
@@ -190,12 +195,12 @@ async def run(agent, dry_run, local_login, limit):
                 summary["triage_errors"] += 1
             state.save_triage(item["key"], item["triage"])
             events.append(hec_event(agent, "item", key=item["key"], title=item["title"], severity=item["severity"],
-                                    host=item["host"], source=item["source"], triage=item["triage"],
+                                    target_host=item["host"], origin=item["source"], triage=item["triage"],
                                     error=item.get("triage_error"), **stats))
 
         report = [i for i in triage_now + to_repost if i.get("triage") or i.get("triage_error")]
         if report or untriaged:
-            message = slack_message(agent, report, untriaged, notes)
+            message = slack_message(agent, report, untriaged, notes, cap)
             if dry_run:
                 print(json.dumps(message, indent=2))
             elif not webhook:
@@ -237,8 +242,9 @@ def main():
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--local-login", action="store_true")
     p.add_argument("--limit", type=int, default=config.MAX_ITEMS_PER_RUN)
+    p.add_argument("--collect-only", action="store_true")
     a = p.parse_args()
-    sys.exit(asyncio.run(run(a.agent, a.dry_run, a.local_login, a.limit)))
+    sys.exit(asyncio.run(run(a.agent, a.dry_run, a.local_login, a.limit, a.collect_only)))
 
 
 if __name__ == "__main__":

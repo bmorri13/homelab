@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 id homelab-agents >/dev/null 2>&1 ||
   useradd --system --home-dir /var/lib/homelab-agents --shell /usr/bin/nologin homelab-agents
 install -d -m 755 /opt/homelab-agents
-install -d -m 700 /etc/homelab-agents
+install -d -m 755 /etc/homelab-agents
 
 rm -rf /opt/homelab-agents/app.new
 cp -r app /opt/homelab-agents/app.new

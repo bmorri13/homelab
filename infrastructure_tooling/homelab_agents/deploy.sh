@@ -18,7 +18,7 @@ COPYFILE_DISABLE=1 tar --no-xattrs --exclude __pycache__ -czf - app systemd inst
   ssh "$HOST" 'rm -rf /root/homelab-agents && mkdir -p /root/homelab-agents && tar -xzf - -C /root/homelab-agents'
 
 ssh "$K3S" cat /var/lib/rancher/k3s/server/tls/server-ca.crt |
-  ssh "$HOST" 'install -d -m 700 /etc/homelab-agents && cat > /etc/homelab-agents/k3s-ca.crt'
+  ssh "$HOST" 'install -d -m 755 /etc/homelab-agents && cat > /etc/homelab-agents/k3s-ca.crt'
 
 if [[ "${1:-}" == "--mint-token" ]]; then
   ssh "$K3S" kubectl -n toolhive-clients create token agent-runner --duration 2160h |

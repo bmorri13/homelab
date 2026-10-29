@@ -242,7 +242,7 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 
 - Most run every 15 minutes over `[-20m@m, -5m@m)`. "First seen" detections search their own 14- or 30-day baseline. All suppress repeats per entity (1 to 24 hours).
 - Every finding is written to `index=security sourcetype=homelab:detection` as one JSON event (Log Event action), with `detection`, `severity`, `technique`, `tactic`, `attack_strategy`, `host`, `user`, `src`, `object` and `detail`. This is the queue the security agent reads.
-- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`).
+- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`.
 - The `homelab_slack` alert action (`bin/homelab_slack.py`) is installed but not attached to any search, kept as a fallback if the agents are down for long. To use it, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
 
   ```bash
