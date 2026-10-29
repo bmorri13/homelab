@@ -10,6 +10,16 @@ every token minted for it is denied from then on.
 {{- $subs = append $subs (printf "system:serviceaccount:%s:%s" $.Values.auth.clientNamespace .) }}
 {{- end }}
 {{- $allowed := printf "%s.contains(principal.claim_sub)" ($subs | toJson) }}
+{{- /*
+Agents (auth.agents) are a separate set of ServiceAccounts. They are not in
+$subs, so none of the client rules below apply to them; each gets only its own
+tool allowlist.
+*/}}
+{{- $agentSubs := list }}
+{{- range $agent, $_ := .Values.auth.agents }}
+{{- $agentSubs = append $agentSubs (printf "system:serviceaccount:%s:%s" $.Values.auth.clientNamespace $agent) }}
+{{- end }}
+{{- $isAgent := printf "%s.contains(principal.claim_sub)" ($agentSubs | toJson) }}
 apiVersion: toolhive.stacklok.dev/v1beta1
 kind: VirtualMCPServer
 metadata:
@@ -31,13 +41,14 @@ spec:
       type: inline
       inline:
         policies:
-          # Only the machine ServiceAccounts in auth.clients. Every other
+          # Only the machine ServiceAccounts in auth.clients (and, for listing,
+          # the agents in auth.agents). Every other
           # identity (including valid tokens from other namespaces or from
           # removed clients) matches no permit and is denied by Cedar's
           # default-deny.
           - |-
             permit(principal, action in [Action::"list_tools", Action::"list_prompts", Action::"list_resources"], resource)
-            when { principal has claim_sub && {{ $allowed }} };
+            when { principal has claim_sub && ({{ $allowed }} || {{ $isAgent }}) };
           # Read-only tools: annotated by the server, or vouched for in values.
           - |-
             permit(principal, action == Action::"call_tool", resource)
@@ -53,6 +64,20 @@ spec:
             permit(principal, action == Action::"call_tool", resource == Tool::{{ . | quote }})
             when { principal has claim_sub && {{ $allowed }} };
           {{- end }}
+          # Agents: exactly the tools listed for each under auth.agents. (Cedar
+          # allows a set only in the when clause, not in the resource scope.)
+          {{- range $agent, $cfg := .Values.auth.agents }}
+          {{- $tools := list }}
+          {{- range $cfg.tools }}{{ $tools = append $tools (printf "Tool::%s" (. | quote)) }}{{ end }}
+          - |-
+            permit(principal, action == Action::"call_tool", resource)
+            when { principal has claim_sub && principal.claim_sub == {{ printf "system:serviceaccount:%s:%s" $.Values.auth.clientNamespace $agent | quote }} && resource in [{{ join ", " $tools }}] };
+          {{- end }}
+          # The agents' Splunk backend (read-only mcp-agent user) is for agents
+          # only, whatever readOnlyHint or extraPolicies would otherwise allow.
+          - |-
+            forbid(principal, action == Action::"call_tool", resource)
+            when { resource has name && resource.name like "splunk-agent_*" && !(principal has claim_sub && {{ $isAgent }}) };
           {{- range .Values.authz.extraPolicies }}
           - {{ . | quote }}
           {{- end }}

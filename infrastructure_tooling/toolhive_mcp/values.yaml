@@ -375,6 +375,55 @@ remoteServers:
           cpu: 200m
           memory: 128Mi
 
+  splunk-agent:
+    # Same Splunk MCP Server app as `splunk`, as the user mcp-agent (role
+    # mcp_agent: search and read only, no SPL that writes, bounded search
+    # quotas). Only the agents in auth.agents can see or call these tools; it is
+    # hidden from the client machines. Tools: splunk-agent_splunk_*.
+    console:
+      title: Splunk (agents)
+      description: >-
+        Read-only Splunk for the security and operations agents, as the
+        mcp-agent user.
+    enabled: true
+    egress:
+      - cidr: 192.168.4.11/32
+        ports: [8089]
+    spec:
+      remoteUrl: https://192.168.4.11:8089/services/mcp
+      allowPrivateEndpoint: true
+      transport: streamable-http
+      proxyPort: 8080
+      headerForward:
+        addHeadersFromSecret:
+          - headerName: Authorization
+            valueSecretRef:
+              name: splunk-agent-mcp
+              key: authorization
+      resourceOverrides:
+        proxyDeployment:
+          env:
+            # Go reads this as the whole trust store, which is all the proxy
+            # needs: it only ever calls Splunk.
+            - {name: SSL_CERT_FILE, value: /etc/mcp-trusted-cas/homelab-ca.crt}
+      podTemplateSpec:
+        spec:
+          containers:
+            - name: toolhive
+              volumeMounts:
+                - {name: trusted-cas, mountPath: /etc/mcp-trusted-cas, readOnly: true}
+          volumes:
+            - name: trusted-cas
+              configMap:
+                name: mcp-trusted-cas
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
 # ExternalSecrets pulled from Vault (ClusterSecretStore vault-backend) into
 # toolhive-mcp, for MCP servers to reference via spec.secrets.
 #
@@ -434,6 +483,21 @@ externalSecrets:
         from monitoring_stack/splunk/scripts/splunk-mcp-token.sh. Valid for at
         most 180 days.
       vaultPath: kv/apiary/shared/splunk
+      fields:
+        - {key: token, label: MCP token, secret: true}
+      template:
+        authorization: "Bearer {{ .token }}"
+
+    splunk-agent-mcp:
+      enabled: true
+      server: splunk-agent
+      title: Splunk MCP token (agents)
+      description: >-
+        Encrypted Splunk MCP token for the mcp-agent user (role mcp_agent),
+        from MCP_USER=mcp-agent MCP_ROLE=mcp_agent
+        monitoring_stack/splunk/scripts/splunk-mcp-token.sh. Valid for at most
+        180 days.
+      vaultPath: kv/apiary/shared/splunk-agent
       fields:
         - {key: token, label: MCP token, secret: true}
       template:
@@ -509,6 +573,57 @@ auth:
     - macbook-air
     - windows-desktop
     - linux-vm
+  # Agents: one ServiceAccount each (same namespace), with their own explicit
+  # tool allowlist instead of the client rules above. An agent can list and
+  # call only the tools named here (tools/list is filtered the same way), never
+  # the writeTools, and is the only kind of caller that can use splunk-agent_*.
+  # Use aggregated (prefixed) names. Tokens: ./mint-client-token.sh <agent> 1h
+  agents:
+    # Security agent: detections queue, fired alerts, raw security data.
+    agent-sec:
+      tools:
+        - splunk-agent_splunk_run_query
+        - splunk-agent_splunk_get_indexes
+        - splunk-agent_splunk_get_index_info
+        - splunk-agent_splunk_get_metadata
+        - splunk-agent_splunk_get_sourcetypes
+        - splunk-agent_splunk_get_info
+        - splunk-agent_splunk_list_alerts
+        - splunk-agent_splunk_get_alert_details
+        - splunk-agent_splunk_list_fired_alerts
+        - splunk-agent_splunk_get_fired_alert_details
+        - splunk-agent_splunk_get_knowledge_objects
+        - argocd_list_applications
+        - argocd_get_application
+        - argocd_get_application_events
+        - argocd_get_resource_events
+    # Operations agent: metrics and logs in Splunk, Argo CD app health, and
+    # Cribl's pipeline health.
+    agent-ops:
+      tools:
+        - splunk-agent_splunk_run_query
+        - splunk-agent_splunk_get_indexes
+        - splunk-agent_splunk_get_index_info
+        - splunk-agent_splunk_get_metadata
+        - splunk-agent_splunk_get_sourcetypes
+        - splunk-agent_splunk_get_info
+        - splunk-agent_splunk_list_alerts
+        - splunk-agent_splunk_get_alert_details
+        - splunk-agent_splunk_list_fired_alerts
+        - splunk-agent_splunk_get_fired_alert_details
+        - splunk-agent_splunk_get_knowledge_objects
+        - argocd_list_applications
+        - argocd_get_application
+        - argocd_get_application_resource_tree
+        - argocd_get_application_events
+        - argocd_get_resource_events
+        - argocd_get_application_workload_logs
+        - cribl_cribl_getSystemMetrics
+        - cribl_cribl_getAlerts
+        - cribl_cribl_listWorkerGroups
+        - cribl_cribl_getSources
+        - cribl_cribl_getDestinations
+        - cribl_cribl_getPipelines
 
 # ---------------------------------------------------------------------------
 # Authorization (Cedar, enforced by the vMCP on every list/call).
