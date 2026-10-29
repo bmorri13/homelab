@@ -23,7 +23,10 @@ WORKDIR /app
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python --version && python -m venv /app/venv
 COPY requirements.txt /tmp/requirements.txt
-RUN /app/venv/bin/pip install --require-hashes --only-binary=:all: -r /tmp/requirements.txt
+RUN /app/venv/bin/pip install --require-hashes --only-binary=:all: -r /tmp/requirements.txt \
+ # pip has no job at run time; don't ship it into the runtime image.
+ && /app/venv/bin/python -m pip uninstall --yes pip \
+ && find /app/venv -name __pycache__ -prune -exec rm -rf {} +
 
 # --- skills: Splunk agent skills, pinned to one commit -----------------------------------
 FROM ${PYTHON_DEV} AS skills
