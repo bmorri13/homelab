@@ -43,16 +43,11 @@ DOC_DOMAINS = ["help.splunk.com", "docs.splunk.com", "dev.splunk.com", "lantern.
 
 AGENTS = {
     "sec": {"title": "Security agent", "renotify_hours": 24,
-            "skills": ["alerting-and-notable-workflows", "field-extraction-and-cim-mapping",
-                       "splunk-identity-saml-readiness-advisor", "upgrade-and-vulnerability-readiness-advisor",
-                       "vulnerability-remediation-and-compliance-readiness", "splunk-enterprise-administration-advisor",
-                       "search-and-dashboard-troubleshooter", "splunk-product-question-navigator"]},
+            "skills": ["search-and-dashboard-troubleshooter", "field-extraction-and-cim-mapping",
+                       "alerting-and-notable-workflows"]},
     "ops": {"title": "Ops agent", "renotify_hours": 12,
-            "skills": ["search-and-dashboard-troubleshooter", "dashboard-report-alert-performance-advisor",
+            "skills": ["dashboard-report-alert-performance-advisor", "search-and-dashboard-troubleshooter",
                        "search-performance-optimizer", "forwarder-and-data-ingest-doctor",
                        "hec-setup-and-troubleshooting", "splunk-health-monitoring-and-diagnostic-collection",
-                       "incident-diagnosis-specialist", "index-and-storage-management-advisor",
-                       "license-and-capacity-planning-advisor", "data-model-and-search-acceleration",
-                       "knowledge-object-governance", "alerting-and-notable-workflows",
-                       "splunk-enterprise-administration-advisor", "splunk-product-question-navigator"]},
+                       "index-and-storage-management-advisor"]},
 }

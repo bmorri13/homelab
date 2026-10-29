@@ -479,6 +479,16 @@
       "options": {
         "count": 20
       }
+    },
+    "viz_ag_skills": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_ag_skills"
+      },
+      "title": "Skills used by the agents (last 7 days): triaged items per Splunk agent skill; (none) = triaged without a skill",
+      "options": {
+        "count": 20
+      }
     }
   },
   "dataSources": {
@@ -857,13 +867,25 @@
         },
         "refresh": "5m"
       }
+    },
+    "ds_ag_skills": {
+      "type": "ds.search",
+      "name": "ag_skills",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent kind=item triage.verdict=* | eval skills=null() | foreach tools_used.Skill:* [eval skills=if(isnotnull('<<FIELD>>'), mvappend(skills, \"<<MATCHSTR>>\"), skills)] | eval Skill=coalesce(skills, \"(none)\") | mvexpand Skill | eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\") | stats count as Items by Agent Skill | sort Agent - Items",
+        "queryParameters": {
+          "earliest": "-7d",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
     }
   },
   "layout": {
     "type": "absolute",
     "options": {
       "width": 1200,
-      "height": 4180,
+      "height": 4400,
       "display": "auto-scale"
     },
     "structure": [
@@ -1245,6 +1267,16 @@
           "y": 3920,
           "w": 1200,
           "h": 260
+        }
+      },
+      {
+        "item": "viz_ag_skills",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 4180,
+          "w": 1200,
+          "h": 220
         }
       }
     ],

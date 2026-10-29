@@ -19,14 +19,11 @@ def main():
     import infrastructure_overview
     infrastructure_overview.generate()
 
-    import data_logging_flow
-    data_logging_flow.generate()
+    import deployment_pipeline
+    deployment_pipeline.generate()
 
-    import gitops_ci_pipeline
-    gitops_ci_pipeline.generate()
-
-    import homelab_overview_png
-    homelab_overview_png.generate()
+    import data_flow
+    data_flow.generate()
 
     print("\nAll diagrams generated successfully.")
 

@@ -59,30 +59,64 @@ VMS = {
     ],
 }
 
-# K8s clusters
+# Proxmox nodes (hardware label shown in the diagrams)
+NODES = {
+    "proxmox": "Intel NUC",
+    "proxmox2": "Beelink Mini PC",
+    "proxmox3": "",
+}
+
+# Notes shown under a VM's name (what it is for, when the name doesn't say)
+VM_NOTES = {
+    "github-action-runner": "Terraform CI runner",
+    "docker-compose-03": "Docker + secondary k3s",
+    "security-tooling-01": "Cribl, Splunk, OpenCanary",
+    "k3s-01": "primary k3s",
+}
+
+# Kubernetes workloads by cluster (Argo CD applications on k3s-01, grouped)
 K8S_CLUSTERS = {
-    "Primary K3s": {
-        "node": "Intel NUC (proxmox)",
-        "components": ["ArgoCD", "Vault", "Cert Manager", "MetalLB", "ESO", "Traefik", "ARC Controller", "ARC Runners"],
+    "k3s-01": {
+        "Platform": ["Argo CD", "Vault", "External Secrets", "cert-manager", "Traefik"],
+        "Security": ["Falco + k8saudit", "OTel collector"],
+        "MCP gateway": ["ToolHive vMCP"],
+        "Agents": ["homelab-agent-sec", "homelab-agent-ops"],
+        "CI": ["ARC runners"],
+        "Apps": ["Apiary", "Stirling-PDF", "Uptime Kuma", "alexprinter"],
     },
-    "Secondary K3s": {
-        "node": "docker-compose-03 VM (proxmox2)",
-        "components": ["Vault", "ESO", "Tailscale Operator"],
+    "docker-compose-03 (secondary)": {
+        "Platform": ["Vault", "External Secrets", "Tailscale operator"],
     },
 }
 
 # Network
 NETWORK = {
     "bridge": "vmbr0",
-    "metallb_pool": "192.168.3.100-199",
     "domain": "bmosan.com",
+    "tailnet_only": ["mcp.bmosan.com", "vault.bmosan.com", "apiary.bmosan.com"],
+    "hec": "192.168.4.11:8088",
+    "honeypot": "192.168.4.240",
 }
 
-# Monitoring stack services
-ELASTIC_SERVICES = ["es01", "kibana", "logstash01", "filebeat01", "metricbeat01"]
-CRIBL_SERVICES = ["cribl-leader", "cribl-worker"]
+# Log and metric sources, all sent to Cribl's HEC input
+SOURCES = [
+    "VM + Proxmox host agents (OTel)\njournald, Docker logs, host metrics",
+    "Proxmox OTLP metrics",
+    "k3s OTel DaemonSet\npod logs, events, cluster metrics",
+    "k3s API audit log",
+    "Falco (10 VMs + k3s, k8saudit)",
+    "Vault audit",
+    "UniFi syslog + IDS",
+    "OpenCanary honeypot",
+    "App logs (daily news)",
+    "Agent run logs",
+]
+
+SPLUNK_INDEXES = ["security", "audit", "infra", "k8s", "apps", "network", "metrics", "ai_agents"]
 
 
 def vm_label(vm):
     """Format a VM label with resource info."""
-    return f"{vm['name']}\n({vm['cores']}c / {vm['mem_gb']}GB / {vm['disk_gb']}GB)"
+    note = VM_NOTES.get(vm["name"])
+    label = f"{vm['name']}\n({vm['cores']}c / {vm['mem_gb']}GB / {vm['disk_gb']}GB)"
+    return f"{label}\n{note}" if note else label

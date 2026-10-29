@@ -14,26 +14,18 @@ import shutil
 import sys
 
 # Advisory and diagnostic skills that work from read-only evidence, which is all the
-# agents have (Splunk searches and REST reads through the gateway).
+# agents have (Splunk searches and REST reads through the gateway). Only the skills
+# some agent lists in app/config.py AGENTS; each agent's list is what it may invoke.
 SKILLS = [
     "alerting-and-notable-workflows",
     "dashboard-report-alert-performance-advisor",
-    "data-model-and-search-acceleration",
     "field-extraction-and-cim-mapping",
     "forwarder-and-data-ingest-doctor",
     "hec-setup-and-troubleshooting",
-    "incident-diagnosis-specialist",
     "index-and-storage-management-advisor",
-    "knowledge-object-governance",
-    "license-and-capacity-planning-advisor",
     "search-and-dashboard-troubleshooter",
     "search-performance-optimizer",
-    "splunk-enterprise-administration-advisor",
     "splunk-health-monitoring-and-diagnostic-collection",
-    "splunk-identity-saml-readiness-advisor",
-    "splunk-product-question-navigator",
-    "upgrade-and-vulnerability-readiness-advisor",
-    "vulnerability-remediation-and-compliance-readiness",
 ]
 
 src = pathlib.Path(sys.argv[1]) / "skills"

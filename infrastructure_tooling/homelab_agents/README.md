@@ -22,6 +22,37 @@ Results go to Slack as Block Kit cards, and every run and item is logged to Splu
 
 `image/app/runner.py` is deterministic; the model only triages.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant K as CronJob pod<br/>(agent-sec / agent-ops)
+    participant V as Vault
+    participant G as MCP gateway<br/>(vmcp-homelab)
+    participant S as Splunk / Argo CD
+    participant D as SQLite state<br/>(PVC)
+    participant C as Claude Agent SDK<br/>(Anthropic API)
+    participant SL as Slack
+    participant H as Splunk HEC<br/>(index=ai_agents)
+
+    Note over K: kubelet projects two tokens:<br/>gateway (1 h), Vault (10 min)
+    K->>V: log in (role homelab-agents)
+    V-->>K: Claude token, Slack webhook, HEC token
+    K->>V: revoke Vault token
+    K->>G: fixed queue searches (agent's own identity)
+    G->>S: Splunk searches, Argo CD app list
+    S-->>K: rows → items with stable keys
+    K->>D: drop items posted inside the renotify window
+    loop each new item (up to 10)
+        K->>C: prompt + runbook + item (untrusted)
+        C->>G: read-only MCP tools
+        C->>C: Skill, Read (skills only), WebFetch (Splunk docs only)
+        C-->>K: JSON verdict, severity, evidence, next steps
+        K->>D: record item
+    end
+    K->>SL: alert card per non-routine item + one digest card
+    K->>H: run and item logs
+```
+
 1. **Credentials.** The pod runs as the agent's own ServiceAccount (`agent-sec` or `agent-ops`, in `toolhive-clients`, created by the `toolhive_mcp` chart) with no Kubernetes API token. The kubelet projects two tokens into it, bound to the pod and rotated automatically:
    - audience `https://mcp.bmosan.com`, 1 hour: the gateway token;
    - audience `vault`, 10 minutes: logs in to Vault (role `homelab-agents`), reads the Slack webhook, the Cribl HEC token and the Claude subscription token, and revokes the Vault token.
@@ -43,11 +74,15 @@ Results go to Slack as Block Kit cards, and every run and item is logged to Splu
 ## Splunk agent skills
 
 The image bakes in a selection of [Splunk's agent skills](https://github.com/splunk/splunk-agent-skills) (Apache-2.0), pinned to one commit (`SKILLS_COMMIT` in the Dockerfile), at `/app/workspace/.claude/skills`. `select_skills.py`:
-- copies only the advisory and diagnostic skills that work from read-only evidence (searches, health, ingestion and HEC, indexes and storage, CIM, alerting, Splunk advisories);
+- copies only the advisory and diagnostic skills that work from read-only evidence and that some agent uses (9: scheduled-search performance and troubleshooting, search performance, ingestion and HEC, Splunk health, indexes and storage, field extraction and CIM, alerting);
 - drops scripts and other non-Markdown files;
 - strips each skill's `allowed-tools` frontmatter, so no skill can pre-approve a tool.
 
 Skills that need a shell or write files (`splunk-search` via `splunkctl`, the visualization and setup-page builders, Splunk Cloud admin) are left out. Each agent gets its own list (`config.AGENTS[...]["skills"]`).
+
+Each list is short on purpose: every skill's description is in the model's context on every turn, and similar descriptions compete. The security agent has 3 (is the finding itself right: search logic, fields, alert throttling); the ops agent has 7 (Splunk scheduler, ingestion, HEC, health, storage). The model decides when to invoke one, so the prompts say which skill fits which kind of item and the runbooks name the skill where one applies (`splunk-health.md`, `telemetry.md`, `capacity.md`, `general.md`, `secret-leak.md`).
+
+Whether they are used shows in Splunk: each item's `tools_used` has a `Skill:<name>` count, and the *Skills used by the agents* panel on *Homelab Operations* charts it. To add a skill: add it to `SKILLS` in `select_skills.py` and to the agent's list, say in the prompt when it fits, and name it in the runbooks it belongs to.
 
 To update the skills: change `SKILLS_COMMIT`, read the diff of the skills you ship (they become part of the agents' instructions), and push.
 
@@ -131,6 +166,18 @@ In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time sour
 - had every run in the last hour fail;
 - had every triage in the last hour fail (this is how an expired Claude token shows up);
 - got Kubernetes warnings for its CronJob, Jobs or pods (failed job, image pull, scheduling, deadline).
+
+```mermaid
+flowchart LR
+    R["index=ai_agents<br/>run + item logs"] --> W
+    E["index=k8s<br/>Warning events for the CronJobs,<br/>Jobs and pods (not UnexpectedJob)"] --> W
+    W{"Agents - not running or failing<br/>security-tooling-01, :05 and :35"}
+    W -->|"no run in 75 min"| P
+    W -->|"every run in the last hour failed"| P
+    W -->|"every triage in the last hour failed"| P
+    W -->|"Kubernetes warnings"| P
+    P["homelab_slack action<br/>suppressed 6 h per agent + problem type"] --> SL["Slack card"]
+```
 
 It's suppressed per agent and problem type for 6 hours. Splunk runs on security-tooling-01, so it still fires if k3s-01 is down. The webhook it uses is a copy of the Vault one in Splunk's credential store; after changing `kv/slack-alerts`, refresh it:
 
