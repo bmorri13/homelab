@@ -1,0 +1,49 @@
+---
+# Tailnet-only entry point for Vault's UI and API: https://vault.bmosan.com
+#
+# Same pattern as mcp.bmosan.com and apiary.bmosan.com: Traefik on k3s-01 is
+# hostNetwork and listens on every node interface, the Cloudflare record
+# (DNS-only) points at k3s-01's tailnet IP 100.124.194.87, and the ipAllowList
+# below answers 403 to anything not coming from the tailnet, including the LAN
+# path (192.168.4.98 + Host header). The certificate is DNS-01 via Cloudflare,
+# so nothing has to be reachable from the internet.
+#
+# Vault itself (the hashicorp/vault chart, Argo CD app "vault") is not changed;
+# this only routes to its existing Service on 8200.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: tailnet-only
+  namespace: vault
+spec:
+  ipAllowList:
+    sourceRange:
+      - 100.64.0.0/10
+      - fd7a:115c:a1e0::/48
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault
+  namespace: vault
+  annotations:
+    cert-manager.io/cluster-issuer: bmosan-cert
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.middlewares: vault-tailnet-only@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: vault.bmosan.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vault
+                port:
+                  number: 8200
+  tls:
+    - hosts:
+        - vault.bmosan.com
+      secretName: vault-bmosan-com-tls
