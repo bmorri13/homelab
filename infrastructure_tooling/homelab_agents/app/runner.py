@@ -23,6 +23,8 @@ import socket
 import sys
 import time
 import traceback
+import urllib.parse
+import uuid
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
@@ -41,16 +43,20 @@ def schema(agent):
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "confidence", "severity", "summary", "evidence", "next_steps"],
+        "required": ["verdict", "confidence", "severity", "headline", "summary", "evidence", "next_steps"],
         "properties": {
             "verdict": {"type": "string", "enum": TRIAGE_SCHEMA[agent]},
+            "headline": {"type": "string", "maxLength": 160,
+                         "description": "One plain sentence for a chat notification, at most 140 characters: "
+                                        "what happened and who or what caused it. No code formatting, no hedging."},
             "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
             "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
             "summary": {"type": "string", "description": "Two or three sentences: what happened and why you think so."},
             "evidence": {"type": "array", "items": {"type": "string"}, "maxItems": 6,
                          "description": "Facts you checked, each with the query or tool that showed it."},
-            "next_steps": {"type": "array", "items": {"type": "string"}, "maxItems": 5,
-                           "description": "What a person should do or check next. Empty if nothing."},
+            "next_steps": {"type": "array", "items": {"type": "string"}, "maxItems": 3,
+                           "description": "What a person should do or check next, one short line each. "
+                                          "Empty when nothing needs doing."},
         },
     }
 
@@ -109,36 +115,105 @@ async def triage(agent, item, gateway_token, claude_env):
 SEV_EMOJI = {"critical": ":red_circle:", "high": ":large_orange_circle:", "medium": ":large_yellow_circle:",
              "low": ":white_circle:"}
 QUIET_VERDICTS = {"expected_activity", "benign", "transient"}
+VERDICT_LABEL = {"expected_activity": "Expected activity", "benign": "Benign", "suspicious": "Suspicious",
+                 "likely_malicious": "Likely malicious", "inconclusive": "Inconclusive", "transient": "Transient",
+                 "needs_attention": "Needs attention", "urgent": "Urgent"}
+AGENT_ICON = {"sec": ":shield:", "ops": ":gear:"}
 
 
-def slack_message(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN):
+def _short(title):
+    return title[5:] if title.startswith("HL - ") else title
+
+
+def _headline(t):
+    """The agent's one-line headline; items triaged before that field existed fall back
+    to the first sentence of the summary."""
+    if t.get("headline"):
+        return t["headline"]
+    first = t.get("summary", "").split(". ")[0].rstrip(".")
+    return first[:157] + "..." if len(first) > 160 else first
+
+
+def _grouped(items):
+    """Collapse items with the same title into one line with a count, keeping order."""
+    groups = {}
+    for i in items:
+        groups.setdefault(_short(i["title"]), []).append(i)
+    return groups
+
+
+def _section(text):
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}}
+
+
+def _context(text):
+    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text[:2900]}]}
+
+
+def splunk_link(agent, run_id):
+    q = f'search index={config.HEC_INDEX} sourcetype={config.HEC_SOURCETYPE} run_id="{run_id}" kind=item ' \
+        "| table title severity target_host triage.verdict triage.summary triage.evidence{} triage.next_steps{}"
+    return f"{config.SPLUNK_WEB}/en-US/app/search/search?" + urllib.parse.urlencode({"q": q, "earliest": "-24h"})
+
+
+def slack_message(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
+    """One message per run. Items that need a look come first, each with the agent's
+    headline, verdict and next steps; routine and untriaged items are one line each,
+    repeats collapsed. The full analysis is in Splunk, linked at the bottom.
+    Everything from logs or the model goes through slack_escape."""
     esc = clients.slack_escape
     title = config.AGENTS[agent]["title"]
-    blocks = [{"type": "header", "text": {"type": "plain_text", "text": f"{title}: {len(items) + len(untriaged)} new"}}]
     loud = [i for i in items if (i.get("triage") or {}).get("verdict") not in QUIET_VERDICTS]
     quiet = [i for i in items if i not in loud]
+    total = len(items) + len(untriaged)
+
+    if total:
+        parts = [f"{len(loud)} to look at" if loud else "nothing needs attention",
+                 f"{len(quiet)} routine" if quiet else None,
+                 f"{len(untriaged)} not triaged" if untriaged else None]
+        headline = f"{title}: " + ", ".join(p for p in parts if p)
+    else:
+        headline = title
+    blocks = [{"type": "header", "text": {"type": "plain_text", "text": f"{headline}"[:150], "emoji": True}}]
+
     for i in loud:
         t = i.get("triage") or {}
-        lines = [f"{SEV_EMOJI.get(i['severity'], '')} *{esc(i['title'])}*  ({esc(i['severity'])}, {esc(i['host'] or '-')})"]
         if t:
-            lines.append(f"*{esc(t['verdict'])}* ({esc(t['confidence'])} confidence, agent says {esc(t['severity'])}): {esc(t['summary'])}")
-            lines += [f"• {esc(e)}" for e in t.get("evidence", [])[:4]]
+            label = VERDICT_LABEL.get(t["verdict"], t["verdict"])
+            text = (f"{SEV_EMOJI.get(t['severity'], '')} *{esc(_short(i['title']))}*\n{esc(_headline(t))}")
             if t.get("next_steps"):
-                lines.append("*Next:* " + esc("; ".join(t["next_steps"])))
+                text += "\n" + "\n".join(f"→ {esc(n)}" for n in t["next_steps"][:3])
+            blocks.append(_section(text))
+            blocks.append(_context(f"*{esc(label)}* · {esc(t['confidence'])} confidence · "
+                                   f"agent says {esc(t['severity'])} · detection: {esc(i['severity'])} · "
+                                   f"{esc(i['host'] or '-')}"))
         else:
-            lines.append(f"_Not triaged: {esc(i.get('triage_error', 'unknown error'))}_")
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)[:2900]}})
+            blocks.append(_section(f"{SEV_EMOJI.get(i['severity'], '')} *{esc(_short(i['title']))}*\n"
+                                   f"Couldn't triage: {esc(i.get('triage_error', 'unknown error')[:200])}"))
+            blocks.append(_context(f"detection: {esc(i['severity'])} · {esc(i['host'] or '-')}"))
+        blocks.append({"type": "divider"})
+
     if quiet:
-        text = "*Looked routine:*\n" + "\n".join(
-            f"• {esc(i['title'])} ({esc(i['host'] or '-')}): {esc(i['triage']['summary'])}" for i in quiet)
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}})
+        lines = []
+        for name, group in _grouped(quiet).items():
+            count = f" ×{len(group)}" if len(group) > 1 else ""
+            lines.append(f"• *{esc(name)}*{count} · {esc(_headline(group[0]['triage']))}")
+        blocks.append(_section(":white_check_mark: *Routine*\n" + "\n".join(lines)))
+
     if untriaged:
-        text = f"*Not triaged (over {cap} this run):*\n" + "\n".join(
-            f"• {SEV_EMOJI.get(i['severity'], '')} {esc(i['title'])} ({esc(i['host'] or '-')})" for i in untriaged)
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}})
-    for n in notes:
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": esc(n)}]})
-    return {"text": f"{title}: {len(items) + len(untriaged)} new", "blocks": blocks[:50]}
+        lines = []
+        for name, group in _grouped(untriaged).items():
+            count = f" ×{len(group)}" if len(group) > 1 else ""
+            sev = max((g["severity"] for g in group), key=queues.SEV_RANK.get)
+            lines.append(f"• {SEV_EMOJI.get(sev, '')} {esc(name)}{count}")
+        blocks.append(_section(f":hourglass: *Not triaged* (over {cap} this run, listed only)\n" + "\n".join(lines)))
+
+    footer = [esc(n) for n in notes]
+    if run_id and items:
+        footer.append(f"<{splunk_link(agent, run_id)}|Full analysis in Splunk>")
+    if footer:
+        blocks.append(_context(" · ".join(footer)))
+    return {"text": headline, "blocks": blocks[:50]}
 
 
 def hec_event(agent, kind, **fields):
@@ -149,6 +224,7 @@ def hec_event(agent, kind, **fields):
 
 async def run(agent, dry_run, local_login, limit, collect_only=False):
     started = time.time()
+    run_id = uuid.uuid4().hex[:12]
     state = State(agent)
     summary = {"collected": 0, "new": 0, "reposted": 0, "quiet": 0, "triaged": 0, "triage_errors": 0,
                "cost_usd": 0.0, "posted": False}
@@ -194,13 +270,13 @@ async def run(agent, dry_run, local_login, limit, collect_only=False):
                 item["triage_error"] = str(e)[:300]
                 summary["triage_errors"] += 1
             state.save_triage(item["key"], item["triage"])
-            events.append(hec_event(agent, "item", key=item["key"], title=item["title"], severity=item["severity"],
+            events.append(hec_event(agent, "item", run_id=run_id, key=item["key"], title=item["title"], severity=item["severity"],
                                     target_host=item["host"], origin=item["source"], triage=item["triage"],
                                     error=item.get("triage_error"), **stats))
 
         report = [i for i in triage_now + to_repost if i.get("triage") or i.get("triage_error")]
         if report or untriaged:
-            message = slack_message(agent, report, untriaged, notes, cap)
+            message = slack_message(agent, report, untriaged, notes, cap, run_id)
             if dry_run:
                 print(json.dumps(message, indent=2))
             elif not webhook:
@@ -227,7 +303,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False):
     summary["duration_s"] = round(time.time() - started, 1)
     summary["notes"] = notes
     state.record_run(started, status, summary)
-    events.append(hec_event(agent, "run", status=status, dry_run=dry_run, **summary))
+    events.append(hec_event(agent, "run", run_id=run_id, status=status, dry_run=dry_run, **summary))
     print(json.dumps({"status": status, **summary}))
     try:
         clients.hec_send(hec_token, events)
