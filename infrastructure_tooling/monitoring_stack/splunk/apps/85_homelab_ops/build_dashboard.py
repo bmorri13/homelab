@@ -218,8 +218,19 @@ S["ag_items"] = (
     "| rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" "
     "| table When Verdict Confidence \"Agent severity\" Item Host What"
 )
+# Splunk agent skills each agent invoked, per triaged item ("(none)" = triaged without one).
+# Each item logs tools_used.Skill:<name> = number of invocations.
+S["ag_skills"] = (
+    "index=ai_agents sourcetype=homelab:agent kind=item triage.verdict=* | eval skills=null() "
+    "| foreach tools_used.Skill:* [eval skills=if(isnotnull('<<FIELD>>'), mvappend(skills, \"<<MATCHSTR>>\"), skills)] "
+    "| eval Skill=coalesce(skills, \"(none)\") | mvexpand Skill "
+    "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\") "
+    "| stats count as Items by Agent Skill | sort Agent - Items"
+)
 
 # Searches that follow the time picker; the rest set their own short windows.
+# Searches with their own fixed window (default: last 24 h).
+WINDOW = {"ag_skills": "-7d"}
 TIMED = {"cpu_busy", "mem_used", "load_per_cpu", "disk_busy", "net_mbps", "disk_mbs", "k8s_phase", "k8s_node"}
 
 # --- visualizations and layout -----------------------------------------------------
@@ -357,6 +368,10 @@ y += 110
 table("viz_ag_items", "ds_ag_items", "Ops agent: triaged items, not routine first")
 place("viz_ag_items", 0, 1200, 260)
 y += 260
+table("viz_ag_skills", "ds_ag_skills",
+      "Skills used by the agents (last 7 days): triaged items per Splunk agent skill; (none) = triaged without a skill")
+place("viz_ag_skills", 0, 1200, 220)
+y += 220
 
 data_sources = {}
 for key, q in S.items():
@@ -364,7 +379,7 @@ for key, q in S.items():
     if key in TIMED:
         ds["options"]["queryParameters"] = {"earliest": "$global_time.earliest$", "latest": "$global_time.latest$"}
     else:
-        ds["options"]["queryParameters"] = {"earliest": "-24h", "latest": "now"}
+        ds["options"]["queryParameters"] = {"earliest": WINDOW.get(key, "-24h"), "latest": "now"}
         ds["options"]["refresh"] = "5m"
     data_sources[f"ds_{key}"] = ds
 
