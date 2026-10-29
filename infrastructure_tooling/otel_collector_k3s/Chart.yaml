@@ -4,5 +4,5 @@ description: OpenTelemetry Collector DaemonSet on k3s-01 - pod logs, Kubernetes 
 version: 0.1.0
 dependencies:
   - name: opentelemetry-collector
-    version: 0.178.0
+    version: 0.178.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
