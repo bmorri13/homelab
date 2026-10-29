@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS items (
     triaged    REAL,          -- when the agent last triaged it
     triage     TEXT,          -- the agent's structured output (JSON)
     notified   REAL,          -- when it was last posted to Slack
+    failures   INTEGER NOT NULL DEFAULT 0,  -- triage attempts that failed in a row
     PRIMARY KEY (agent, key)
 );
 CREATE TABLE IF NOT EXISTS runs (
@@ -36,6 +37,8 @@ class State:
         self.db = sqlite3.connect(os.path.join(config.STATE_DIR, "state.db"))
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        if "failures" not in [r["name"] for r in self.db.execute("PRAGMA table_info(items)")]:
+            self.db.execute("ALTER TABLE items ADD COLUMN failures INTEGER NOT NULL DEFAULT 0")
         self.renotify = config.AGENTS[agent]["renotify_hours"] * 3600
 
     def classify(self, items, now=None):
@@ -65,9 +68,17 @@ class State:
         return to_triage, to_repost, quiet
 
     def save_triage(self, key, triage):
-        self.db.execute("UPDATE items SET triaged=?, triage=? WHERE agent=? AND key=?",
+        self.db.execute("UPDATE items SET triaged=?, triage=?, failures=0 WHERE agent=? AND key=?",
                         (time.time(), json.dumps(triage) if triage is not None else None, self.agent, key))
         self.db.commit()
+
+    def triage_failed(self, key):
+        """Count a failed triage and return how many failed in a row. The item stays
+        untriaged, so the next run tries it again."""
+        self.db.execute("UPDATE items SET failures=failures+1 WHERE agent=? AND key=?", (self.agent, key))
+        self.db.commit()
+        return self.db.execute("SELECT failures FROM items WHERE agent=? AND key=?",
+                               (self.agent, key)).fetchone()["failures"]
 
     def mark_notified(self, keys):
         now = time.time()
