@@ -3,7 +3,8 @@ Client identities. One ServiceAccount per machine (auth.clients) and per agent
 (auth.agents); nothing runs here. Tokens are minted out of band (see README)
 with audience {{ .Values.auth.audience }},
 which the Kubernetes API server itself rejects, so a leaked MCP token is not
-a cluster credential. These SAs are bound to no Roles.
+a cluster credential. These SAs are bound to no Roles (the agent runner's SA,
+in agent-runner.yaml, is the one exception).
 */}}
 ---
 apiVersion: v1
