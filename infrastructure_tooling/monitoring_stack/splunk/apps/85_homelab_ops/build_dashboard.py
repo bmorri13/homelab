@@ -187,6 +187,38 @@ S["k8s_node"] = (
     f"| eval \"CPU (cores)\"=round(cpu,2), \"Memory GB\"=round(mem/{GIB},2) | fields _time \"CPU (cores)\" \"Memory GB\""
 )
 
+# The ops agent (homelab_agents on coding-box), and the health of both agents.
+AGENT = "index=ai_agents sourcetype=homelab:agent agent=ops"
+AGENT_ITEMS = (f"{AGENT} kind=item | rename triage.verdict as verdict triage.confidence as confidence "
+               "triage.headline as headline triage.summary as summary triage.severity as agent_severity")
+QUIET = '("expected_activity", "benign", "transient")'
+S["agents_health"] = (
+    "| makeresults | eval agent=split(\"sec,ops\", \",\") | mvexpand agent | fields agent "
+    "| join type=left agent [search index=ai_agents sourcetype=homelab:agent kind=run earliest=-24h "
+    "| stats max(_time) as last_run count as runs_24h by agent] "
+    "| join type=left agent [search index=ai_agents sourcetype=homelab:agent kind=run earliest=-65m "
+    "| stats count as runs sum(eval(if(status=\"error\",1,0))) as failed_runs sum(triaged) as triaged "
+    "sum(triage_errors) as triage_errors latest(error) as last_error by agent] "
+    "| fillnull value=0 runs failed_runs triaged triage_errors runs_24h "
+    "| eval minutes_since=if(isnull(last_run), null(), round((now()-last_run)/60)) "
+    "| eval Status=case(isnull(last_run), \"NOT RUNNING (24 h)\", minutes_since>75, \"NOT RUNNING\", "
+    "runs>0 AND failed_runs==runs, \"RUNS FAILING\", triage_errors>0 AND triaged==0, \"TRIAGE FAILING\", true(), \"ok\") "
+    "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), \"Last run\"=strftime(last_run, \"%Y-%m-%d %H:%M\") "
+    "| rename minutes_since as \"Minutes ago\" runs as \"Runs (1 h)\" failed_runs as \"Failed (1 h)\" runs_24h as \"Runs (24 h)\" last_error as \"Last error (1 h)\" "
+    "| table Status Agent \"Last run\" \"Minutes ago\" \"Runs (1 h)\" \"Failed (1 h)\" \"Runs (24 h)\" \"Last error (1 h)\""
+)
+S["ag_t_items"] = f"{AGENT} kind=run | stats sum(collected) as n | fillnull value=0 n"
+S["ag_t_triaged"] = f"{AGENT} kind=run | stats sum(triaged) as n | fillnull value=0 n"
+S["ag_t_attention"] = f"{AGENT_ITEMS} | where isnotnull(verdict) AND NOT verdict IN {QUIET} | stats count"
+S["ag_t_cost"] = f"{AGENT} kind=run | stats sum(cost_usd) as c | eval c=round(coalesce(c, 0), 2)"
+S["ag_items"] = (
+    f"{AGENT_ITEMS} | where isnotnull(verdict) "
+    f"| eval rank=if(verdict IN {QUIET}, 1, 0), What=coalesce(headline, summary) "
+    "| sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") "
+    "| rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" "
+    "| table When Verdict Confidence \"Agent severity\" Item Host What"
+)
+
 # Searches that follow the time picker; the rest set their own short windows.
 TIMED = {"cpu_busy", "mem_used", "load_per_cpu", "disk_busy", "net_mbps", "disk_mbs", "k8s_phase", "k8s_node"}
 
@@ -306,6 +338,25 @@ y += 380
 table("viz_k8s_restarts", "ds_k8s_restarts", "Containers that restarted (24 h)")
 place("viz_k8s_restarts", 0, 1200, 220)
 y += 220
+
+heading("viz_h_agents", "Agents (coding-box, last 24 h)")
+table("viz_agents_health", "ds_agents_health",
+      "Agent health: both agents run every 30 min; the Agents - not running or failing alert posts to Slack when this isn't ok")
+place("viz_agents_health", 0, 1200, 130)
+y += 130
+agent_tiles = [
+    ("viz_ag_t_items", "ds_ag_t_items", "Ops agent: checks tripped", None),
+    ("viz_ag_t_triaged", "ds_ag_t_triaged", "Ops agent: items triaged", None),
+    ("viz_ag_t_attention", "ds_ag_t_attention", "Ops agent: not routine", 0),
+    ("viz_ag_t_cost", "ds_ag_t_cost", "Ops agent: cost (USD, API-equivalent)", None),
+]
+for i, (vid, ds, title, red) in enumerate(agent_tiles):
+    single(vid, ds, title, red)
+    place(vid, i * 300, 300, 110)
+y += 110
+table("viz_ag_items", "ds_ag_items", "Ops agent: triaged items, not routine first")
+place("viz_ag_items", 0, 1200, 260)
+y += 260
 
 data_sources = {}
 for key, q in S.items():

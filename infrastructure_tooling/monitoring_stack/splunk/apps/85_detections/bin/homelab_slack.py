@@ -14,7 +14,13 @@ import urllib.parse
 
 APP = "85_detections"
 REALM = "homelab_slack"
-SEVERITY_ICON = {"critical": ":rotating_light:", "high": ":red_circle:", "medium": ":large_orange_circle:", "low": ":large_blue_circle:"}
+# Same card layout and severity scheme as the homelab agents (homelab_agents/app/runner.py).
+SEVERITY = {"critical": (":red_circle:", "Critical"), "high": (":large_orange_circle:", "High"),
+            "medium": (":large_yellow_circle:", "Warning"), "low": (":large_blue_circle:", "Info")}
+# Result fields shown in the card's field grid, in this order, with their labels.
+FIELDS = [("agent", "Agent"), ("problem", "Problem"), ("last_run", "Last run"), ("runs", "Runs (last hour)"),
+          ("host", "Host"), ("finding_host", "Host"), ("agent_host", "Host"), ("src_host", "Source"),
+          ("rule", "Rule"), ("user", "User"), ("src", "Source"), ("object", "Object"), ("count", "Count")]
 
 
 def log(msg):
@@ -49,26 +55,51 @@ def webhook_url(server_uri, session_key):
     return json.loads(data)["entry"][0]["content"]["clear_password"]
 
 
+def esc(text):
+    """Slack mrkdwn control characters: stops <!channel> and disguised links from event data."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def clip(text, n):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1].rstrip() + "…"
+
+
 def message(payload):
+    """A Block Kit card: severity header, title and description, field grid, optional
+    link (result field `link`, https only), footer."""
     r = payload.get("result", {})
     sev = (r.get("severity") or "medium").lower()
+    emoji, label = SEVERITY.get(sev, SEVERITY["medium"])
     title = r.get("detection") or payload.get("search_name", "Splunk alert")
-    lines = [f"{SEVERITY_ICON.get(sev, '')} *[{sev.upper()}] {title}*"]
-    if r.get("technique"):
-        lines.append(f"ATT&CK v20 {r.get('technique')} ({r.get('tactic', '')}) {r.get('attack_strategy', '')}".rstrip())
-    keys = ("host", "finding_host", "agent_host", "src_host", "rule", "user", "src", "object", "count")
-    facts = [f"{k}: `{r[k]}`" for k in keys if r.get(k)]
-    if facts:
-        lines.append("  ".join(facts))
-    # Alerts from other apps (Falco, OpenCanary, secret leaks) use their own field names.
     detail = r.get("detail") or r.get("details") or r.get("commands") or r.get("signatures") or ""
     if isinstance(detail, list):
-        detail = " || ".join(detail)
-    if detail:
-        lines.append(f"> {detail[:1500]}")
-    if r.get("first_seen"):
-        lines.append(f"_{r.get('first_seen')} to {r.get('last_seen', '')}_")
-    return {"text": "\n".join(lines)}
+        detail = "; ".join(detail)
+    if r.get("technique"):
+        detail = f"ATT&CK v20 {r['technique']} ({r.get('tactic', '')}). {detail}"
+
+    fields = [{"type": "mrkdwn", "text": f"*Severity*\n{emoji} {label}"}]
+    seen = set()
+    for key, name in FIELDS:
+        value = r.get(key)
+        if isinstance(value, list):
+            value = ", ".join(map(str, value[:3]))
+        if value in (None, "") or name in seen or len(fields) >= 8:
+            continue
+        seen.add(name)
+        fields.append({"type": "mrkdwn", "text": f"*{name}*\n{esc(clip(value, 80))}"})
+
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "emoji": True, "text": f":rotating_light: Splunk Alert — {label}"}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": f"*{esc(clip(title, 150))}*" + (f"\n{esc(clip(detail, 600))}" if detail else "")}},
+        {"type": "divider"},
+        {"type": "section", "fields": fields},
+    ]
+    link = r.get("link") or ""
+    if link.startswith("https://"):
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"<{link}|View Dashboard ↗>"}})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f":bar_chart: Bmo Homelab Bot • Splunk • {esc(payload.get('search_name', ''))}"}]})
+    return {"text": f"{label}: {clip(title, 150)}", "blocks": blocks}
 
 
 def main():

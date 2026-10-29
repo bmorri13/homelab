@@ -399,6 +399,86 @@
       "options": {
         "count": 20
       }
+    },
+    "viz_h_agents": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Agents (coding-box, last 24 h)",
+        "fontSize": "large"
+      }
+    },
+    "viz_agents_health": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_agents_health"
+      },
+      "title": "Agent health: both agents run every 30 min; the Agents - not running or failing alert posts to Slack when this isn't ok",
+      "options": {
+        "count": 20
+      }
+    },
+    "viz_ag_t_items": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_ag_t_items"
+      },
+      "title": "Ops agent: checks tripped",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0) | lastPoint()"
+      }
+    },
+    "viz_ag_t_triaged": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_ag_t_triaged"
+      },
+      "title": "Ops agent: items triaged",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0) | lastPoint()"
+      }
+    },
+    "viz_ag_t_attention": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_ag_t_attention"
+      },
+      "title": "Ops agent: not routine",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0) | lastPoint()",
+        "majorColor": "> majorValue | rangeValue(colors)"
+      },
+      "context": {
+        "colors": [
+          {
+            "to": 0.5,
+            "value": "#118832"
+          },
+          {
+            "from": 0.5,
+            "value": "#D41F1F"
+          }
+        ]
+      }
+    },
+    "viz_ag_t_cost": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_ag_t_cost"
+      },
+      "title": "Ops agent: cost (USD, API-equivalent)",
+      "options": {
+        "majorValue": "> primary | seriesByIndex(0) | lastPoint()"
+      }
+    },
+    "viz_ag_items": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_ag_items"
+      },
+      "title": "Ops agent: triaged items, not routine first",
+      "options": {
+        "count": 20
+      }
     }
   },
   "dataSources": {
@@ -705,13 +785,85 @@
           "latest": "$global_time.latest$"
         }
       }
+    },
+    "ds_agents_health": {
+      "type": "ds.search",
+      "name": "agents_health",
+      "options": {
+        "query": "| makeresults | eval agent=split(\"sec,ops\", \",\") | mvexpand agent | fields agent | join type=left agent [search index=ai_agents sourcetype=homelab:agent kind=run earliest=-24h | stats max(_time) as last_run count as runs_24h by agent] | join type=left agent [search index=ai_agents sourcetype=homelab:agent kind=run earliest=-65m | stats count as runs sum(eval(if(status=\"error\",1,0))) as failed_runs sum(triaged) as triaged sum(triage_errors) as triage_errors latest(error) as last_error by agent] | fillnull value=0 runs failed_runs triaged triage_errors runs_24h | eval minutes_since=if(isnull(last_run), null(), round((now()-last_run)/60)) | eval Status=case(isnull(last_run), \"NOT RUNNING (24 h)\", minutes_since>75, \"NOT RUNNING\", runs>0 AND failed_runs==runs, \"RUNS FAILING\", triage_errors>0 AND triaged==0, \"TRIAGE FAILING\", true(), \"ok\") | eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), \"Last run\"=strftime(last_run, \"%Y-%m-%d %H:%M\") | rename minutes_since as \"Minutes ago\" runs as \"Runs (1 h)\" failed_runs as \"Failed (1 h)\" runs_24h as \"Runs (24 h)\" last_error as \"Last error (1 h)\" | table Status Agent \"Last run\" \"Minutes ago\" \"Runs (1 h)\" \"Failed (1 h)\" \"Runs (24 h)\" \"Last error (1 h)\"",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_t_items": {
+      "type": "ds.search",
+      "name": "ag_t_items",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=run | stats sum(collected) as n | fillnull value=0 n",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_t_triaged": {
+      "type": "ds.search",
+      "name": "ag_t_triaged",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=run | stats sum(triaged) as n | fillnull value=0 n",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_t_attention": {
+      "type": "ds.search",
+      "name": "ag_t_attention",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) AND NOT verdict IN (\"expected_activity\", \"benign\", \"transient\") | stats count",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_t_cost": {
+      "type": "ds.search",
+      "name": "ag_t_cost",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=run | stats sum(cost_usd) as c | eval c=round(coalesce(c, 0), 2)",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_items": {
+      "type": "ds.search",
+      "name": "ag_items",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) | eval rank=if(verdict IN (\"expected_activity\", \"benign\", \"transient\"), 1, 0), What=coalesce(headline, summary) | sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") | rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" | table When Verdict Confidence \"Agent severity\" Item Host What",
+        "queryParameters": {
+          "earliest": "-24h",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
     }
   },
   "layout": {
     "type": "absolute",
     "options": {
       "width": 1200,
-      "height": 3640,
+      "height": 4180,
       "display": "auto-scale"
     },
     "structure": [
@@ -1023,6 +1175,76 @@
           "y": 3420,
           "w": 1200,
           "h": 220
+        }
+      },
+      {
+        "item": "viz_h_agents",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 3640,
+          "w": 1200,
+          "h": 40
+        }
+      },
+      {
+        "item": "viz_agents_health",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 3680,
+          "w": 1200,
+          "h": 130
+        }
+      },
+      {
+        "item": "viz_ag_t_items",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 3810,
+          "w": 300,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_ag_t_triaged",
+        "type": "block",
+        "position": {
+          "x": 300,
+          "y": 3810,
+          "w": 300,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_ag_t_attention",
+        "type": "block",
+        "position": {
+          "x": 600,
+          "y": 3810,
+          "w": 300,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_ag_t_cost",
+        "type": "block",
+        "position": {
+          "x": 900,
+          "y": 3810,
+          "w": 300,
+          "h": 110
+        }
+      },
+      {
+        "item": "viz_ag_items",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 3920,
+          "w": 1200,
+          "h": 260
         }
       }
     ],

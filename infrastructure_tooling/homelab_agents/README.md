@@ -81,6 +81,16 @@ Vault is reached at `http://k3s-01.tail25c6fe.ts.net:31080` (the NodePort; the M
 
 ## Operating it
 
+**Watchdog and dashboards.** A runner that has stopped (coding-box off, timer broken) can't post its own failure, so Splunk watches the run log: *Agents - not running or failing* (app `85_homelab_ops`, at :05 and :35) posts a card to Slack through the `homelab_slack` action when an agent hasn't run for 75 minutes, or every run or every triage in the last hour failed (an expired Claude token shows up as the last one). It's suppressed per agent and problem for 6 hours. The webhook it uses is a copy of the Vault one in Splunk's credential store; after changing `kv/slack-alerts`, refresh it:
+
+```bash
+ssh root@k3s-01 'kubectl -n default get secret vault-token -o jsonpath={.data.token} | base64 -d |
+  kubectl -n vault exec -i vault-0 -- sh -c "read -r VAULT_TOKEN; export VAULT_TOKEN; vault kv get -field=webhook_url kv/slack-alerts"' |
+  ssh root@security-tooling-01 /opt/splunk-stack/scripts/set-slack-webhook.sh
+```
+
+The *Homelab Security* dashboard has a **Security agent** section (runs, failures, items triaged, items not routine, cost, verdicts, the triaged items and the run log); *Homelab Operations* has an **Agents** section with the health of both agents (what the watchdog checks) and the ops agent's items.
+
 ```bash
 systemctl list-timers 'homelab-agent-*'
 journalctl -u homelab-agent@sec -n 50

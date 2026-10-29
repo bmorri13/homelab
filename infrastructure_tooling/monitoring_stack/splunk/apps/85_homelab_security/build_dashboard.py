@@ -60,6 +60,31 @@ S["alerts_fired"] = (
     "| table Alert App Severity Fired When"
 )
 
+# --- the security agent (homelab_agents on coding-box) --------------------------------
+AGENT = "index=ai_agents sourcetype=homelab:agent agent=sec"
+AGENT_ITEMS = (f"{AGENT} kind=item | rename triage.verdict as verdict triage.confidence as confidence "
+               "triage.headline as headline triage.summary as summary triage.severity as agent_severity")
+QUIET = '("expected_activity", "benign", "transient")'
+S["ag_t_runs"] = f"{AGENT} kind=run | stats count"
+S["ag_t_failed"] = f'{AGENT} kind=run status=error | stats count'
+S["ag_t_triaged"] = f"{AGENT} kind=run | stats sum(triaged) as n | fillnull value=0 n"
+S["ag_t_attention"] = f"{AGENT_ITEMS} | where isnotnull(verdict) AND NOT verdict IN {QUIET} | stats count"
+S["ag_t_cost"] = f'{AGENT} kind=run | stats sum(cost_usd) as c | eval c=round(coalesce(c, 0), 2)'
+S["ag_verdicts"] = f'{AGENT_ITEMS} | eval verdict=coalesce(verdict, "not triaged") | timechart count by verdict'
+S["ag_items"] = (
+    f"{AGENT_ITEMS} | where isnotnull(verdict) "
+    f"| eval rank=if(verdict IN {QUIET}, 1, 0), What=coalesce(headline, summary) "
+    "| sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") "
+    "| rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" "
+    "| table When Verdict Confidence \"Agent severity\" Item Host What"
+)
+S["ag_runs"] = (
+    f"{AGENT} kind=run | eval When=strftime(_time, \"%Y-%m-%d %H:%M\"), \"Cost $\"=round(cost_usd, 2) "
+    "| sort - _time | rename status as Status collected as Collected new as New triaged as Triaged "
+    "triage_errors as \"Triage errors\" duration_s as \"Seconds\" error as Error "
+    "| table When Status Collected New Triaged \"Triage errors\" \"Cost $\" Seconds Error"
+)
+
 # --- Falco ------------------------------------------------------------------------
 S["falco_over_time"] = f"{FALCO} | timechart count by severity"
 S["falco_rules"] = (
@@ -245,6 +270,29 @@ heading("viz_h_alerts", "Fired alerts", "Every alert from the detections, Falco,
 table("viz_alerts", "ds_alerts_fired", "Alerts fired")
 place("viz_alerts", 0, 1200, 300)
 y += 300
+
+heading("viz_h_agent", "Security agent",
+        "The triage agent on coding-box (`homelab_agents`), every 30 minutes. Cost is the API-equivalent the SDK reports; "
+        "on the subscription it counts against usage limits. If it stops running, the *Agents - not running or failing* alert posts to Slack.")
+agent_tiles = [
+    ("viz_ag_t_runs", "ds_ag_t_runs", "Runs", None),
+    ("viz_ag_t_failed", "ds_ag_t_failed", "Failed runs", 0),
+    ("viz_ag_t_triaged", "ds_ag_t_triaged", "Items triaged", None),
+    ("viz_ag_t_attention", "ds_ag_t_attention", "Not routine", 0),
+    ("viz_ag_t_cost", "ds_ag_t_cost", "Cost (USD, API-equivalent)", None),
+]
+for i, (vid, ds, title, red) in enumerate(agent_tiles):
+    single(vid, ds, title, red)
+    place(vid, i * 240, 240, 110)
+y += 110
+stacked("viz_ag_verdicts", "ds_ag_verdicts", "Items by verdict")
+place("viz_ag_verdicts", 0, 400, 300)
+table("viz_ag_items", "ds_ag_items", "Triaged items, not routine first")
+place("viz_ag_items", 400, 800, 300)
+y += 300
+table("viz_ag_runs", "ds_ag_runs", "Runs")
+place("viz_ag_runs", 0, 1200, 260)
+y += 260
 
 heading("viz_h_falco", "Falco runtime")
 stacked("viz_falco_time", "ds_falco_over_time", "Falco events by severity", SEVERITY_COLORS)
