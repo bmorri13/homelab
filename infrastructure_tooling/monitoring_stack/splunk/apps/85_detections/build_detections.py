@@ -67,9 +67,11 @@ det("HL - Kubernetes service account token minted",
     "T1528", "Credential Access", "medium", "DET0515",
     "`hl_k8s_audit` objectRef.resource=serviceaccounts objectRef.subresource=token verb=create responseStatus.code<400 "
     "| where NOT `hl_k8s_platform_user` "
+    "AND NOT ('user.username'=\"system:serviceaccount:toolhive-clients:agent-runner\" "
+    "AND 'objectRef.namespace'=\"toolhive-clients\" AND 'objectRef.name' IN (\"agent-sec\", \"agent-ops\", \"agent-runner\")) "
     + K8S_TAIL,
     "kubectl -n <scratch> create token default",
-    description="A service account token was requested by a person or an application. The kubelet's own pod tokens are not audited. Gateway client tokens (mint-client-token.sh) show up here, as intended.")
+    description="A service account token was requested by a person or an application. The kubelet's own pod tokens are not audited. Gateway client tokens (mint-client-token.sh) show up here, as intended. Excluded: the agent runner (homelab_agents) minting its own and the agents' tokens, every run.")
 
 det("HL - Kubernetes workload created by hand",
     "T1610", "Execution", "medium", "DET0249",

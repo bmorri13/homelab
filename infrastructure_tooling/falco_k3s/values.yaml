@@ -155,6 +155,10 @@ falco-k8saudit:
   # logs pods at Metadata level, so the rule's image allow-list never matches; the
   # exception is by identity instead. Any other user creating a kube-system pod
   # still alerts.
+  # ARC's homelab runner set runs in Kubernetes container mode: its runner pod
+  # execs each job step into the job's own "<runner>-workflow" pod (about 100 of
+  # 117 "Attach/Exec Pod" alerts 2026-10-25 to 10-28). Only that service account,
+  # in arc-runners, into a -workflow pod is exempt; any other exec still alerts.
   customRules:
     homelab_k8saudit.yaml: |-
       - list: allowed_k8s_users
@@ -163,6 +167,12 @@ falco-k8saudit:
           items: append
       - rule: Pod Created in Kube Namespace
         condition: and not ka.user.name = "system:serviceaccount:kube-system:local-path-provisioner-service-account"
+        override:
+          condition: append
+      - rule: Attach/Exec Pod
+        condition: >-
+          and not (ka.user.name = "system:serviceaccount:arc-runners:arc-k3s-homelab-gha-rs-kube-mode" and
+          ka.target.namespace = arc-runners and ka.target.name endswith -workflow)
         override:
           condition: append
   driver:

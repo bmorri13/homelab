@@ -624,6 +624,11 @@ auth:
         - cribl_cribl_getSources
         - cribl_cribl_getDestinations
         - cribl_cribl_getPipelines
+  # The runner that starts the agents (infrastructure_tooling/homelab_agents on
+  # coding-box). Its ServiceAccount may only mint tokens for the agents above and
+  # for itself (Vault login, audience "vault"); see templates/security/agent-runner.yaml.
+  # It is in no Cedar policy, so it can't use the gateway itself.
+  agentRunner: agent-runner
 
 # ---------------------------------------------------------------------------
 # Authorization (Cedar, enforced by the vMCP on every list/call).
