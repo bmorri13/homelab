@@ -323,6 +323,30 @@ remoteServers:
           cpu: 200m
           memory: 128Mi
 
+  drawio:
+    # Shown in the Apiary console (apiary.bmosan.com).
+    console:
+      title: draw.io
+      description: Draw and edit draw.io diagrams with draw.io's hosted MCP server.
+    enabled: true
+    # draw.io's official hosted MCP App server (jgraph/drawio-mcp). No
+    # credentials. Tools: create_diagram (renders a diagram inline in hosts
+    # that support MCP Apps), search_shapes (exact style strings from the shape
+    # library), get_drawio_reference. All three are annotated read-only, and
+    # authz.extraPolicies pins the gateway to exactly these three. Diagram
+    # content is sent to draw.io's servers, as with Excalidraw.
+    spec:
+      remoteUrl: https://mcp.draw.io/mcp
+      transport: streamable-http
+      proxyPort: 8080
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
   splunk:
     # Shown in the Apiary console (apiary.bmosan.com).
     console:
@@ -693,7 +717,15 @@ authz:
   # Extra raw Cedar policies, appended verbatim. Use these to grant write
   # tools to specific clients, e.g.:
   #   - 'permit(principal == Client::"system:serviceaccount:toolhive-clients:macbook-air", action == Action::"call_tool", resource == Tool::"github_create_issue");'
-  extraPolicies: []
+  extraPolicies:
+    # draw.io: only the three tools reviewed when it was added. The read-only
+    # rule above trusts the server's own readOnlyHint, so without this a tool
+    # the remote adds later would be callable on its say-so. To allow a new
+    # one, check it with tools/list and add it here.
+    - >-
+      forbid(principal, action == Action::"call_tool", resource)
+      when { resource has name && resource.name like "drawio_*" &&
+      !(resource in [Tool::"drawio_create_diagram", Tool::"drawio_search_shapes", Tool::"drawio_get_drawio_reference"]) };
 
 # ---------------------------------------------------------------------------
 # Ingress: Traefik (hostNetwork on k3s-01), tailnet-only.
