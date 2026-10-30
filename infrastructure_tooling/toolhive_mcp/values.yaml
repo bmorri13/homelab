@@ -89,7 +89,7 @@ mcpServers:
     spec:
       # Pinned by digest. Runs as root by
       # default (no USER in its Dockerfile); forced non-root below.
-      image: ghcr.io/sirkirby/unifi-network-mcp:0.41.0@sha256:29d672057ebbaa643630252925341e577480ccfeac5c2628808f173e34f054a9
+      image: ghcr.io/sirkirby/unifi-network-mcp:0.43.1@sha256:8b31a2e8895fc225a63893c32deef3d4151afd17793d3425f80dbfe95b983bb7
       # stdio: the server never opens an HTTP listener (avoids the upstream
       # 0.0.0.0 + Host-header-allowlist exposure); ToolHive's proxy runner
       # speaks streamable-http on its behalf.
