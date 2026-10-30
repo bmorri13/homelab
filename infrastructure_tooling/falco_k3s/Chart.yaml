@@ -4,10 +4,10 @@ description: Falco on k3s-01 - syscall DaemonSet plus a k8saudit Deployment fed 
 version: 0.2.0
 dependencies:
   - name: falco
-    version: 9.2.1
+    version: 9.2.2
     repository: https://falcosecurity.github.io/charts
   # Second release of the same chart: no driver, k8saudit plugin only.
   - name: falco
     alias: falco-k8saudit
-    version: 9.2.1
+    version: 9.2.2
     repository: https://falcosecurity.github.io/charts
