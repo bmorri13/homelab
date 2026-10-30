@@ -836,7 +836,7 @@
       "type": "ds.search",
       "name": "ag_t_attention",
       "options": {
-        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) AND NOT verdict IN (\"expected_activity\", \"benign\", \"transient\") | stats count",
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) AND NOT (verdict IN (\"expected_activity\", \"benign\", \"transient\") AND confidence IN (\"medium\", \"high\") AND agent_severity IN (\"low\", \"medium\")) | stats count",
         "queryParameters": {
           "earliest": "-24h",
           "latest": "now"
@@ -860,7 +860,7 @@
       "type": "ds.search",
       "name": "ag_items",
       "options": {
-        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) | eval rank=if(verdict IN (\"expected_activity\", \"benign\", \"transient\"), 1, 0), What=coalesce(headline, summary) | sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") | rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" | table When Verdict Confidence \"Agent severity\" Item Host What",
+        "query": "index=ai_agents sourcetype=homelab:agent agent=ops kind=item | rename triage.verdict as verdict triage.confidence as confidence triage.headline as headline triage.summary as summary triage.severity as agent_severity | where isnotnull(verdict) | eval rank=if(verdict IN (\"expected_activity\", \"benign\", \"transient\") AND confidence IN (\"medium\", \"high\") AND agent_severity IN (\"low\", \"medium\"), 1, 0), What=coalesce(headline, summary) | sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") | rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" | table When Verdict Confidence \"Agent severity\" Item Host What",
         "queryParameters": {
           "earliest": "-24h",
           "latest": "now"

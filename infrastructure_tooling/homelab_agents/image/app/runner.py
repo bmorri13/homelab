@@ -10,8 +10,9 @@ agent's queue (queues.py) through the gateway, drop what was already reported
 Splunk agent skills, then post to Slack and send the run log to Splunk
 (index=ai_agents).
 
-The model never decides what gets reported: every new item is posted, with the
-runner's own facts first and the agent's triage after them.
+Every new item is triaged and logged. Items the agent calls routine (routine()) get no
+Slack card; everything else is posted, with the runner's own facts first and the agent's
+triage after them.
 
 --dry-run      print instead of posting to Slack; state is not marked as notified
 --local-login  use this user's own Claude Code login instead of the Vault token (testing)
@@ -277,21 +278,13 @@ def alert_card(agent, item, run_id):
     return {"text": f"{label}: {title}", "blocks": blocks}
 
 
-def digest_card(agent, routine, untriaged, cap, run_id, notes):
-    """One card per run for everything that looked routine or wasn't triaged."""
+def digest_card(agent, untriaged, cap, run_id, notes):
+    """One card per run for anything not triaged (over the per-run limit) and run notes."""
     esc = clients.slack_escape
-    counts = [f"{len(routine)} routine" if routine else None, f"{len(untriaged)} not triaged" if untriaged else None]
-    summary = ", ".join(c for c in counts if c)
+    summary = f"{len(untriaged)} not triaged" if untriaged else ""
     blocks = [{"type": "header", "text": {"type": "plain_text", "emoji": True,
                                           "text": _clip(f":white_check_mark: {CARD[agent][1].split()[0]} Digest — {summary}"
                                                         if summary else f":warning: {config.AGENTS[agent]['title']}", 150)}}]
-    if routine:
-        groups = {}
-        for i in routine:
-            groups.setdefault(_short(i["title"]), []).append(i)
-        lines = [f"• *{esc(_clip(name, 70))}*{f' ×{len(g)}' if len(g) > 1 else ''} — "
-                 f"{esc(_clip(_headline(g[0]['triage']), 110))}" for name, g in groups.items()]
-        blocks.append({"type": "section", "text": _text("*Looked routine*\n" + "\n".join(lines))})
     if untriaged:
         groups = {}
         for i in untriaged:
@@ -300,26 +293,33 @@ def digest_card(agent, routine, untriaged, cap, run_id, notes):
         for name, g in groups.items():
             sev = max((x["severity"] for x in g), key=queues.SEV_RANK.get)
             lines.append(f"• {SEVERITY[sev][0]} {esc(_clip(name, 80))}{f' ×{len(g)}' if len(g) > 1 else ''}")
-        if routine:
-            blocks.append({"type": "divider"})
         blocks.append({"type": "section", "text": _text(f"*Not triaged* (over {cap} this run)\n" + "\n".join(lines))})
     if notes:
         blocks.append({"type": "section", "text": _text("\n".join(f":warning: {esc(n)}" for n in notes))})
-    if routine or untriaged:
+    if untriaged:
         blocks.append(_links(agent, run_id))
     blocks.append(_footer(agent))
     return {"text": f"{config.AGENTS[agent]['title']}: {summary or 'notice'}", "blocks": blocks}
 
 
+def routine(item):
+    """Routine: the agent called it expected/benign/transient, with at least medium
+    confidence and no more than medium severity. Routine items aren't posted to Slack;
+    they're still in Splunk (index=ai_agents kind=item) and on the dashboards."""
+    t = item.get("triage") or {}
+    return (t.get("verdict") in QUIET_VERDICTS and t.get("confidence") in ("medium", "high")
+            and t.get("severity") in ("low", "medium"))
+
+
 def slack_messages(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
-    """Cards for one run: one per item that needs a look, most severe first, then one
-    digest. Everything from logs or the model goes through slack_escape."""
-    loud = [i for i in items if (i.get("triage") or {}).get("verdict") not in QUIET_VERDICTS]
-    routine = [i for i in items if i not in loud]
+    """Cards for one run: one per item that needs a look, most severe first, then a
+    digest if anything wasn't triaged or there are notes. Routine items get no card.
+    Everything from logs or the model goes through slack_escape."""
+    loud = [i for i in items if not routine(i)]
     loud.sort(key=lambda i: -queues.SEV_RANK.get((i.get("triage") or {}).get("severity") or i["severity"], 0))
     messages = [alert_card(agent, i, run_id) for i in loud]
-    if routine or untriaged or notes:
-        messages.append(digest_card(agent, routine, untriaged, cap, run_id, notes))
+    if untriaged or notes:
+        messages.append(digest_card(agent, untriaged, cap, run_id, notes))
     return messages
 
 
@@ -398,6 +398,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
 
         report = [i for i in triage_now + to_repost
                   if (i.get("triage") or i.get("triage_error")) and not i.get("retry")]
+        summary["routine"] = sum(1 for i in report if routine(i))
         if report or untriaged:
             messages = slack_messages(agent, report, untriaged, notes, cap, run_id)
             if dry_run:
@@ -407,8 +408,8 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 status = "no_slack"
             else:
                 post_all(webhook, messages)
-                state.mark_notified([i["key"] for i in report + untriaged])
-                summary["posted"] = True
+                state.mark_notified([i["key"] for i in report + untriaged])  # routine too: reported, just quietly
+                summary["posted"] = bool(messages)
         elif notes and webhook and not dry_run:
             post_all(webhook, slack_messages(agent, [], [], notes))
     except Exception as e:

@@ -64,16 +64,18 @@ S["alerts_fired"] = (
 AGENT = "index=ai_agents sourcetype=homelab:agent agent=sec"
 AGENT_ITEMS = (f"{AGENT} kind=item | rename triage.verdict as verdict triage.confidence as confidence "
                "triage.headline as headline triage.summary as summary triage.severity as agent_severity")
-QUIET = '("expected_activity", "benign", "transient")'
+# Same rule as runner.routine(): routine items get no Slack card.
+ROUTINE = ('verdict IN ("expected_activity", "benign", "transient") AND confidence IN ("medium", "high") '
+           'AND agent_severity IN ("low", "medium")')
 S["ag_t_runs"] = f"{AGENT} kind=run | stats count"
 S["ag_t_failed"] = f'{AGENT} kind=run status=error | stats count'
 S["ag_t_triaged"] = f"{AGENT} kind=run | stats sum(triaged) as n | fillnull value=0 n"
-S["ag_t_attention"] = f"{AGENT_ITEMS} | where isnotnull(verdict) AND NOT verdict IN {QUIET} | stats count"
+S["ag_t_attention"] = f"{AGENT_ITEMS} | where isnotnull(verdict) AND NOT ({ROUTINE}) | stats count"
 S["ag_t_cost"] = f'{AGENT} kind=run | stats sum(cost_usd) as c | eval c=round(coalesce(c, 0), 2)'
 S["ag_verdicts"] = f'{AGENT_ITEMS} | eval verdict=coalesce(verdict, "not triaged") | timechart count by verdict'
 S["ag_items"] = (
     f"{AGENT_ITEMS} | where isnotnull(verdict) "
-    f"| eval rank=if(verdict IN {QUIET}, 1, 0), What=coalesce(headline, summary) "
+    f"| eval rank=if({ROUTINE}, 1, 0), What=coalesce(headline, summary) "
     "| sort rank - _time | eval When=strftime(_time, \"%Y-%m-%d %H:%M\") "
     "| rename title as Item target_host as Host verdict as Verdict confidence as Confidence agent_severity as \"Agent severity\" "
     "| table When Verdict Confidence \"Agent severity\" Item Host What"

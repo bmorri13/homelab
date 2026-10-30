@@ -49,7 +49,7 @@ sequenceDiagram
         C-->>K: JSON verdict, severity, evidence, next steps
         K->>D: record item
     end
-    K->>SL: alert card per non-routine item + one digest card
+    K->>SL: alert card per non-routine item (+ digest if any not triaged)
     K->>H: run and item logs
 ```
 
@@ -65,9 +65,9 @@ sequenceDiagram
    - built-in tools limited to `Skill`, `Read` and `WebFetch` (no shell, no writes) with `permission_mode=dontAsk` (anything not allowed is denied, never asked). `Read` works only inside the agent's working directory, which holds nothing but the skills; `WebFetch` is allowed only for Splunk documentation sites (`config.DOC_DOMAINS`);
    - the **Splunk agent skills** (below), the agent's system prompt (`app/prompts/<agent>.md`) and the item's runbook (`app/runbooks/`), with the item's data marked as untrusted;
    - a JSON schema for the result: verdict, confidence, severity, headline, summary, evidence, next steps.
-5. **Report.** Every new item is posted, whatever the verdict, as Slack Block Kit cards:
+5. **Report.** Every new item that isn't routine is posted as Slack Block Kit cards. **Routine** means the agent called it expected activity, benign or transient, with medium or high confidence and low or medium severity (`runner.routine()`). Routine items get no card: they're still triaged, logged to Splunk and listed on the dashboards, and they count as reported for the renotify window.
    - one **alert card** per item the agent doesn't call routine (or couldn't triage), most severe first: header with severity, title and the agent's one-line headline, a field grid (severity, verdict and confidence, host, and up to three facts such as source, user or object), *Recommended Action*, and **View Dashboard** / **View Analysis** links (plain links, not Block Kit buttons, which need an interactive Slack app; the analysis link opens that item's full triage in Splunk);
-   - one **digest card** per run for everything routine (one line each, repeats collapsed) and anything over the per-run limit.
+   - one **digest card** per run only when something wasn't triaged (over the per-run limit), one line each, repeats collapsed.
 
    Severity uses one scheme everywhere: red critical, orange high, yellow warning (medium), blue info (low). Text from logs or the model is escaped, so it can't add mentions or links. If a run fails, a card says so.
 
