@@ -49,8 +49,10 @@ flowchart LR
 ```
 
 ## The agents
-The run flow of the two triage agents and the watchdog that checks on them are in the [homelab agents README](../infrastructure_tooling/homelab_agents/README.md#how-a-run-works).
+The two triage agents on k3s-01, what they read through the MCP gateway, what they send to Claude and Slack, and the watchdog that checks on them. The step-by-step run flow is in the [homelab agents README](../infrastructure_tooling/homelab_agents/README.md#how-a-run-works).
+
+![Homelab agents](images/agents.drawio.svg)
 
 ## Editing the diagrams
-- **Infrastructure and deployment** are draw.io diagrams saved as `images/infrastructure.drawio.svg` and `images/deployment.drawio.svg`: the SVG GitHub shows also contains the editable diagram. Open it in [draw.io Desktop](https://www.drawio.com/) (`brew install --cask drawio`) or the VS Code *Draw.io Integration* extension, edit, and save it under the same name. When exporting from the desktop app, use the light theme (`drawio -x -f svg --embed-diagram --theme light --embed-svg-fonts false --border 12 -o docs/images/<name>.drawio.svg <file>`); the default adaptive theme turns the background dark in GitHub's dark mode. Icons are from [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons), embedded in the file.
-- **Data flow and the agents** are Mermaid, written in the Markdown. GitHub draws them; edit the text in the same PR as the change they describe.
+- **Infrastructure, deployment and the agents** are draw.io diagrams saved as `images/infrastructure.drawio.svg`, `images/deployment.drawio.svg` and `images/agents.drawio.svg`: the SVG GitHub shows also contains the editable diagram. Open it in [draw.io Desktop](https://www.drawio.com/) (`brew install --cask drawio`) or the VS Code *Draw.io Integration* extension, edit, and save it under the same name. When exporting from the desktop app, use the light theme (`drawio -x -f svg --embed-diagram --theme light --embed-svg-fonts false --border 12 -o docs/images/<name>.drawio.svg <file>`); the default adaptive theme turns the background dark in GitHub's dark mode. Icons are from [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons), embedded in the file.
+- **Data flow and the agents' run flow and watchdog** are Mermaid, written in the Markdown. GitHub draws them; edit the text in the same PR as the change they describe.
