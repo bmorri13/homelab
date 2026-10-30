@@ -125,8 +125,11 @@ OPS_CHECKS = [
      "| eval host=\"k3s-01\" | table host namespace pod container restarts",
      ("namespace", "container", "pod"), lambda r: "medium", "kubernetes-health.md"),
     ("Kubernetes pods stuck outside Running",
-     "| mstats latest(k8s.pod.phase) as p min(k8s.pod.phase) as pmin where index=metrics earliest=-15m "
-     "by k8s.namespace.name k8s.pod.name | where p!=2 AND p!=3 AND pmin!=2 AND 'k8s.namespace.name'!=\"arc-runners\" "
+     "| mstats latest(k8s.pod.phase) as p min(k8s.pod.phase) as pmin earliest_time(k8s.pod.phase) as first "
+     "latest_time(k8s.pod.phase) as last where index=metrics earliest=-15m by k8s.namespace.name k8s.pod.name "
+     "| where p!=2 AND p!=3 AND pmin!=2 AND 'k8s.namespace.name'!=\"arc-runners\" "
+     # seen for 5+ minutes and still reported: skips pods that are just starting (CronJob runs) and deleted ones
+     "AND first<=relative_time(now(),\"-5m\") AND last>=relative_time(now(),\"-5m\") "
      "| eval phase=case(p==1,\"Pending\",p==4,\"Failed\",true(),\"Unknown\") "
      "| rename k8s.namespace.name as namespace k8s.pod.name as pod | eval host=\"k3s-01\" "
      "| table host namespace pod phase",
