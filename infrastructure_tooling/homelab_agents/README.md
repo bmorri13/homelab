@@ -9,6 +9,8 @@ Two triage agents, run as Kubernetes CronJobs on k3s-01 every 30 minutes:
 
 Results go to Slack as Block Kit cards, and every run and item is logged to Splunk `index=ai_agents sourcetype=homelab:agent`.
 
+![Homelab agents](../../docs/images/agents.drawio.svg)
+
 ## Layout
 
 | Path | What |
