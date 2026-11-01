@@ -3,6 +3,13 @@
 # Cribl, where the cc-falco-ocsf pack turns them into OCSF Detection Findings in
 # index=security (matched on namespace "falco"). Host config and rule exceptions
 # match infrastructure_tooling/monitoring_stack/falco/.
+#
+# Node prerequisite: k3s-01 has /etc/sysctl.d/99-inotify.conf with
+# fs.inotify.max_user_instances = 8192 (set by hand on 2026-11-01). Falco needs an
+# inotify instance at start (it watches its config), and every containerd shim holds
+# some as root, so at the default 128 a rollout crashloops with "could not initialize
+# inotify handler" while the old pod still holds its instance. A rebuilt node needs it
+# again.
 falco:
   driver:
     kind: modern_ebpf      # kernel 6.8 with BTF; no kernel module
