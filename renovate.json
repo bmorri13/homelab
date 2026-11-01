@@ -32,6 +32,22 @@
         "tailscale-operator"
       ],
       "enabled": false
+    },
+    {
+      "description": "Charts are vendored under charts/: have Renovate run helm dependency update so a chart bump commits the new tgz too (otherwise the old one keeps rendering).",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "postUpdateOptions": [
+        "helmUpdateSubChartArchives"
+      ]
+    },
+    {
+      "description": "Everything in the homelab agents image (Python lock and both Chainguard digests, which must move together) rebuilds the same :main image the CronJobs run: one PR, one rebuild. requirements.txt is a uv pip compile lock that Renovate edits pin by pin (its pip-compile manager can't take --python-platform), so if the build fails, re-run the uv pip compile command in its header on the PR branch.",
+      "matchFileNames": [
+        "infrastructure_tooling/homelab_agents/image/**"
+      ],
+      "groupName": "homelab-agents image"
     }
   ]
 }
