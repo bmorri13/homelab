@@ -1,0 +1,8 @@
+# Authentik configuration kept in Git (blueprints/*.yaml). The worker applies each file
+# on change and re-applies it hourly, so edits made in the UI to these objects revert.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-homelab-blueprints
+data:
+  {{- (.Files.Glob "blueprints/*.yaml").AsConfig | nindent 2 }}

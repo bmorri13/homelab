@@ -1,0 +1,109 @@
+# Authentik on k3s-01: https://auth.bmosan.com, tailnet-only. The identity provider for
+# Splunk Web (SAML) and the Cribl UI (Traefik forward auth; Cribl's Free license has no
+# external login). Every login needs a second factor (blueprints/require-mfa.yaml).
+#
+# Secrets come from Vault kv/authentik through an ExternalSecret (templates/
+# externalsecret.yaml): secret_key, postgres_password, bootstrap_password. See README.md
+# for how they were generated without leaving Vault.
+
+host: auth.bmosan.com
+
+vault:
+  secretStoreName: vault-backend
+  path: kv/authentik
+  refreshInterval: 1h
+
+ingress:
+  className: traefik
+  entrypoints: websecure
+  clusterIssuer: bmosan-cert
+  tlsSecretName: auth-bmosan-com-tls
+  # Tailscale IPv4 and IPv6. The DNS record points at k3s-01's tailnet IP; this rejects
+  # the LAN path (192.168.4.98 + Host header) and everything else.
+  sourceRanges:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
+
+# Authentik's database: the official image, one replica, on k3s-01's local-path storage.
+# (The upstream chart's PostgreSQL option is the Bitnami chart, which no longer has free
+# images.)
+postgres:
+  image: docker.io/library/postgres:17.11-trixie@sha256:3b0cda93be7c8dba2ed484d19393d93845dc3dafb88973e248ba8e6d99d784e1
+  storageClass: local-path
+  size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+authentik:
+  global:
+    image:
+      digest: sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
+    # Secrets from the ExternalSecret. env wins over the chart's own config Secret.
+    env:
+      - name: AUTHENTIK_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: authentik-credentials, key: secret_key}
+      - name: AUTHENTIK_POSTGRESQL__PASSWORD
+        valueFrom:
+          secretKeyRef: {name: authentik-credentials, key: postgres_password}
+      # Only read on the very first start: the password of the built-in akadmin user.
+      - name: AUTHENTIK_BOOTSTRAP_PASSWORD
+        valueFrom:
+          secretKeyRef: {name: authentik-credentials, key: bootstrap_password}
+
+  authentik:
+    log_level: info
+    error_reporting:
+      enabled: false
+    postgresql:
+      host: authentik-postgres
+      name: authentik
+      user: authentik
+
+  blueprints:
+    configMaps:
+      - authentik-homelab-blueprints
+
+  # The forward auth for the Cribl UI uses the outpost embedded in the server, so
+  # Authentik needs no Kubernetes API access to deploy outposts of its own.
+  serviceAccount:
+    create: false
+
+  server:
+    replicas: 1
+    securityContext: &podsec
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      seccompProfile: {type: RuntimeDefault}
+    containerSecurityContext: &ctrsec
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    metrics:
+      enabled: false
+
+  worker:
+    replicas: 1
+    securityContext: *podsec
+    containerSecurityContext: *ctrsec
+    resources:
+      requests:
+        cpu: 50m
+        memory: 384Mi
+      limits:
+        memory: 1Gi
+    metrics:
+      enabled: false
+
+  postgresql:
+    enabled: false
