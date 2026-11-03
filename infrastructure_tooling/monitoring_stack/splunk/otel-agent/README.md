@@ -4,7 +4,7 @@ The OpenTelemetry Collector (contrib, 0.163.2) as a systemd service on VMs and P
 
 | Role | Config | Collects | Splunk index |
 |---|---|---|---|
-| `base` | `base.yaml` | journald (info and above): sshd, sudo, logind, systemd, kernel, Proxmox services. Host metrics | `infra`; metrics to `metrics` |
+| `base` | `base.yaml` | journald (info and above): sshd, sudo, logind, systemd, kernel, Proxmox services. Host metrics, and the `falco` process's uptime (`process.uptime`, the heartbeat for *HL - Falco not running*) | `infra`; metrics to `metrics` |
 | `docker` | `base.yaml` + `docker.yaml` | the above, plus every container's stdout/stderr and per-container metrics | `apps` for containers |
 | `pve` | `base.yaml` + `pve.yaml` | the base role, plus Proxmox's own node, guest and storage metrics (Proxmox nodes only) | `metrics` |
 

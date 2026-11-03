@@ -251,6 +251,47 @@ det("HL - Host stopped sending telemetry",
     description="A host that sent metrics in the last 24 hours has sent none for 15 minutes: powered off, collector stopped, or network cut. An attacker stopping telemetry looks the same as an outage, so both are reported.")
 
 
+# Silent sources. A feed that normally never pauses for long has stopped while its host
+# is still up: collector, Cribl route or the product's own logging broken or turned off.
+# Limits are a little over the longest normal gap seen in a week (2026-11-03): journald
+# on the Proxmox nodes went 48 minutes quiet, on the VMs 10, the UniFi gateway nearly
+# 5 hours. A journald gap on a host that also stopped sending metrics is left to
+# "Host stopped sending telemetry".
+det("HL - Log source stopped sending",
+    "T1685", "Defense Impairment", "high", "DET0497",
+    '| tstats max(_time) as last_seen where (index=audit sourcetype IN ("kube:apiserver:audit", "hashicorp_vault_audit_log")) '
+    'OR (index=k8s sourcetype="kube:container") OR (index=infra sourcetype="linux:journald") '
+    'OR (index=network sourcetype="ubiquiti:unifi:ocsf") by index sourcetype host '
+    "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-15m by host] "
+    '| eval limit=case(sourcetype=="ubiquiti:unifi:ocsf", 480, sourcetype=="linux:journald" AND match(host, "^proxmox"), 60, '
+    'sourcetype=="linux:journald", 30, true(), 15) '
+    "| eval count=round((now()-last_seen)/60) "
+    '| where count>limit AND NOT (sourcetype=="linux:journald" AND isnull(host_metrics)) '
+    '| eval object=case(sourcetype=="kube:apiserver:audit", "k3s API audit log", sourcetype=="hashicorp_vault_audit_log", "Vault audit log", '
+    'sourcetype=="kube:container", "k3s container logs", sourcetype=="linux:journald", "journald", '
+    'sourcetype=="ubiquiti:unifi:ocsf", "UniFi gateway syslog", true(), sourcetype), '
+    'user="", src="", detail=object." (index=".index." sourcetype=".sourcetype.") has sent nothing for ".count." minutes (limit ".limit.")" '
+    "| eval first_seen=last_seen | convert ctime(first_seen) ctime(last_seen) ",
+    "stop the Vault audit device (vault audit disable) or Cribl's route for a source for 20 minutes",
+    suppress="host,object", period="6h", window=("-24h", "now"),
+    description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
+
+# Falco is quiet when nothing happens, so its alerts can't show it is running. The OTel
+# host agent reports the falco process's uptime every minute (hostmetrics process
+# scraper, otel-agent/base.yaml). k3s-01's DaemonSet pod counts too: the agent sees the
+# node's processes.
+det("HL - Falco not running",
+    "T1685", "Defense Impairment", "high", "DET0497",
+    '| mstats count(process.uptime) as c where index=metrics process.executable.name="falco" earliest=-24h latest=now span=1m by host '
+    "| stats max(_time) as last_seen min(_time) as first_seen by host "
+    "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-10m by host] "
+    '| where last_seen<relative_time(now(), "-10m") AND host_metrics>0 '
+    '| eval user="", src="", object="falco", count=round((now()-last_seen)/60), detail="falco not running for ".count." minutes; the host is still sending metrics" '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "systemctl stop falco-modern-bpf on a test VM for 15 minutes",
+    suppress="host", period="6h", window=("-24h", "now"),
+    description="Falco ran on this host in the last 24 hours but has not for 10 minutes, while the host itself is still reporting. Someone stopping runtime detection looks like this, and so does a crash.")
+
 # ---- write savedsearches.conf ----------------------------------------------------------------
 def conf_escape(s):
     return s.replace("\n", " ")

@@ -57,6 +57,30 @@ receivers:
       system:
         metrics:
           system.uptime: {enabled: true}
+      # Falco's heartbeat: it only logs when a rule fires, so "HL - Falco not running"
+      # (85_detections) watches this instead. One series per falco process (k3s-01's
+      # DaemonSet pods included), uptime only, no command lines.
+      process:
+        include:
+          names: [falco]
+          match_type: strict
+        mute_process_name_error: true
+        mute_process_exe_error: true
+        mute_process_io_error: true
+        mute_process_user_error: true
+        mute_process_cgroup_error: true
+        metrics:
+          process.cpu.time: {enabled: false}
+          process.disk.io: {enabled: false}
+          process.memory.usage: {enabled: false}
+          process.memory.virtual: {enabled: false}
+          process.uptime: {enabled: true}
+        resource_attributes:
+          process.command: {enabled: false}
+          process.command_line: {enabled: false}
+          process.executable.path: {enabled: false}
+          process.owner: {enabled: false}
+          process.parent_pid: {enabled: false}
 
 processors:
   memory_limiter:

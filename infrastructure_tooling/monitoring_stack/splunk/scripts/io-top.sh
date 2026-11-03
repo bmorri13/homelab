@@ -5,7 +5,7 @@
 # the journal and reaches Splunk through the OTel agent's journald pipeline
 # (index=infra, syslog.identifier=splunk-io-top). Containers' processes are visible
 # here too: the host sees every container process.
-#   index=infra host=security-tooling-01 "splunk-io-top" | table _time comm pid read_kBps write_kBps iodelay
+#   index=infra host=security-tooling-01 syslog.identifier=splunk-io-top | table _time comm pid read_kBps write_kBps iodelay
 # A process is logged when its average read+write over the minute is at least
 # IO_TOP_MIN_KBPS (512 kB/s, about 30 MB a minute), or it spent at least
 # IO_TOP_MIN_IODELAY clock ticks (100 = 1 second) waiting on block I/O. Most minutes
