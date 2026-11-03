@@ -23,7 +23,7 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 | Cribl Worker: pulled config, persistent queue | `/srv/cribl-worker` on the VM | Nothing here that the Leader can't send again, except queued data |
 | TLS certs for 8089 and the Cribl API | `/root/homelab-ca` (CA), `/srv/splunk/etc/auth/homelab/`, `/srv/cribl/local/cribl/auth/homelab-tls/` | Issued and renewed by `scripts/tls-certs.sh`. See [MCP access](#mcp-access). |
 | Frozen archive | Unraid NFS share at `/mnt/unraid-splunk/frozen/<index dir>/` | Raw data of every bucket that ages out, except `cribl` and `unrouted`. Kept forever; see [Frozen archive](#frozen-archive). |
-| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives (about 500 MB each, mostly Splunk's built-in apps). |
+| Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives of about 80 MB each. Files the Splunk image ships in its built-in apps are left out (the image has them); their `local/`, `lookups/` and `metadata/local.meta` are kept. |
 | Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
 
@@ -177,7 +177,7 @@ Current base apps:
 
 - `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh`, which archives frozen buckets to the Unraid share.
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
-- `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk.
+- `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk, and raises splunkd's IOWait health thresholds (`health.conf`) so short I/O bursts from the other containers on this VM don't turn health red.
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`), and `src` for UniFi IDS/IPS findings, which the OCSF-CIM add-on leaves unmapped.
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
@@ -346,9 +346,10 @@ Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./s
 ## Restore on a fresh VM
 
 1. Mount the Unraid share (see above).
-2. Extract the latest backup:
+2. Lay down the image's own `etc` (the backup leaves out the files Splunk's built-in apps ship with), then extract the latest backup over it. `<splunk image>` is the `image:` in `docker-compose.yml`.
    ```bash
-   mkdir -p /srv/splunk /srv/cribl
+   mkdir -p /srv/splunk/etc /srv/cribl
+   docker run --rm -u 0 --entrypoint tar <splunk image> -C /opt/splunk-etc -cf - . | tar -xf - -C /srv/splunk/etc
    tar -xzf /mnt/unraid-splunk/backups/<latest>.tar.gz -C /srv/splunk etc
    tar -xzf /mnt/unraid-splunk/backups/<latest>.tar.gz -C /srv/cribl local groups
    ```
