@@ -51,11 +51,11 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `8000` | Splunk Web (HTTPS, self-signed) | |
 | `8089` | Splunk REST API + MCP Server app (HTTPS, homelab CA) | Published on 192.168.4.11 only. `scripts/mgmt-firewall.sh` drops everything but k3s-01 and local containers. |
 | `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | |
-| `514` tcp/udp | Cribl syslog → `infra` | Proxmox, Unraid, other hosts |
-| `5514` tcp/udp | Cribl syslog → `network` | UniFi gateway |
+| `514` tcp/udp | Cribl syslog → `infra` | Closed: nothing sends to it. To use it, add the sender to `SYSLOG_INFRA_ALLOWED`. |
+| `5514` tcp/udp | Cribl syslog → `network` | UniFi gateways only (`SYSLOG_NETWORK_ALLOWED`). |
 | `8088` | Cribl HEC (HTTP) | OTel collectors. Requires `CRIBL_HEC_TOKEN`. |
 
-Syslog has no authentication. Restrict ports 514 and 5514 to the senders' IPs with a host firewall if that matters.
+Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. Docker also publishes the syslog ports on IPv6, where its userland proxy takes the connection, so the script drops 514 and 5514 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). The allowlists are comma-separated CIDRs, defaulted in the script so the boot-time unit (which has no `.env`) applies the same rules. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
 
 ### Cribl routing
 
@@ -299,7 +299,7 @@ chmod 600 .env
 
 `deploy.sh` is safe to re-run. It:
 
-1. Installs and runs the port 8089 firewall (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
+1. Installs and runs the host firewall for ports 8089, 514 and 5514 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
 2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089 and the Cribl Leader.
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
