@@ -46,10 +46,10 @@ Cribl's syslog parser reads `CEF:` as the RFC 3164 tag, so the pack parses `_raw
 
 ## Testing
 
-`data/samples/unifi_cef_samples.json` holds 22 events:
+`data/samples/unifi_cef_samples.json` holds 23 events:
 
 - real events from this network (sanitized)
 - public UniFi CEF examples
-- three synthetic events: a zone-firewall block, a kernel firewall line, and an admin login
+- four synthetic events: a zone-firewall block, a Network 10.6 "Blocked by Firewall" (203, which carries only `UNIFIsrcClientIp` and `UNIFIfirewallPolicy`), a kernel firewall line, and an admin login
 
-All 22 convert in Cribl 4.20.3, and every output passes the OCSF 1.9.0 validator (`https://schema.ocsf.io/api/v2/validate`) with no errors or warnings.
+All 23 convert in Cribl 4.20.3, and every output passes the OCSF 1.9.0 validator (`https://schema.ocsf.io/api/v2/validate`) with no errors or warnings.
