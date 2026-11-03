@@ -39,6 +39,12 @@ systemctl daemon-reload
 systemctl enable splunk-mgmt-firewall.service >/dev/null 2>&1
 ./scripts/mgmt-firewall.sh
 
+# Per-process disk I/O to the journal, for tracing IOWait (scripts/io-top.sh).
+install -m 644 systemd/splunk-io-top.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable splunk-io-top.service >/dev/null 2>&1
+systemctl restart splunk-io-top.service
+
 # TLS certs for Splunk's management port and the Cribl Leader API. Sets
 # $certs_changed to the services whose cert was (re)issued.
 issue_certs() { certs_changed+=" $(./scripts/tls-certs.sh | sed -n 's/^changed: //p' | tr '\n' ' ')"; }
