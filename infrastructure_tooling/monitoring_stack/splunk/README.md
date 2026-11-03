@@ -178,7 +178,7 @@ Current base apps:
 - `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh`, which archives frozen buckets to the Unraid share.
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
 - `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk, and raises splunkd's IOWait health thresholds (`health.conf`) so short I/O bursts from the other containers on this VM don't turn health red.
-- `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`.
+- `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`. The two MCP roles can also read server status, the health report and the license (`list_introspection`, `list_health`, `license_read`).
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`), and `src` for UniFi IDS/IPS findings, which the OCSF-CIM add-on leaves unmapped.
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
@@ -242,8 +242,8 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 
 - Most run every 15 minutes over `[-20m@m, -5m@m)`. "First seen" detections search their own 14- or 30-day baseline. All suppress repeats per entity (1 to 24 hours).
 - Every finding is written to `index=security sourcetype=homelab:detection` as one JSON event (Log Event action), with `detection`, `severity`, `technique`, `tactic`, `attack_strategy`, `host`, `user`, `src`, `object` and `detail`. This is the queue the security agent reads.
-- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The one exception to "Splunk does not post to Slack" is the agents' own watchdog, *Agents - not running or failing* in `85_homelab_ops`, which uses `homelab_slack` because a stopped agent can't report itself.
-- The `homelab_slack` alert action (`bin/homelab_slack.py`) is installed but not attached to any search, kept as a fallback if the agents are down for long. To use it, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
+- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The exceptions to "Splunk does not post to Slack" are two searches in `85_homelab_ops` that watch what the agents depend on, and use `homelab_slack`: the agents' own watchdog, *Agents - not running or failing* (a stopped agent can't report itself), and *Splunk - health degraded* (a splunkd health feature yellow or red for 15 minutes, checked every 10).
+- The `homelab_slack` alert action (`bin/homelab_slack.py`) is attached only to those two searches, and kept as a fallback if the agents are down for long. To use it elsewhere, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
 
   ```bash
   read -rs SLACK_URL && printf '%s' "$SLACK_URL" | ssh root@security-tooling-01 /opt/splunk-stack/scripts/set-slack-webhook.sh; unset SLACK_URL
@@ -358,5 +358,11 @@ Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./s
 Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` to `toolhive_mcp/files/homelab-ca.crt`, and re-mint the Splunk MCP token (see below). Indexed data is lost; frozen buckets can be thawed (see [Frozen archive](#frozen-archive)).
 
 ## Host tuning
+
+`splunk-io-top` (`scripts/io-top.sh`, installed by `deploy.sh`) logs, once a minute, every process doing heavy disk I/O (512 kB/s or 1 s of I/O wait), containers' included, to the journal and so to `index=infra`. When *Splunk - health degraded* fires for IOWait, this shows which process caused it:
+
+```
+index=infra host=security-tooling-01 "splunk-io-top" | table _time comm pid read_kBps write_kBps iodelay
+```
 
 Splunk warns when transparent huge pages are on. The VM is set to `madvise`, which is acceptable. To silence the warning, set `never` with a systemd unit or `transparent_hugepage=never` on the kernel command line.

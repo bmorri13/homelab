@@ -1,0 +1,14 @@
+# Installed by scripts/deploy.sh. Per-process disk I/O to the journal, once a minute;
+# see scripts/io-top.sh.
+[Unit]
+Description=Log processes doing heavy disk I/O (for tracing splunkd IOWait)
+
+[Service]
+ExecStart=/opt/splunk-stack/scripts/io-top.sh
+SyslogIdentifier=splunk-io-top
+Nice=10
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
