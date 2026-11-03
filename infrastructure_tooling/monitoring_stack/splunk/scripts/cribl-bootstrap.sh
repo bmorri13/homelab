@@ -2,9 +2,9 @@
 # Setup for the Cribl Leader. Safe to re-run; each step only acts when needed:
 #  1. Turn on HTTPS for the Leader API (cert from tls-certs.sh) and restart it.
 #  2. After deploy.sh has seeded the Worker Group config (marker file .group-seeded),
-#     set the HEC token from .env, enable the HEC inputs, and commit and deploy the
-#     group config to the Worker. On a group seeded before the HTTPS HEC input
-#     (hec_tls) existed, create it from the plain one.
+#     set the HEC token from .env, enable the HEC input, and commit and deploy the
+#     group config to the Worker. A group that still has the old plain-HTTP input
+#     (hec, port 8088) gets hec_tls created from it, and hec removed.
 #  3. On a brand-new Leader, still on its default admin/admin login, set the admin
 #     password from .env. This runs last so a failed run can still log in.
 # Once the password has changed, later token or password changes made in the UI are
@@ -88,13 +88,11 @@ print(json.dumps(i))' "$cur" "$1" "$2" "$3"
 # 2. Freshly seeded Worker Group config: its HEC token is either empty (repo seed)
 # or encrypted with the old single-instance key, which the group cannot decrypt.
 if [[ -f "$SEEDED" ]]; then
-    hec_input hec 8088 false |
-        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec" --data @- >/dev/null
     if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; then
         hec_input hec_tls 8443 true |
             ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec_tls" --data @- >/dev/null
+        echo "cribl: HEC input enabled"
     fi
-    echo "cribl: HEC inputs enabled"
     cribl_commit_deploy "Seed Worker Group config (deploy.sh)"
     rm -f "$SEEDED"
 fi
@@ -103,6 +101,12 @@ if ! ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; th
         ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/m/$GROUP/system/inputs" --data @- >/dev/null
     echo "cribl: HEC input hec_tls (HTTPS, port 8443) created"
     cribl_commit_deploy "Add HEC input hec_tls (deploy.sh)"
+fi
+# Plain-HTTP HEC is retired: every sender uses hec_tls (2026-11-03).
+if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec" >/dev/null; then
+    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/system/inputs/hec" >/dev/null
+    echo "cribl: plain-HTTP HEC input hec removed"
+    cribl_commit_deploy "Remove plain-HTTP HEC input hec (deploy.sh)"
 fi
 
 # 3. Admin password, only while the default login still works.

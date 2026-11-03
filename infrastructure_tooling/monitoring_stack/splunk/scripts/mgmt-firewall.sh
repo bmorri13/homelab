@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Allow only the MCP gateway on k3s-01 to reach Splunk's management port (8089), only
 # the UniFi gateways to send syslog (Cribl, 5514), and only the server LAN to reach
-# Cribl's HEC inputs (8088, 8443). Syslog has no authentication, so the source
+# Cribl's HEC input (8443). Syslog has no authentication, so the source
 # address is the only check; HEC also needs its token.
 # Docker publishes the port with its own DNAT rules, which bypass the INPUT chain,
 # so the filter goes in DOCKER-USER, which Docker evaluates first and never flushes.
@@ -43,12 +43,15 @@ allow_only() {
 allow_only SPLUNK-MGMT "$MGMT_ALLOWED" 8089 tcp
 allow_only SYSLOG-NETWORK "$SYSLOG_NETWORK_ALLOWED" 5514 udp tcp
 allow_only SYSLOG-INFRA "$SYSLOG_INFRA_ALLOWED" 514 udp tcp
-allow_only CRIBL-HEC "$HEC_ALLOWED" 8088,8443 tcp
+allow_only CRIBL-HEC "$HEC_ALLOWED" 8443 tcp
+# Plain-HTTP HEC (8088) was retired on 2026-11-03; drop its old rules.
+iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdstport 8088 --ctdir ORIGINAL -j CRIBL-HEC 2>/dev/null || true
+for proto in udp tcp; do ip6tables -w -D INPUT -p "$proto" --dport 8088 -j DROP 2>/dev/null || true; done
 
 # Docker also publishes the syslog and HEC ports on [::]. IPv6 connections go through
 # Docker's userland proxy (a host process), so INPUT applies, not DOCKER-USER. The
 # only IPv6 address here is Tailscale's, and nothing sends over IPv6: drop them.
-for port in 514 5514 8088 8443; do
+for port in 514 5514 8443; do
     for proto in udp tcp; do
         rule=(-p "$proto" --dport "$port" -j DROP)
         ip6tables -w -C INPUT "${rule[@]}" 2>/dev/null || ip6tables -w -I INPUT 1 "${rule[@]}"

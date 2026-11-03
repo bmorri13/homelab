@@ -105,7 +105,6 @@ services:
       - "514:9514/tcp"
       - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
       - "5514:9515/tcp"
-      - "8088:8088"       # HEC over plain HTTP, being retired: senders move to 8443
       - "8443:8443"       # HEC over HTTPS (homelab CA), token required
     networks:
       - default           # sends to splunk:9997
