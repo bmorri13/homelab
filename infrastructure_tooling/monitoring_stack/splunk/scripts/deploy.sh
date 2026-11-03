@@ -45,9 +45,11 @@ systemctl daemon-reload
 systemctl enable splunk-io-top.service >/dev/null 2>&1
 systemctl restart splunk-io-top.service
 
-# TLS certs for Splunk's management port and the Cribl Leader API. Sets
-# $certs_changed to the services whose cert was (re)issued.
+# TLS certs for Splunk's management port, the Cribl Leader API and the Worker's HEC
+# input. Sets $certs_changed to the services whose cert was (re)issued; check it
+# with cert_changed <service>.
 issue_certs() { certs_changed+=" $(./scripts/tls-certs.sh | sed -n 's/^changed: //p' | tr '\n' ' ')"; }
+cert_changed() { [[ " $certs_changed " == *" $1 "* ]]; }
 certs_changed=""
 issue_certs
 
@@ -77,7 +79,7 @@ if [[ -d "$DATA_DIR/etc/system" ]]; then
     # from starting can still be deployed.
     sync_apps
     docker compose up -d --remove-orphans
-    if [[ -n "$changes" || "$certs_changed" == *splunk* ]]; then docker compose restart splunk; fi
+    if [[ -n "$changes" ]] || cert_changed splunk; then docker compose restart splunk; fi
     echo "waiting for splunk to become healthy..."
     wait_healthy
 else
@@ -96,8 +98,12 @@ fi
 
 # The Leader reads its cert at startup. A brand-new Leader is still on HTTP and gets
 # switched to HTTPS by cribl-bootstrap.sh.
-if [[ "$certs_changed" == *cribl* && -f "$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl/inputs.yml" ]]; then
+if cert_changed cribl && [[ -f "$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl/inputs.yml" ]]; then
     docker compose restart cribl
+fi
+# The Worker's HEC input reads its cert when it starts.
+if cert_changed cribl-worker; then
+    docker compose restart cribl-worker
 fi
 
 # Seed the Worker Group config once. The Leader creates the empty default group on

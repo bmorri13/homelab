@@ -29,7 +29,8 @@ activeDeadlineSeconds: 1500
 env:
   GATEWAY_URL: http://vmcp-homelab.toolhive-mcp.svc.cluster.local:4483/mcp
   VAULT_ADDR: http://vault.vault.svc.cluster.local:8200
-  HEC_URL: http://192.168.4.11:8088/services/collector/event
+  HEC_URL: https://192.168.4.11:8443/services/collector/event
+  HEC_CA_FILE: /etc/homelab-ca/homelab-ca.crt
 
 # Projected ServiceAccount tokens. The gateway validates audience
 # https://mcp.bmosan.com; Vault role homelab-agents expects audience "vault".
@@ -53,7 +54,7 @@ networkPolicy:
   # Splunk HEC (Cribl on security-tooling-01).
   hec:
     cidr: 192.168.4.11/32
-    port: 8088
+    port: 8443
   # Everything else the pods talk to outside the cluster is HTTPS on the internet:
   # the Anthropic API, Slack's webhook, Splunk documentation. Private ranges are
   # excluded so the pods can't reach the LAN or tailnet beyond the HEC rule.

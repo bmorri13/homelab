@@ -1,6 +1,6 @@
 # OTel host agent
 
-The OpenTelemetry Collector (contrib, 0.163.2) as a systemd service on VMs and Proxmox nodes. It sends to Cribl's HEC input on security-tooling-01 (`http://192.168.4.11:8088`), and Cribl picks the Splunk index.
+The OpenTelemetry Collector (contrib, 0.163.2) as a systemd service on VMs and Proxmox nodes. It sends to Cribl's HEC input on security-tooling-01 over HTTPS (`https://192.168.4.11:8443`), checking the cert against the homelab CA in `homelab-ca.crt` (a copy of `toolhive_mcp/files/homelab-ca.crt`), and Cribl picks the Splunk index.
 
 | Role | Config | Collects | Splunk index |
 |---|---|---|---|

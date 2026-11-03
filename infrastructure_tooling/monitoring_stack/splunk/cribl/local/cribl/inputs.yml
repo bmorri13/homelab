@@ -61,7 +61,41 @@ inputs:
     splunkHecAPI: /services/collector
     disabled: true
     authTokens: []
-    description: OTel collectors. Token set by scripts/cribl-bootstrap.sh
+    description: Plain-HTTP HEC, being retired (senders move to hec_tls). Token set by scripts/cribl-bootstrap.sh
+    sendToRoutes: true
+    pqEnabled: false
+    streamtags: []
+    maxActiveReq: 256
+    maxRequestsPerSocket: 0
+    enableProxyHeader: false
+    captureHeaders: false
+    activityLogSampleRate: 100
+    requestTimeout: 0
+    socketTimeout: 0
+    keepAliveTimeout: 5
+    ipAllowlistRegex: /.*/
+    ipDenylistRegex: /^$/
+    splunkHecAcks: false
+    staleChannelFlushMs: 10000
+    autoParse: false
+    useFwdTimezone: true
+    dropControlFields: true
+    extractMetrics: false
+    emitTokenMetrics: false
+  hec_tls:
+    type: splunk_hec
+    host: 0.0.0.0
+    port: 8443
+    splunkHecAPI: /services/collector
+    disabled: true
+    authTokens: []
+    description: HEC over HTTPS for the OTel collectors and agents. Token set by scripts/cribl-bootstrap.sh
+    # Cert from scripts/tls-certs.sh, mounted read-only (docker-compose.yml)
+    tls:
+      disabled: false
+      privKeyPath: /opt/cribl/tls/hec.key
+      certPath: /opt/cribl/tls/hec.crt
+      minVersion: TLSv1.2
     sendToRoutes: true
     pqEnabled: false
     streamtags: []

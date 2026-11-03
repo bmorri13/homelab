@@ -1,5 +1,5 @@
 # Pod logs, Kubernetes events and Kubernetes metrics from k3s-01 -> Cribl HEC on security-tooling-01
-# (http://192.168.4.11:8088). Cribl picks the Splunk index from k8s.namespace.name
+# (https://192.168.4.11:8443, cert checked against the homelab CA in files/homelab-ca.crt). Cribl picks the Splunk index from k8s.namespace.name
 # (cribl/local/cribl/pipelines/hec_in): k8s, apps, or audit. The Kubernetes API audit
 # log is tailed from the host and sent with index=audit already set. The HEC token comes
 # from Vault kv/cribl-hec (property "token") through an ExternalSecret.
@@ -63,14 +63,21 @@ opentelemetry-collector:
       enabled: false
 
   # Kubernetes API audit log written by the k3s apiserver (infrastructure_tooling/k3s_audit).
+  # The homelab CA (templates/homelab-ca.yaml) for the HEC exporters.
   extraVolumes:
     - name: k8s-audit
       hostPath:
         path: /var/log/kubernetes/audit
         type: DirectoryOrCreate
+    - name: homelab-ca
+      configMap:
+        name: homelab-ca
   extraVolumeMounts:
     - name: k8s-audit
       mountPath: /var/log/kubernetes/audit
+      readOnly: true
+    - name: homelab-ca
+      mountPath: /etc/homelab-ca
       readOnly: true
 
   resources:
@@ -154,7 +161,9 @@ opentelemetry-collector:
     exporters:
       splunk_hec:
         token: ${env:CRIBL_HEC_TOKEN}
-        endpoint: http://192.168.4.11:8088/services/collector
+        endpoint: https://192.168.4.11:8443/services/collector
+        tls:
+          ca_file: /etc/homelab-ca/homelab-ca.crt
         source: k3s-01
         sourcetype: kube:container
         splunk_app_name: homelab-otel-k3s
@@ -165,7 +174,9 @@ opentelemetry-collector:
           max_elapsed_time: 0
       splunk_hec/metrics:
         token: ${env:CRIBL_HEC_TOKEN}
-        endpoint: http://192.168.4.11:8088/services/collector
+        endpoint: https://192.168.4.11:8443/services/collector
+        tls:
+          ca_file: /etc/homelab-ca/homelab-ca.crt
         source: k3s-01
         sourcetype: otel:metrics
         index: metrics           # Cribl's hec_in sends these to the metric index

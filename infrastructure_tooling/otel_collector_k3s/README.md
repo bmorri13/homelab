@@ -1,6 +1,6 @@
 # OpenTelemetry Collector on k3s-01
 
-A DaemonSet that sends pod logs, Kubernetes events and Kubernetes metrics from k3s-01 to Cribl's HEC input on security-tooling-01 (`http://192.168.4.11:8088`). Cribl drops noise and picks the Splunk index; see `monitoring_stack/splunk/README.md`.
+A DaemonSet that sends pod logs, Kubernetes events and Kubernetes metrics from k3s-01 to Cribl's HEC input on security-tooling-01 over HTTPS (`https://192.168.4.11:8443`; the homelab CA is in `files/homelab-ca.crt`). Cribl drops noise and picks the Splunk index; see `monitoring_stack/splunk/README.md`.
 
 | Data | Receiver | Splunk sourcetype | Index (set by Cribl) |
 |---|---|---|---|
