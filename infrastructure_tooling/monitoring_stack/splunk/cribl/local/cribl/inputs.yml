@@ -54,34 +54,6 @@ inputs:
     socketMaxLifespan: 0
     enableLoadBalancing: false
     autoParse: false
-  hec:
-    type: splunk_hec
-    host: 0.0.0.0
-    port: 8088
-    splunkHecAPI: /services/collector
-    disabled: true
-    authTokens: []
-    description: Plain-HTTP HEC, being retired (senders move to hec_tls). Token set by scripts/cribl-bootstrap.sh
-    sendToRoutes: true
-    pqEnabled: false
-    streamtags: []
-    maxActiveReq: 256
-    maxRequestsPerSocket: 0
-    enableProxyHeader: false
-    captureHeaders: false
-    activityLogSampleRate: 100
-    requestTimeout: 0
-    socketTimeout: 0
-    keepAliveTimeout: 5
-    ipAllowlistRegex: /.*/
-    ipDenylistRegex: /^$/
-    splunkHecAcks: false
-    staleChannelFlushMs: 10000
-    autoParse: false
-    useFwdTimezone: true
-    dropControlFields: true
-    extractMetrics: false
-    emitTokenMetrics: false
   hec_tls:
     type: splunk_hec
     host: 0.0.0.0
