@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Issue the TLS certificates for Splunk's management port (8089) and the Cribl
-# Leader API (9000) from a small homelab CA kept on this host. The CA is created on
+# Issue the TLS certificates for Splunk's management port (8089), the Cribl Leader
+# API (9000) and the Cribl Worker's HEC input (8443) from a small homelab CA kept on
+# this host. The CA is created on
 # the first run. Its certificate is public: the MCP gateway on k3s-01 trusts it via
 # toolhive_mcp/files/homelab-ca.crt. Its key never leaves /root/homelab-ca.
 # The CA can only sign names under bmosan.com, a few host names, and private IPs.
 # A leaf certificate is reissued when it is missing, expires within 30 days, was
-# signed by a different CA, or its names differ from the ones below. Prints "changed: splunk" / "changed: cribl" for each one
-# it wrote, so deploy.sh knows what to restart.
+# signed by a different CA, or its names differ from the ones below. Prints
+# "changed: splunk", "changed: cribl" or "changed: cribl-worker" for each one it
+# wrote, so deploy.sh knows what to restart.
 # Run on security-tooling-01 as root (deploy.sh calls it).
 set -euo pipefail
 
 CA_DIR="${HOMELAB_CA_DIR:-/root/homelab-ca}"
 SPLUNK_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
+CRIBL_WORKER_TLS_DIR="${CRIBL_WORKER_TLS_DIR:-/srv/cribl-worker-tls}"
 HOST_IP="${HOST_IP:-192.168.4.11}"
 # The Leader's fixed address on its compose network (docker-compose.yml). Cribl's MCP
 # tools call the Leader API at the Leader's own interface address, so it must be in
@@ -102,4 +105,17 @@ if needs_issue "$cribl_out/cribl.crt" "$cribl_san"; then
     chmod 600 "$cribl_out/cribl.key"
     chmod 644 "$cribl_out/cribl.crt" "$cribl_out/ca.crt"
     echo "changed: cribl"
+fi
+
+# Cribl Worker HEC input. Its own directory, mounted read-only into the Worker
+# (docker-compose.yml): the Worker's config volume is rewritten by Leader deploys.
+# The collectors send to the host's IP; they trust the CA from
+# otel-agent/homelab-ca.crt.
+worker_san="DNS:security-tooling-01,DNS:localhost,IP:$HOST_IP,IP:127.0.0.1"
+if needs_issue "$CRIBL_WORKER_TLS_DIR/hec.crt" "$worker_san"; then
+    issue hec "$CRIBL_WORKER_TLS_DIR" security-tooling-01 "$worker_san"
+    chmod 700 "$CRIBL_WORKER_TLS_DIR"
+    chmod 600 "$CRIBL_WORKER_TLS_DIR/hec.key"
+    chmod 644 "$CRIBL_WORKER_TLS_DIR/hec.crt"
+    echo "changed: cribl-worker"
 fi

@@ -18,7 +18,10 @@ VAULT_SLACK = "slack-alerts"
 VAULT_HEC = "cribl-hec"
 VAULT_AGENTS = "homelab-agents"
 
-HEC_URL = os.environ.get("HEC_URL", "http://192.168.4.11:8088/services/collector/event")
+HEC_URL = os.environ.get("HEC_URL", "https://192.168.4.11:8443/services/collector/event")
+# The homelab CA that signed Cribl's HEC cert; the only CA trusted for HEC (the
+# CronJobs mount it from the homelab-agents-ca ConfigMap).
+HEC_CA_FILE = os.environ.get("HEC_CA_FILE", "/etc/homelab-ca/homelab-ca.crt")
 HEC_INDEX = "ai_agents"
 HEC_SOURCETYPE = "homelab:agent"
 # For links in Slack messages: the full MagicDNS name resolves on any tailnet device (phones too).

@@ -2,8 +2,9 @@
 # Setup for the Cribl Leader. Safe to re-run; each step only acts when needed:
 #  1. Turn on HTTPS for the Leader API (cert from tls-certs.sh) and restart it.
 #  2. After deploy.sh has seeded the Worker Group config (marker file .group-seeded),
-#     set the HEC token from .env, enable the HEC input, and commit and deploy the
-#     group config to the Worker.
+#     set the HEC token from .env, enable the HEC inputs, and commit and deploy the
+#     group config to the Worker. On a group seeded before the HTTPS HEC input
+#     (hec_tls) existed, create it from the plain one.
 #  3. On a brand-new Leader, still on its default admin/admin login, set the admin
 #     password from .env. This runs last so a failed run can still log in.
 # Once the password has changed, later token or password changes made in the UI are
@@ -63,22 +64,45 @@ for _ in $(seq 1 30); do
     sleep 2
 done
 
+# hec_input <id> <port> <tls>: print the JSON for HEC input <id>, enabled, with the
+# token from .env. Starts from the input's current config, or from the plain hec
+# input's when <id> doesn't exist yet. <tls> true: HTTPS with the Worker's cert.
+hec_input() {
+    local cur
+    cur=$(ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/$1" ||
+          ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec")
+    python3 -c '
+import json, os, sys
+i = json.loads(sys.argv[1])["items"][0]
+for k in ("status", "notifications"):
+    i.pop(k, None)
+i["id"], i["port"], i["disabled"] = sys.argv[2], int(sys.argv[3]), False
+i["authTokens"] = [{"token": os.environ["CRIBL_HEC_TOKEN"], "enabled": True, "description": "OTel collectors"}]
+if sys.argv[4] == "true":
+    i["tls"] = {"disabled": False, "privKeyPath": "/opt/cribl/tls/hec.key",
+                "certPath": "/opt/cribl/tls/hec.crt", "minVersion": "TLSv1.2"}
+    i["description"] = "HEC over HTTPS for the OTel collectors and agents. Token set by scripts/cribl-bootstrap.sh"
+print(json.dumps(i))' "$cur" "$1" "$2" "$3"
+}
+
 # 2. Freshly seeded Worker Group config: its HEC token is either empty (repo seed)
 # or encrypted with the old single-instance key, which the group cannot decrypt.
 if [[ -f "$SEEDED" ]]; then
-    ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec" |
-        python3 -c '
-import json, os, sys
-i = json.load(sys.stdin)["items"][0]
-for k in ("status", "notifications"):
-    i.pop(k, None)
-i["disabled"] = False
-i["authTokens"] = [{"token": os.environ["CRIBL_HEC_TOKEN"], "enabled": True, "description": "OTel collectors"}]
-print(json.dumps(i))' |
+    hec_input hec 8088 false |
         ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec" --data @- >/dev/null
-    echo "cribl: HEC input enabled"
+    if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; then
+        hec_input hec_tls 8443 true |
+            ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec_tls" --data @- >/dev/null
+    fi
+    echo "cribl: HEC inputs enabled"
     cribl_commit_deploy "Seed Worker Group config (deploy.sh)"
     rm -f "$SEEDED"
+fi
+if ! ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; then
+    hec_input hec_tls 8443 true |
+        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/m/$GROUP/system/inputs" --data @- >/dev/null
+    echo "cribl: HEC input hec_tls (HTTPS, port 8443) created"
+    cribl_commit_deploy "Add HEC input hec_tls (deploy.sh)"
 fi
 
 # 3. Admin password, only while the default login still works.

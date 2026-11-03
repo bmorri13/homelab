@@ -35,6 +35,8 @@ if [[ ! -s "$ETC/hec.env" ]]; then
 fi
 chmod 600 "$ETC/hec.env"
 
+# The homelab CA that signed Cribl's HEC cert (scripts/tls-certs.sh); public.
+install -m 644 homelab-ca.crt "$ETC/homelab-ca.crt"
 install -m 644 base.yaml "$ETC/base.yaml"
 opts="--config=$ETC/base.yaml"
 rm -f "$ETC/docker.yaml" "$ETC/pve.yaml"

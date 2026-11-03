@@ -44,7 +44,9 @@ receivers:
 exporters:
   splunk_hec/docker:
     token: ${env:CRIBL_HEC_TOKEN}
-    endpoint: http://192.168.4.11:8088/services/collector
+    endpoint: https://192.168.4.11:8443/services/collector
+    tls:
+      ca_file: /etc/otelcol-contrib/homelab-ca.crt
     source: docker
     sourcetype: docker:container
     splunk_app_name: homelab-otel-agent

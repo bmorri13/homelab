@@ -32,7 +32,7 @@ flowchart LR
 
     subgraph st["security-tooling-01"]
         direction LR
-        cribl["Cribl Stream · hec_in 192.168.4.11:8088<br/>secret masking · Falco → OCSF + MITRE<br/>logins → linux_secure · routing, noise drops"]
+        cribl["Cribl Stream · hec_in 192.168.4.11:8443 (HTTPS)<br/>secret masking · Falco → OCSF + MITRE<br/>logins → linux_secure · routing, noise drops"]
         idx[("Splunk indexes<br/>security · audit · infra · k8s<br/>apps · network · metrics · ai_agents")]
         det["18 ATT&CK v20 detections<br/>every 15 min → homelab:detection"]
         alerts["Alerts<br/>Falco, honeypot, secret leaks"]

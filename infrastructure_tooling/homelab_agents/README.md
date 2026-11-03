@@ -141,7 +141,7 @@ The pods accept no connections. They can reach:
 - DNS;
 - the vMCP Service (`vmcp-homelab.toolhive-mcp:4483`), which admits them through the gateway's `allow-agents` NetworkPolicy;
 - Vault (`vault.vault:8200`);
-- Splunk HEC (`192.168.4.11:8088`);
+- Splunk HEC (`192.168.4.11:8443`, HTTPS; the cert is checked against the homelab CA only, `files/homelab-ca.crt`);
 - HTTPS on the public internet (Anthropic API, Slack, Splunk docs), with private ranges excluded.
 
 Claude Code's telemetry and update checks are off (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`).

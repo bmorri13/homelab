@@ -4,6 +4,7 @@ Cribl HEC. Standard library only.
 Every URL here is a fixed endpoint from config.py, never data from Splunk or the model.
 """
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -140,7 +141,11 @@ def hec_send(token, events):
     if not token or not events:
         return
     raw = "\n".join(json.dumps(e) for e in events).encode()
-    status, _, text = _http("POST", config.HEC_URL, raw_body=raw,
+    context = None
+    if config.HEC_URL.startswith("https://"):
+        # Only the homelab CA: the public roots never sign this cert.
+        context = ssl.create_default_context(cafile=config.HEC_CA_FILE)
+    status, _, text = _http("POST", config.HEC_URL, raw_body=raw, context=context,
                             headers={"Authorization": f"Splunk {token}"}, timeout=30)
     if status != 200:
         raise ClientError(f"HEC send failed: HTTP {status} {text[:200]}")

@@ -78,6 +78,7 @@ spec:
                 - {name: tmp, mountPath: /tmp}
                 - {name: gateway-token, mountPath: /var/run/secrets/homelab-agents/gateway, readOnly: true}
                 - {name: vault-token, mountPath: /var/run/secrets/homelab-agents/vault, readOnly: true}
+                - {name: homelab-ca, mountPath: /etc/homelab-ca, readOnly: true}
           volumes:
             - name: state
               persistentVolumeClaim:
@@ -101,4 +102,8 @@ spec:
                       path: token
                       audience: vault
                       expirationSeconds: {{ $.Values.tokens.vaultSeconds }}
+            # The CA that signed Cribl's HEC cert (templates/homelab-ca.yaml).
+            - name: homelab-ca
+              configMap:
+                name: homelab-agents-ca
 {{- end }}

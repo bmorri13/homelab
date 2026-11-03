@@ -1,0 +1,12 @@
+{{- /*
+The homelab CA that signed Cribl's HEC cert (monitoring_stack/splunk/scripts/tls-certs.sh).
+A public certificate, no secrets. Copy of toolhive_mcp/files/homelab-ca.crt.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homelab-agents-ca
+  labels:
+    {{- include "homelab-agents.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "files/homelab-ca.crt").AsConfig | nindent 2 }}
