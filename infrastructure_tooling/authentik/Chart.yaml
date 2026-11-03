@@ -1,0 +1,9 @@
+apiVersion: v2
+name: authentik-homelab
+description: Authentik identity provider on k3s-01 (auth.bmosan.com, tailnet-only) - SSO and MFA for Splunk Web and the Cribl UI
+type: application
+version: 0.1.0
+dependencies:
+  - name: authentik
+    version: 2026.8.5
+    repository: https://charts.goauthentik.io
