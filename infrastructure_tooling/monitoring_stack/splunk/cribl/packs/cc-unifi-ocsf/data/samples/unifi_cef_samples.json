@@ -86,5 +86,9 @@
  {
   "_raw": "Oct 21 22:51:10 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|500|Admin Accessed UniFi Network|2|UNIFIcategory=System UNIFIsubCategory=Admin UNIFIhost=Home Gateway UNIFIadmin=UniFi User UNIFIaccessMethod=web src=203.0.113.50 UNIFIutcTime=2026-10-22T02:51:10.000Z msg=UniFi User logged in to UniFi Network. (synthetic)",
   "_time": 1792635000
+ },
+ {
+  "_raw": "Nov  3 00:40:12 Home-Gateway CEF:0|Ubiquiti|UniFi Network|10.6.109|203|Blocked by Firewall|4|UNIFIcategory=Security UNIFIhost=Home Gateway dst=192.168.10.11 UNIFIsrcClientAlias=Test MacBook UNIFIsrcClientHostname=test-mbp UNIFIsrcClientIp=192.168.50.23 UNIFIsrcClientMac=02:00:00:00:00:23 UNIFIsrcClientModel=MacBook Pro UNIFIfirewallPolicy=Log isolated network block UNIFIutcTime=2026-11-03T05:40:12.750Z msg=Test MacBook was blocked from accessing 192.168.10.11 by the Log isolated network block Firewall Policy.",
+  "_time": 1792635000
  }
 ]

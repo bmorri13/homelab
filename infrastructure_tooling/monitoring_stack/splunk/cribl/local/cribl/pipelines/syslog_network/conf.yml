@@ -8,6 +8,12 @@ functions:
     conf:
       processor: pack:cc-unifi-ocsf
     description: UniFi CEF and kernel firewall lines to OCSF JSON (cribl/packs/cc-unifi-ocsf)
+  - id: drop
+    filter: "!sourcetype && severity >= 6"
+    conf: {}
+    description: The gateways' own system log at info level (mcad, stahtd, udapi-server, systemd).
+      It comes with the Gateway category, which Firewall Default Policy needs. Notice and above is
+      kept; anything the pack converted has a sourcetype and is kept.
   - id: eval
     filter: "true"
     conf:

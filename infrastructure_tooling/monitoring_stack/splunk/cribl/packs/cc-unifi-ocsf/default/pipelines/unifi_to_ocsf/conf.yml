@@ -133,7 +133,7 @@ functions:
             const dirKnown = dirMap[lc(g('UNIFIdirection'))];
             const direction_id = dirKnown !== undefined ? dirKnown : zoneDir(srcZone, dstZone);
             const src_endpoint = {
-              ip: g('src', 'UNIFIclientIp'),
+              ip: g('src', 'UNIFIclientIp', 'UNIFIsrcClientIp'),
               port: num(g('spt')),
               mac: lc(g('UNIFIsrcClientMac', 'UNIFIclientMac')),
               hostname: g('UNIFIsrcClientHostname', 'UNIFIclientHostname'),
@@ -165,7 +165,10 @@ functions:
             } : {};
             const message = g('msg');
             const isIds = lc(policyType) === 'ids/ips' || k.UNIFIipsSignature !== undefined || /threat detected/i.test(name || '');
-            const isFw = !isIds && (policyType !== undefined || srcZone !== undefined || dstZone !== undefined || /firewall/i.test(sub || ''));
+            // Network 10.6 "Blocked by Firewall" (203) has no zones or policy type: just
+            // UNIFIfirewallPolicy and the source in UNIFIsrcClientIp.
+            const isFw = !isIds && (policyType !== undefined || srcZone !== undefined || dstZone !== undefined
+              || k.UNIFIfirewallPolicy !== undefined || /firewall/i.test(sub || '') || /blocked by firewall/i.test(name || ''));
             const isClient = /client (connected|disconnected|roamed)/i.test(name || '') || (lc(category) === 'monitoring' && /wifi|wired|client/i.test(sub || ''));
             const admin = g('UNIFIadmin');
             const isLogin = (admin !== undefined || /admin/i.test(sub || '')) && /logged in|log ?in|accessed|signed in|sign ?in/i.test(`${name} ${message}`);
@@ -207,7 +210,7 @@ functions:
                 activity_id: blocked ? 5 : 6, activity_name: blocked ? 'Refuse' : 'Traffic',
                 severity_id: sevFromCef(cefSev),
                 src_endpoint, dst_endpoint, connection_info, traffic,
-                firewall_rule: { name: g('UNIFIpolicyName'), type: policyType, uid: g('UNIFIpolicyId', 'UNIFIruleId') },
+                firewall_rule: { name: g('UNIFIpolicyName', 'UNIFIfirewallPolicy'), type: policyType, uid: g('UNIFIpolicyId', 'UNIFIruleId') },
                 app_name: g('app'),
               };
               Object.assign(ev, action);

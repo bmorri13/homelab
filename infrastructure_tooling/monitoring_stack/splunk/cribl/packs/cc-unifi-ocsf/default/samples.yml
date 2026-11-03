@@ -3,4 +3,4 @@ unifi_cef_samples:
   description: UniFi Network CEF (real and public examples, sanitized) plus kernel firewall lines
   created: 1792635000000
   size: 12677
-  numEvents: 22
+  numEvents: 23

@@ -220,6 +220,26 @@ det("HL - UniFi configuration changed",
     suppress="object", period="1h",
     description="A UniFi configuration change: firewall policies, logging/SIEM settings, CyberSecure, networks. About one a day normally.")
 
+# Isolated networks are blocked from the other Internal networks by UniFi's built-in
+# "Isolated Networks" policy, which can't log. The custom policy "Log isolated network
+# block" (same match, new connections only, Syslog Logging on) sits ahead of it and logs
+# each attempt as CEF 203 "Blocked by Firewall". Needs the Gateway and Firewall Default
+# Policy categories in UniFi's Activity Logging.
+det("HL - Isolated network device tried to reach a trusted network",
+    "T1046", "Discovery", "medium", "",
+    'index=network sourcetype=ubiquiti:unifi:ocsf class_uid=4001 disposition=Blocked firewall_rule.name="Log isolated network block" '
+    '| eval target=\'dst_endpoint.ip\'.if(isnotnull(\'dst_endpoint.port\'), ":".\'dst_endpoint.port\', "") '
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(target) as targets "
+    "values(src_endpoint.hostname) as hostnames values(src_endpoint.name) as names values(src_endpoint.mac) as macs by src_endpoint.ip "
+    "| rename src_endpoint.ip as src "
+    '| eval host=coalesce(mvindex(hostnames, 0), src), user="", object=mvjoin(mvindex(targets, 0, 4), ", "), '
+    'detail="blocked ".count." connection attempt(s) to ".mvcount(targets)." target(s): ".mvjoin(mvindex(targets, 0, 9), ", ")'
+    '.if(isnotnull(names), "; device ".mvjoin(names, ", "), "").if(isnotnull(macs), " (".mvjoin(macs, ", ").")", "") '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a device on an isolated network, try to open a port on a host in another Internal network (nc -vz <host> <port>); it is blocked",
+    suppress="src", period="1h",
+    description="A device on an isolated network tried to open a connection to another Internal network and the firewall blocked it. Isolated devices have no reason to do this, so any attempt is worth a look; a scan or repeated tries suggests the device is compromised.")
+
 # ---- MCP gateway ---------------------------------------------------------------------------
 det("HL - MCP gateway write tool, denial or new client",
     "T1078", "Initial Access", "medium", "DET0927",
