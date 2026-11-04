@@ -56,7 +56,7 @@ Rollback: `qm rollback 103 <name>` on proxmox3. This returns the whole VM to the
 
 | Step | k3s | Traefik | Also needed |
 |---|---|---|---|
-| 1 | 1.32.13 | 3.6 (chart 39), from 2.11 | Nothing else: Argo CD 3.4, cert-manager 1.17 and the rest support 1.32 |
+| 1 | 1.32.13 | 3.6 (chart 39), from 2.11 | Nothing else: Argo CD 3.4, cert-manager 1.17 and the rest support 1.32. **Done 2026-11-04.** |
 | 2 | 1.33 | chart 40 | cert-manager 1.17 is the last that stops at 1.33: upgrade it to 1.20+ before step 3 |
 | 3 | 1.34 | chart 40 | Argo CD 3.4 → 3.6 here (3.6 is tested on 1.34+) |
 | 4 | 1.35, 1.36 | chart 40 | External Secrets 0.18 and Vault 1.18 need upgrading on the way |

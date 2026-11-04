@@ -37,6 +37,12 @@ for _ in $(seq 1 60); do
     sleep 5
 done
 k3s kubectl get --raw /readyz >/dev/null
+# The node keeps reporting the old version (and Ready) until the new kubelet updates it.
+for _ in $(seq 1 60); do
+    [[ $(k3s kubectl get node "$(hostname)" -o jsonpath='{.status.nodeInfo.kubeletVersion}') == "$K3S_VERSION" ]] && break
+    sleep 5
+done
+k3s kubectl wait node/"$(hostname)" --for=jsonpath='{.status.nodeInfo.kubeletVersion}'="$K3S_VERSION" --timeout=10s
 k3s kubectl wait node/"$(hostname)" --for=condition=Ready --timeout=300s
 k3s kubectl get node -o wide
 echo "k3s is up on $K3S_VERSION; the previous binary is /usr/local/bin/k3s.$current"

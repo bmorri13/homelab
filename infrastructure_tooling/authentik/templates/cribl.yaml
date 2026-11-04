@@ -66,8 +66,8 @@ metadata:
   name: cribl-leader
 spec:
   serverName: {{ .Values.cribl.leader.serverName }}
-  rootCAsSecrets:
-    - homelab-ca
+  rootCAs:
+    - secret: homelab-ca
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
