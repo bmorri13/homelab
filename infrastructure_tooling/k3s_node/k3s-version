@@ -1,0 +1,4 @@
+# The k3s release k3s-01 runs, and the SHA-256 of its amd64 binary (from the
+# release's sha256sum-amd64.txt). upgrade-k3s.sh installs exactly this.
+K3S_VERSION=v1.32.13+k3s1
+K3S_SHA256=4aaf9825a92dc885856baab578f18e1881e8d381d42578bcbdabd5d7b7285865
