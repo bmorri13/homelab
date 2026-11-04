@@ -7,6 +7,10 @@ resourceExclusions:
     # Stop ArgoCD tracking (and pruning) the runtime objects the ARC controller
     # creates. See templates/argocd-cm.yaml for the full explanation.
     enabled: true
+  # Argo CD 3.x's own default exclusions and ignoreResourceUpdates, minus
+  # Endpoints. See templates/argocd-cm.yaml.
+  upstreamDefaults:
+    enabled: true
 
 resourceCustomizations:
   ingressHealth:

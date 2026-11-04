@@ -17,7 +17,8 @@ metadata:
     app.kubernetes.io/name: argocd-cm
     app.kubernetes.io/part-of: argocd
 data:
-{{- if .Values.resourceExclusions.arc.enabled }}
+{{- with .Values.resourceExclusions }}
+{{- if or .arc.enabled .upstreamDefaults.enabled }}
   # The ARC controller copies the AutoscalingRunnerSet's Helm labels -- including
   # app.kubernetes.io/instance -- onto the AutoscalingListener, EphemeralRunnerSet
   # and EphemeralRunner objects it creates at runtime. ArgoCD reads that label as
@@ -32,7 +33,14 @@ data:
   #
   # Do NOT exclude AutoscalingRunnerSet: that one IS rendered from Git by the
   # arc_runner_scaleset charts and must stay under ArgoCD's control.
+  #
+  # From Argo CD 3.0 upstream ships default exclusions and ignoreResourceUpdates
+  # in its own argocd-cm. This chart owns argocd-cm (infrastructure_tooling/argocd
+  # leaves upstream's copy out), so they are copied in below, from v3.4.13, minus
+  # core Endpoints: the authentik app manages two selectorless Endpoints from Git
+  # (cribl-leader, splunk-web), and an excluded kind can't be synced.
   resource.exclusions: |
+{{- if .arc.enabled }}
     - apiGroups:
         - actions.github.com
       kinds:
@@ -41,6 +49,83 @@ data:
         - EphemeralRunnerSet
       clusters:
         - "*"
+{{- end }}
+{{- if .upstreamDefaults.enabled }}
+    - apiGroups:
+        - discovery.k8s.io
+      kinds:
+        - EndpointSlice
+    - apiGroups:
+        - coordination.k8s.io
+      kinds:
+        - Lease
+    - apiGroups:
+        - authentication.k8s.io
+        - authorization.k8s.io
+      kinds:
+        - SelfSubjectReview
+        - TokenReview
+        - LocalSubjectAccessReview
+        - SelfSubjectAccessReview
+        - SelfSubjectRulesReview
+        - SubjectAccessReview
+    - apiGroups:
+        - certificates.k8s.io
+      kinds:
+        - CertificateSigningRequest
+    - apiGroups:
+        - cert-manager.io
+      kinds:
+        - CertificateRequest
+    - apiGroups:
+        - kyverno.io
+        - reports.kyverno.io
+        - wgpolicyk8s.io
+      kinds:
+        - PolicyReport
+        - ClusterPolicyReport
+        - EphemeralReport
+        - ClusterEphemeralReport
+        - AdmissionReport
+        - ClusterAdmissionReport
+        - BackgroundScanReport
+        - ClusterBackgroundScanReport
+        - UpdateRequest
+{{- end }}
+{{- end }}
+{{- if .upstreamDefaults.enabled }}
+  # Changes Argo CD doesn't need to refresh an app for (upstream's defaults, minus
+  # Endpoints for the same reason as above).
+  resource.customizations.ignoreResourceUpdates.all: |
+    jsonPointers:
+      - /status
+  resource.customizations.ignoreResourceUpdates.ConfigMap: |
+    jqPathExpressions:
+      - '.metadata.annotations."cluster-autoscaler.kubernetes.io/last-updated"'
+      - '.metadata.annotations."control-plane.alpha.kubernetes.io/leader"'
+  resource.customizations.ignoreResourceUpdates.apps_ReplicaSet: |
+    jqPathExpressions:
+      - '.metadata.annotations."deployment.kubernetes.io/desired-replicas"'
+      - '.metadata.annotations."deployment.kubernetes.io/max-replicas"'
+      - '.metadata.annotations."rollout.argoproj.io/desired-replicas"'
+  resource.customizations.ignoreResourceUpdates.argoproj.io_Application: |
+    jqPathExpressions:
+      - '.metadata.annotations."notified.notifications.argoproj.io"'
+      - '.metadata.annotations."argocd.argoproj.io/refresh"'
+      - '.metadata.annotations."argocd.argoproj.io/hydrate"'
+      - '.operation'
+  resource.customizations.ignoreResourceUpdates.autoscaling_HorizontalPodAutoscaler: |
+    jqPathExpressions:
+      - '.metadata.annotations."autoscaling.alpha.kubernetes.io/behavior"'
+      - '.metadata.annotations."autoscaling.alpha.kubernetes.io/conditions"'
+      - '.metadata.annotations."autoscaling.alpha.kubernetes.io/metrics"'
+      - '.metadata.annotations."autoscaling.alpha.kubernetes.io/current-metrics"'
+  resource.customizations.ignoreResourceUpdates.discovery.k8s.io_EndpointSlice: |
+    jsonPointers:
+      - /metadata
+      - /endpoints
+      - /ports
+{{- end }}
 {{- end }}
 {{- if .Values.resourceCustomizations.ingressHealth.enabled }}
   # Traefik on this cluster runs hostNetwork with its Service disabled

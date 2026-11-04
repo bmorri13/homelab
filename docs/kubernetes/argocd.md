@@ -50,7 +50,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ## The install itself
 
-The running install (v2.13.2) is captured in [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd): the upstream manifests pinned to a release, with this cluster's changes. Upgrades are made there and applied by hand; see its README. The steps below are how it was first installed.
+The running install is captured in [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd): the upstream manifests pinned to a release, with this cluster's changes. Upgrades are made there and applied by hand; see its README. The steps below are how it was first installed.
 
 ## ArgoCD server configuration (`argocd-cm`)
 
@@ -60,11 +60,12 @@ ArgoCD's own settings live in [`infrastructure_tooling/argocd_config`](../../inf
 kubectl apply -f infrastructure_tooling/argocd_config/application.yaml
 ```
 
-That chart is the source of truth for `argocd-cm`. Settings added through the ArgoCD UI that are not in the chart get reverted on the next sync — put them in the chart instead. It currently configures two things:
+That chart is the source of truth for `argocd-cm`. Settings added through the ArgoCD UI that are not in the chart get reverted on the next sync — put them in the chart instead. It currently configures:
 
 | Setting | Why |
 |---------|-----|
 | `resource.exclusions` for `AutoscalingListener`, `EphemeralRunner`, `EphemeralRunnerSet` | The ARC controller stamps `app.kubernetes.io/instance` onto the runtime objects it creates. ArgoCD reads that as its own tracking label, sees resources absent from Git, and prunes them; the controller recreates them, looping every reconcile. `AutoscalingRunnerSet` is deliberately **not** excluded — that one does come from Git. |
 | Ingress health override | Traefik runs hostNetwork with its Service disabled and there is no MetalLB, so `status.loadBalancer` never populates and ArgoCD's built-in check would leave every Ingress-owning app stuck at `Progressing`. |
+| Argo CD 3.x default `resource.exclusions` and `ignoreResourceUpdates`, minus `Endpoints` | Upstream ships these in its own `argocd-cm`, which isn't applied here. `Endpoints` is left out because the `authentik` app manages two selectorless `Endpoints` from Git, and an excluded kind can't be synced. |
 
 > **The ARC runner apps must keep `prune: false`.** The exclusions above cover the `actions.github.com` kinds, but the ARC controller also creates a **Role and RoleBinding** per listener, which no `apiGroups`-based exclusion can cover without excluding all RBAC. The controller is therefore run with `flags.excludeLabelPropagationPrefixes: [app.kubernetes.io/instance]` (set on the `arc-controller-k3s` Application, which is not in Git) so it stops copying ArgoCD's tracking label onto them. Keep prune off anyway: if that flag is ever lost, prune would delete the listener RBAC and loop. With the flag in place, `arc-runner-scaleset-k3s` and `arc-runner-cointhieves-k3s` should both show `Synced / Healthy`.
