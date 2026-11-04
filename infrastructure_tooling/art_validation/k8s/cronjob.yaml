@@ -1,0 +1,47 @@
+# Weekly, at the same time as the host part on ubuntu-desktop-01. Run it any time with
+#   kubectl -n art-validation create job --from=cronjob/art-validation art-validation-manual-$(date +%s)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: art-validation
+spec:
+  schedule: "0 6 * * 0"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: art-validation
+        spec:
+          serviceAccountName: art-runner
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: runner
+              image: docker.io/alpine/k8s:1.31.13@sha256:7a319b15cfc99c9aaa27ec9891d6b4ca24632b795908591c7b0ba89b03549e0a
+              command: [bash, /scripts/art-validation.sh]
+              env:
+                - {name: HOME, value: /tmp}
+                - name: TARGET_IMAGE
+                  value: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 20m, memory: 64Mi}
+                limits: {memory: 256Mi}
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          volumes:
+            - name: scripts
+              configMap: {name: art-validation-scripts}

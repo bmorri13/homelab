@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly detection validation (same time as the k3s CronJob)
+
+[Timer]
+OnCalendar=Sun *-*-* 06:00:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

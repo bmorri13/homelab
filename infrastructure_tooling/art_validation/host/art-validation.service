@@ -1,0 +1,7 @@
+[Unit]
+Description=Detection validation: Atomic Red Team style tests (homelab art_validation)
+Documentation=https://github.com/bmorri13/homelab/tree/main/infrastructure_tooling/art_validation
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/art-validation/art-validation
