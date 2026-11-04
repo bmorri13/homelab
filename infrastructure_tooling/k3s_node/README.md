@@ -61,6 +61,8 @@ Rollback: `qm rollback 103 <name>` on proxmox3. This returns the whole VM to the
 | 3 | 1.34 | chart 40 | Argo CD 3.4 → 3.6 here (3.6 is tested on 1.34+) |
 | 4 | 1.35, 1.36 | chart 40 | External Secrets 0.18 and Vault 1.18 need upgrading on the way |
 
+Step 2 (1.33.13+k3s2) brings Traefik 3.7.8 on chart 40.1.4. With our config it renders the same as chart 39 apart from the image. Kubernetes 1.33 deprecates core `Endpoints`, so applying the two in `authentik` gives warnings only. Moving them to EndpointSlices also needs EndpointSlice taken out of Argo CD's exclusions (`argocd_config`).
+
 Traefik 3 changes for this cluster:
 - The Ingress routes, `ipAllowList` and forwardAuth middlewares, and ServersTransports already use the `traefik.io` API that v3 reads.
 - Selectorless Services (`authentik/cribl-leader`, `authentik/splunk-web`) work through the EndpointSlices Kubernetes mirrors from their Endpoints.
