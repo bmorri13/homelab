@@ -34,6 +34,13 @@
       "enabled": false
     },
     {
+      "description": "Argo CD itself (infrastructure_tooling/argocd) is applied by hand, so merging a bump changes nothing until someone applies it, and each release only supports certain Kubernetes versions. Upgrade by hand: see infrastructure_tooling/argocd/README.md.",
+      "matchFileNames": [
+        "infrastructure_tooling/argocd/**"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Charts are vendored under charts/: have Renovate run helm dependency update so a chart bump commits the new tgz too (otherwise the old one keeps rendering).",
       "matchManagers": [
         "helmv3"

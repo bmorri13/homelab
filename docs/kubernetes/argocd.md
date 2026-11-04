@@ -1,7 +1,7 @@
 # ArgoCD
 - In order to manage deployments in a GitOps workflow metholdology, I will be using ArgoCD as my CD tool to deploy out my subsequent applications
 
-## Setup
+## Setup (original install)
 - Following the [ArgoCD Getting Starting Guide](https://argo-cd.readthedocs.io/en/stable/getting_started/), we will deploy ArgoCD
 > NOTE: I am only including the steps that I have run that are a subset of the steps on the guide (e.g. not installing argocd cli, etc.)
 
@@ -47,6 +47,10 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 - Password: outputted results from Step 5
 
 - You are now ready to install your first apps!
+
+## The install itself
+
+The running install (v2.13.2) is captured in [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd): the upstream manifests pinned to a release, with this cluster's changes. Upgrades are made there and applied by hand; see its README. The steps below are how it was first installed.
 
 ## ArgoCD server configuration (`argocd-cm`)
 
