@@ -24,3 +24,7 @@ Every record carries `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name`,
 - Checkpoints live in `/var/lib/otelcol` on the node (`storeCheckpoints`), which runs the collector as root.
 - The image is `otel/opentelemetry-collector-contrib`, pinned to the same version as the host agents in `monitoring_stack/splunk/otel-agent/`.
 - **`k8s_events` stops for good if its watch fails while the API server restarts.** It logs `Watch channel closed unexpectedly` and never reconnects, though pod logs and the audit log keep flowing, because those come from files. This happened when k3s restarted for the audit log on 2026-10-23, and `kube:events` was silent for a day. After restarting k3s by hand, also run `kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent`; `k3s_audit/install.sh` does this itself. A node reboot recreates the pod, so it's unaffected.
+
+## Trivy Operator reports
+
+`k8sobjects/trivy` reads Trivy Operator's report objects (`../trivy_operator`) every 12 hours, through a read-only ClusterRole on those types only (`clusterRole.rules` in `values.yaml`), and sends each as one event with `index=security` and `sourcetype=trivy:<kind>`.

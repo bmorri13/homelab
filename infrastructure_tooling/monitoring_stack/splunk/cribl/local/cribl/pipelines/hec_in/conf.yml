@@ -82,6 +82,29 @@ functions:
       AdGuard Home's query log on k3s-01 (infrastructure_tooling/adguard), one JSON
       line per DNS query, shipped by its querylog sidecar: to network.
   - id: eval
+    filter: sourcetype && sourcetype.startsWith('trivy:')
+    conf:
+      add:
+        - name: index
+          value: "'security'"
+    final: true
+    description: >-
+      Trivy Operator reports from the k3s collector (sourcetype trivy:<kind>): to
+      security. Final, so the debug-line drop below can't discard a report whose
+      vulnerability text mentions "debug".
+  - id: eval
+    filter: __e['syslog.identifier'] == 'kube-bench'
+    conf:
+      add:
+        - name: index
+          value: "'security'"
+        - name: sourcetype
+          value: "'kube-bench'"
+    final: true
+    description: >-
+      kube-bench's monthly CIS k3s benchmark on k3s-01 (infrastructure_tooling/
+      kube_bench), one line per check: to security.
+  - id: eval
     filter: >-
       __e['container.name'] == 'cloudflared-tunnel' && __e['container.image.name'] == 'cloudflare/cloudflared'
     conf:
