@@ -106,7 +106,6 @@ services:
       - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
       - "5514:9515/tcp"
       - "8443:8443"       # HEC over HTTPS (homelab CA), token required
-      - "2055:2055/udp"   # NetFlow/IPFIX: UniFi gateway -> index=network
     networks:
       - default           # sends to splunk:9997
       - cribl-leader      # pulls config from cribl:4200
