@@ -24,6 +24,22 @@ ingress:
     - 100.64.0.0/10
     - fd7a:115c:a1e0::/48
 
+# The Cribl UI behind Authentik (templates/cribl.yaml). Cribl's Free license has no
+# external login, so Traefik asks Authentik's embedded outpost first, then Cribl's own
+# login follows. The Leader's firewall lets only k3s-01 reach port 9000.
+cribl:
+  host: cribl.bmosan.com
+  tlsSecretName: cribl-bmosan-com-tls
+  # The Leader, on security-tooling-01. Its cert (homelab CA) has this name, not the
+  # host name, so Traefik verifies against it.
+  leader:
+    ip: 192.168.4.11
+    port: 9000
+    serverName: cribl-homelab
+  # Traefik runs on the host network, so it can't resolve cluster DNS names. It reaches
+  # the outpost through a Service at this fixed address instead.
+  forwardAuthClusterIP: 10.43.200.11
+
 # Authentik's database: the official image, one replica, on k3s-01's local-path storage.
 # (The upstream chart's PostgreSQL option is the Bitnami chart, which no longer has free
 # images.)

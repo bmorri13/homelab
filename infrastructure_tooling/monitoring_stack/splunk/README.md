@@ -11,6 +11,8 @@ OTel collectors ──HEC 8443───┘    drop noise, mask secrets,         
                                   Cribl Leader ◄── UI, API, MCP (9000, HTTPS) ─┘
 ```
 
+The Cribl UI is at `https://cribl.bmosan.com` (tailnet only, behind Authentik; see `infrastructure_tooling/authentik`).
+
 Every source sends to Cribl. Splunk receives only from Cribl, and its receiving ports are not published on the host. If Splunk is down (restart, upgrade), Cribl holds data in a persistent queue (up to 10 GB) and catches up.
 
 ## Layout
@@ -50,12 +52,12 @@ Cribl picks the index for every event. Data older than the retention below, or p
 |---|---|---|
 | `8000` | Splunk Web (HTTPS, self-signed) | |
 | `8089` | Splunk REST API + MCP Server app (HTTPS, homelab CA) | Published on 192.168.4.11 only. `scripts/mgmt-firewall.sh` drops everything but k3s-01 and local containers. |
-| `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | |
+| `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | k3s-01 only (`CRIBL_UI_ALLOWED`): the MCP gateway, and Traefik serving the UI at `https://cribl.bmosan.com` behind Authentik. Cribl's Free license has no external login, so Authentik's forward auth sits in front of Cribl's own login. |
 | `514` tcp/udp | Cribl syslog → `infra` | Closed: nothing sends to it. To use it, add the sender to `SYSLOG_INFRA_ALLOWED`. |
 | `5514` tcp/udp | Cribl syslog → `network` | UniFi gateways only (`SYSLOG_NETWORK_ALLOWED`). |
 | `8443` | Cribl HEC (HTTPS, homelab CA), input `hec_tls` | OTel collectors and the homelab agents. Requires `CRIBL_HEC_TOKEN`. Server LAN only (`HEC_ALLOWED`, default 192.168.4.0/24). |
 
-Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 514, 5514 and 8443 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). The allowlists are comma-separated CIDRs, defaulted in the script so the boot-time unit (which has no `.env`) applies the same rules. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
+Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 514, 5514, 8443 and 9000 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). The allowlists are comma-separated CIDRs, defaulted in the script so the boot-time unit (which has no `.env`) applies the same rules. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
 
 ### Cribl routing
 
@@ -299,7 +301,7 @@ chmod 600 .env
 
 `deploy.sh` is safe to re-run. It:
 
-1. Installs and runs the host firewall for ports 8089, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
+1. Installs and runs the host firewall for ports 8089, 9000, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
 2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
