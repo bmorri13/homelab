@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
+# Runs under busybox sh (cronjob.yaml): keep it POSIX sh plus pipefail.
 # Atomic Red Team style detection validation, Kubernetes part. Runs in the namespace
 # art-validation as the service account art-runner, which may do exactly these tests
 # and nothing else (rbac.yaml). Before each test it prints a marker
