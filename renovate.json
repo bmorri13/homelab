@@ -67,11 +67,11 @@
       "enabled": false
     },
     {
-      "description": "kubectl must stay within one minor version of the cluster (k3s-01 runs 1.33): the art-validation runner uses it against the API server. Patch updates up to 1.33 still come through; raise this with the k3s upgrade.",
+      "description": "kubectl must stay within one minor version of the cluster (k3s-01 runs 1.34): the art-validation runner uses it against the API server. Patch updates up to 1.34 still come through; raise this with the k3s upgrade.",
       "matchPackageNames": [
         "registry.k8s.io/kubectl"
       ],
-      "allowedVersions": "<1.34.0"
+      "allowedVersions": "<1.35.0"
     }
   ]
 }
