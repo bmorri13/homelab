@@ -1,0 +1,40 @@
+# Argo CD itself: the upstream non-HA install, pinned to a release, plus the
+# changes this cluster makes to it. Applied by hand (README.md), not by Argo CD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - https://github.com/argoproj/argo-cd//manifests/cluster-install?ref=v2.13.2
+patches:
+  # argocd-cm and argocd-rbac-cm belong to the argocd-config app
+  # (infrastructure_tooling/argocd_config). Applying upstream's copies would
+  # overwrite its settings until Argo CD self-heals them back.
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cm
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-rbac-cm
+  # The UI is reached on k3s-01's NodePorts (no ingress).
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: argocd-server
+      spec:
+        type: NodePort
+        ports:
+          - name: http
+            port: 80
+            targetPort: 8080
+            nodePort: 30447
+          - name: https
+            port: 443
+            targetPort: 8080
+            nodePort: 31836
