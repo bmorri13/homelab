@@ -1,0 +1,13 @@
+# How long a login lasts. By default Authentik's session ends when the browser closes;
+# this keeps it for 5 hours from login, across browser restarts, so one password + MFA
+# covers Splunk Web and the Cribl UI gate for that time. Then both ask again.
+# (The Cribl gate's own token is also 5 hours: blueprints/cribl.yaml.)
+version: 1
+metadata:
+  name: homelab - session length
+entries:
+  - model: authentik_stages_user_login.userloginstage
+    identifiers:
+      name: default-authentication-login
+    attrs:
+      session_duration: hours=5

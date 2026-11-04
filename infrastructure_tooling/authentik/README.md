@@ -16,6 +16,7 @@ This chart deploys Authentik and the routes for both apps.
 - **No Redis.** Authentik dropped it in 2025.10.
 - **No Kubernetes API access** (`serviceAccount.create: false`). The Cribl forward auth uses the outpost embedded in the server, so Authentik never deploys outposts of its own.
 - **Blueprints** (`blueprints/*.yaml`, mounted from a ConfigMap): Authentik configuration kept in Git. The worker applies each one when it changes and re-applies it every hour, so UI edits to these objects revert.
+  - `session.yaml`: a login lasts 5 hours from sign-in (Authentik's default ends it when the browser closes), so one password and second factor cover Splunk Web and the Cribl UI gate for that time. The Cribl gate's token is 5 hours too (`cribl.yaml`). Cribl's own login still follows: its Free license can't take Authentik's identity.
   - `require-mfa.yaml`: the default login flow's MFA stage requires TOTP or WebAuthn, and makes a user without either enrol one before the login completes.
   - `splunk.yaml`: the Splunk SAML provider and application, its `role`, `mail` and `realName` attributes, and the entitlement `splunk-admin` for `authentik Admins` (Splunk's side: `monitoring_stack/splunk/apps/00_homelab_auth`).
   - `cribl.yaml`: a forward-auth proxy provider for `cribl.bmosan.com`, the Cribl application (open to `authentik Admins` only), and the provider bound to the embedded outpost.
