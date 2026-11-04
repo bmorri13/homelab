@@ -43,7 +43,7 @@ spec:
         # directory is created one level down the volume (whose root belongs to root),
         # so AdGuard owns it at 0700.
         - name: config
-          image: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           command: [sh, -c, "cp /config/AdGuardHome.yaml /conf/AdGuardHome.yaml && mkdir -p /work/agh && chmod 700 /work/agh"]
           securityContext: &ctr
             allowPrivilegeEscalation: false
@@ -83,7 +83,7 @@ spec:
         # Splunk through the k3s OTel collector and Cribl (hec_in: index=network,
         # sourcetype=adguard:querylog).
         - name: querylog
-          image: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          image: docker.io/library/busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           # From the end on a restart (Splunk already has the older lines); from the start
           # if AdGuard hasn't created the file yet.
           command:
