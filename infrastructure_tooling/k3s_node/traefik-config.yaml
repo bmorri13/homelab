@@ -2,6 +2,11 @@
 # k3s applies it over its bundled Traefik chart. Traefik listens on k3s-01's own
 # 80 and 443 (host network); there is no Service, since there is no load balancer.
 # Holds for chart 27 (Traefik 2.11, k3s 1.31) through chart 40 (k3s 1.33 to 1.36).
+#
+# updateStrategy: the chart starts the new pod before stopping the old one, but on
+# one node the new pod can't get host ports 80 and 443 while the old one holds them,
+# so a Traefik upgrade sits Pending forever (it did on the move to k3s 1.33). Stop
+# the old pod first instead: a few seconds without ingress per Traefik update.
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -10,6 +15,11 @@ metadata:
 spec:
   valuesContent: |-
     hostNetwork: true
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+        maxSurge: 0
     service:
       enabled: false
     ports:
