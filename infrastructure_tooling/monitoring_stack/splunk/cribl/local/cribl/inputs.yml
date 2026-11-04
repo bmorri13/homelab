@@ -88,3 +88,19 @@ inputs:
     dropControlFields: true
     extractMetrics: false
     emitTokenMetrics: false
+  netflow:
+    type: netflow
+    host: 0.0.0.0
+    port: 2055
+    description: NetFlow/IPFIX from the UniFi gateway (host port 2055/udp)
+    disabled: false
+    sendToRoutes: true
+    pqEnabled: false
+    streamtags: []
+    enablePassThrough: false
+    ipAllowlistRegex: /.*/
+    ipDenylistRegex: /^$/
+    templateCacheMinutes: 30
+    v5Enabled: true
+    v9Enabled: true
+    ipfixEnabled: true
