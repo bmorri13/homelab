@@ -1,7 +1,7 @@
 # Trivy Operator on k3s-01: scans what is actually running, not what is in Git.
 # Reports are Kubernetes objects (VulnerabilityReport, ConfigAuditReport,
 # ExposedSecretReport, RbacAssessmentReport, ClusterRbacAssessmentReport). The k3s OTel
-# collector reads them every 12 hours (otel_collector_k3s, receiver k8sobjects/trivy)
+# collector reads them every 12 hours (otel_collector_k3s, receiver k8s_objects/trivy)
 # and sends them to Splunk index=security as sourcetype=trivy:<kind>.
 
 trivy-operator:

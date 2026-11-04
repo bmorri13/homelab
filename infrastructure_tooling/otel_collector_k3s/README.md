@@ -27,4 +27,4 @@ Every record carries `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name`,
 
 ## Trivy Operator reports
 
-`k8sobjects/trivy` reads Trivy Operator's report objects (`../trivy_operator`) every 12 hours, through a read-only ClusterRole on those types only (`clusterRole.rules` in `values.yaml`), and sends each as one event with `index=security` and `sourcetype=trivy:<kind>`.
+`k8s_objects/trivy` reads Trivy Operator's report objects (`../trivy_operator`) every 12 hours, through a read-only ClusterRole on those types only (`clusterRole.rules` in `values.yaml`), and sends each as one event with `index=security` and `sourcetype=trivy:<kind>`.

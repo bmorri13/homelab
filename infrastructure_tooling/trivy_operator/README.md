@@ -21,7 +21,7 @@ Renovate keeps versions current but never says which CVEs are running; guardrail
 
 ## Into Splunk
 
-The k3s OTel collector (`../otel_collector_k3s`, receiver `k8sobjects/trivy`, read-only ClusterRole on these report types) copies every report every 12 hours to Cribl, which sends it to `index=security` as `sourcetype=trivy:<kind>` (`trivy:vulnerabilityreport`, `trivy:exposedsecretreport`, ...). `monitoring_stack/splunk/apps/85_k8s_posture` parses the JSON. Alerts in `85_homelab_ops`, posted to Slack:
+The k3s OTel collector (`../otel_collector_k3s`, receiver `k8s_objects/trivy`, read-only ClusterRole on these report types) copies every report every 12 hours to Cribl, which sends it to `index=security` as `sourcetype=trivy:<kind>` (`trivy:vulnerabilityreport`, `trivy:exposedsecretreport`, ...). `monitoring_stack/splunk/apps/85_k8s_posture` parses the JSON. Alerts in `85_homelab_ops`, posted to Slack:
 
 - *Trivy - critical vulnerabilities in running images*: weekly digest (Monday 13:00 UTC).
 - *Trivy - secret found in a running image*: within 6 hours of a report, then once a week per image. Secret values are masked by Trivy and never logged.
