@@ -57,6 +57,13 @@ ALERTS = {
 }
 
 
+def _is_validation(r):
+    """Findings from the weekly detection validation (infrastructure_tooling/art_validation):
+    marked art-validation, on the two hosts it runs on. Checked by "Splunk - detection
+    validation failed" instead of being triaged."""
+    return "art-validation" in json.dumps(r) and _first(r.get("host")) in ("ubuntu-desktop-01", "k3s-01")
+
+
 def security(gw):
     items = []
     rows = gw.splunk(
@@ -64,6 +71,8 @@ def security(gw):
         "| table _time detection severity technique tactic host user src object detail count first_seen last_seen",
         WINDOW)
     for r in rows:
+        if _is_validation(r):
+            continue
         name = r.get("detection", "")
         runbook = next((f for prefix, f in DETECTION_RUNBOOKS if name.startswith(prefix)), "general.md")
         key = "|".join(["hl", name, r.get("host", ""), r.get("user", ""), r.get("src", ""), r.get("object", "")])
@@ -80,6 +89,8 @@ def security(gw):
         for r in gw.splunk(f'| loadjob "{sid}"', WINDOW):
             parts = [_first(r.get(k)) for k in fields]
             host = parts[0] if "host" in fields[0] else _first(r.get("host"))
+            if "art-validation" in json.dumps(r) and host == "ubuntu-desktop-01":
+                continue
             title = display(r)
             severity = fixed_severity or _top_severity(r.get("severity"))
             items.append(_item("|".join(["alert", name, *parts]), "alert", title, severity, host, r, runbook))

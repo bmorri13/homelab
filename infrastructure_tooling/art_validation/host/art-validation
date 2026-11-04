@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Atomic Red Team style detection validation, host part (ubuntu-desktop-01).
+# Each test is a harmless, self-cleaning version of an ATT&CK technique that one of
+# the homelab detections should catch. Before each test it logs a marker
+#   ART-VALIDATION run=<id> expect="<detection>" test=<id>
+# to the journal (index=infra); "Splunk - detection validation failed"
+# (85_homelab_ops) checks about an hour later that every expected finding appeared.
+# Everything it creates is named art-validation, which is also how the security agent
+# recognises these findings and leaves them out of Slack.
+# Run by art-validation.timer (weekly) or by hand: systemctl start art-validation
+set -uo pipefail
+
+RUN="${ART_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-host}"
+# Not /run or /tmp: those are mounted noexec here, and the T1003.008 test runs a binary.
+WORK=/usr/local/lib/art-validation/work
+SENSITIVE="HL - Sensitive command run over SSH or sudo"
+
+mark() { logger -t art-validation -p user.notice "ART-VALIDATION run=$RUN expect=\"$1\" test=$2"; }
+step() { echo "[$RUN] $*"; }
+failed=0
+fail() { echo "[$RUN] FAILED: $*" >&2; failed=1; }
+
+cleanup() {
+    sudo -n -u art-validation crontab -r 2>/dev/null || true
+    id art-validation >/dev/null 2>&1 && sudo -n userdel art-validation 2>/dev/null
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+# 755: the art-validation account reads its crontab file from here.
+install -d -m 755 "$WORK"
+
+# T1003.008 OS Credential Dumping: /etc/passwd and /etc/shadow. Reads /etc/shadow with a
+# copy of cat under the run directory, so Falco reports an untrusted program (and the
+# path carries the marker). Nothing is kept.
+mark "Falco: Read sensitive file untrusted" T1003.008
+install -m 755 /usr/bin/cat "$WORK/art-validation-cat"
+"$WORK/art-validation-cat" /etc/shadow >/dev/null && step "T1003.008 read /etc/shadow" || fail T1003.008
+
+# T1136.001 Create Account: Local Account, through sudo. A system account with no
+# home directory and no login shell; removed at the end.
+mark "$SENSITIVE" T1136.001
+sudo -n useradd -M -r -s /usr/sbin/nologin -c art-validation art-validation && step "T1136.001 useradd art-validation" || fail T1136.001
+
+# T1053.003 Scheduled Task/Job: Cron. Installs a crontab for that account containing
+# only a comment, so nothing ever runs; removed at the end.
+mark "$SENSITIVE" T1053.003
+printf '# art-validation: detection test, no jobs\n' > "$WORK/art-validation.cron"
+chmod 644 "$WORK/art-validation.cron"
+sudo -n -u art-validation crontab "$WORK/art-validation.cron" && step "T1053.003 crontab art-validation.cron" || fail T1053.003
+
+# T1070.003 Indicator Removal: Clear Command History, in a throwaway shell.
+mark "$SENSITIVE" T1070.003
+sudo -n bash -c 'history -c # art-validation' && step "T1070.003 history -c" || fail T1070.003
+
+step "done (failed=$failed)"
+exit "$failed"

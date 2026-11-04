@@ -1,0 +1,26 @@
+# Argo CD Application for the Kubernetes part of the detection validation. Apply once:
+#   kubectl apply -f infrastructure_tooling/art_validation/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: art-validation
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/art_validation/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: art-validation
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest

@@ -188,7 +188,10 @@ det("HL - Sensitive command run over SSH or sudo",
     "index=infra sourcetype=linux_secure (eventtype=homelab_tailscale_ssh_command OR app=sudo) "
     "| eval cmd=coalesce(command, process) "
     f"| regex cmd=\"{SENSITIVE}\" "
-    "| eval user=coalesce(ts_user, user) "
+    # A local sudo has no src, and stats drops rows whose by-fields are empty: until
+    # 2026-11-04 this only ever fired for commands over Tailscale SSH (found by
+    # infrastructure_tooling/art_validation).
+    "| eval user=coalesce(ts_user, user), src=coalesce(src, \"local\") "
     "| stats count min(_time) as first_seen max(_time) as last_seen values(cmd) as cmds by host user src "
     "| eval object=\"command\", detail=mvjoin(mvindex(cmds, 0, 4), \" || \") "
     "| convert ctime(first_seen) ctime(last_seen) ",
