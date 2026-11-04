@@ -46,7 +46,7 @@ Widen to other networks once it has run cleanly for a while.
 
 **Rollback:** set that network's DNS back to Auto. Clients return to the gateway at their next renewal, or `networkctl renew eth0 && systemctl restart systemd-resolved`.
 
-Live since 2026-11-04 on the server LAN (192.168.4.0/24) and 192.168.3.0/24. Not on the isolated networks: their firewall policy blocks them from reaching the server LAN, so AdGuard could never answer them.
+Only roll it out to networks whose firewall policy lets clients reach the server LAN on port 53: elsewhere AdGuard can never answer, and every lookup waits for the fallback.
 
 ## Outside Git
 
