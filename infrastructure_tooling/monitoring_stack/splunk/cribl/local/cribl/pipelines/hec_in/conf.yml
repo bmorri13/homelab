@@ -70,6 +70,19 @@ functions:
       startup lines stay in apps.
   - id: eval
     filter: >-
+      __e['k8s.namespace.name'] == 'adguard' && __e['k8s.container.name'] == 'querylog' && /^\{"T":/.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'network'"
+        - name: sourcetype
+          value: "'adguard:querylog'"
+    final: true
+    description: >-
+      AdGuard Home's query log on k3s-01 (infrastructure_tooling/adguard), one JSON
+      line per DNS query, shipped by its querylog sidecar: to network.
+  - id: eval
+    filter: >-
       __e['container.name'] == 'cloudflared-tunnel' && __e['container.image.name'] == 'cloudflare/cloudflared'
     conf:
       add:

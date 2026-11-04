@@ -1,0 +1,58 @@
+# AdGuard Home's config, kept in Git. kustomization.yaml turns it into a ConfigMap, so a
+# change rolls the pod; the init container copies it over the live file on every start,
+# so changes made in the web UI last only until the next restart.
+#
+# It starts as a logging resolver that answers exactly like the gateway does today:
+# every query goes to the UCG-Max (192.168.4.1), so local names and the gateway's own
+# upstreams are unchanged, and nothing is blocked (filtering_enabled: false, no
+# filters). Turn on blocklists here once it has run for a while.
+http:
+  # Web UI and API. Not exposed outside the pod: reach it with
+  # kubectl -n adguard port-forward deploy/adguard 3000. No users are defined, so
+  # anyone who can reach the port is an admin; the NetworkPolicy only lets DNS in.
+  address: 0.0.0.0:3000
+users: []
+dns:
+  bind_hosts:
+    - 0.0.0.0
+  # Not 53: the pod runs unprivileged. The Service maps 192.168.4.98:53 here.
+  port: 5353
+  upstream_dns:
+    - 192.168.4.1
+  bootstrap_dns:
+    - 192.168.4.1
+  fallback_dns: []
+  upstream_mode: load_balance
+  # Reverse lookups of LAN addresses go to the gateway too, which knows the client
+  # names.
+  use_private_ptr_resolvers: true
+  local_ptr_upstreams:
+    - 192.168.4.1
+  # The default (20 queries/s per /24) would throttle the whole server LAN, and
+  # k3s-01's CoreDNS, as one client.
+  ratelimit: 0
+  # Answer like the gateway does: it neither refuses ANY nor sets the DNSSEC bit.
+  refuse_any: false
+  enable_dnssec: false
+  cache_enabled: true
+querylog:
+  enabled: true
+  file_enabled: true
+  # Flush to querylog.json every few entries (default 1000), so the sidecar ships
+  # queries to Splunk within seconds. The file rotates daily; Splunk keeps the copy.
+  size_memory: 5
+  interval: 24h
+  ignored: []
+statistics:
+  enabled: true
+  interval: 24h
+  ignored: []
+filtering:
+  protection_enabled: true
+  filtering_enabled: false
+  parental_enabled: false
+  safebrowsing_enabled: false
+filters: []
+whitelist_filters: []
+user_rules: []
+schema_version: 34

@@ -72,6 +72,8 @@ With Gateway ticked, the gateway's own system log (systemd, mcad, DPI, ulogd, ab
 
 `netflow` (UDP 2055) receives NetFlow v5/v9 and IPFIX from the UCG-Max. The `netflow` pipeline sends one event per flow record to `network` as `sourcetype=netflow`, with the record serialized to JSON (`apps/85_netflow`: `KV_MODE = json`) and `host` set to the exporter's address. NetFlow is switched on in the UniFi console, not here: the collector is `192.168.4.11`, port `2055`. An input or route added to the repo reaches a group that's already seeded through `cribl-bootstrap.sh` (inputs) and `cribl-sync-pipelines.sh` (pipelines and routes).
 
+AdGuard Home's DNS query log (k3s-01, [`../../adguard`](../../adguard/README.md)) arrives through `hec_in` from its `querylog` sidecar and goes to `network` as `sourcetype=adguard:querylog`; `apps/85_adguard` maps its fields to CIM Network_Resolution.
+
 Falco alerts arriving through `hec_in` (journald identifier `falco`, or the `falco` namespace on k3s) are chained to the [`cc-falco-ocsf`](cribl/packs/cc-falco-ocsf) pack and sent to `security`; see [`../falco/`](../falco/README.md).
 
 Vault's audit log arrives through `hec_in` too. Vault writes it to stdout (a `file` audit device at path `stdout/`), so it shares the pod log with Vault's server log. `hec_in` recognises the audit entries, tags them `sourcetype=hashicorp_vault_audit_log` and sends them to `audit`, before any drop rule can see them. Vault HMACs tokens and secret values in the entries. To recreate the device after a Vault rebuild, run as a token with `sudo` on `sys/audit`:
@@ -252,7 +254,7 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 | UniFi | admin login from a new source or a failure (T1078.001), configuration change (T1686), a device on an isolated network blocked from reaching another Internal network (T1046) |
 | Logins (Authentik, Splunk Web) | three or more failed Authentik logins (T1110.001), an Authentik second factor failing after a correct password (T1078), the deactivated `akadmin` logging in or an admin impersonating a user (T1078.001), a local Splunk Web login that skipped Authentik (T1078.001) |
 | MCP gateway | denied call, write-capable tool, or first call from a client identity |
-| Telemetry | a host that stopped sending metrics for 15 minutes; a log feed that stopped while its host is up (k3s API audit, Vault audit and k3s container logs after 15 minutes, a host's journald after 30, or 60 on the Proxmox nodes, the UniFi gateway after 8 hours); Falco not running for 10 minutes, from its process heartbeat in `index=metrics` (all T1685) |
+| Telemetry | a host that stopped sending metrics for 15 minutes; a log feed that stopped while its host is up (k3s API audit, Vault audit and k3s container logs after 15 minutes, a host's journald and the AdGuard DNS query log after 30, or 60 on the Proxmox nodes, the UniFi gateway after 8 hours); Falco not running for 10 minutes, from its process heartbeat in `index=metrics` (all T1685) |
 
 - Most run every 15 minutes over `[-20m@m, -5m@m)`; the telemetry ones look back 24 hours to now. "First seen" detections search their own 14- or 30-day baseline. All suppress repeats per entity (1 to 24 hours).
 - Every finding is written to `index=security sourcetype=homelab:detection` as one JSON event (Log Event action), with `detection`, `severity`, `technique`, `tactic`, `attack_strategy`, `host`, `user`, `src`, `object` and `detail`. This is the queue the security agent reads.

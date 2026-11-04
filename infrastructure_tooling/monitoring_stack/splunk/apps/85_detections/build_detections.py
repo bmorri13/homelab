@@ -331,20 +331,20 @@ det("HL - Log source stopped sending",
     "T1685", "Defense Impairment", "high", "DET0497",
     '| tstats max(_time) as last_seen where (index=audit sourcetype IN ("kube:apiserver:audit", "hashicorp_vault_audit_log")) '
     'OR (index=k8s sourcetype="kube:container") OR (index=infra sourcetype="linux:journald") '
-    'OR (index=network sourcetype="ubiquiti:unifi:ocsf") by index sourcetype host '
+    'OR (index=network sourcetype IN ("ubiquiti:unifi:ocsf", "adguard:querylog")) by index sourcetype host '
     "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-15m by host] "
     '| eval limit=case(sourcetype=="ubiquiti:unifi:ocsf", 480, sourcetype=="linux:journald" AND match(host, "^proxmox"), 60, '
-    'sourcetype=="linux:journald", 30, true(), 15) '
+    'sourcetype=="linux:journald", 30, sourcetype=="adguard:querylog", 30, true(), 15) '
     "| eval count=round((now()-last_seen)/60) "
     '| where count>limit AND NOT (sourcetype=="linux:journald" AND isnull(host_metrics)) '
     '| eval object=case(sourcetype=="kube:apiserver:audit", "k3s API audit log", sourcetype=="hashicorp_vault_audit_log", "Vault audit log", '
     'sourcetype=="kube:container", "k3s container logs", sourcetype=="linux:journald", "journald", '
-    'sourcetype=="ubiquiti:unifi:ocsf", "UniFi gateway syslog", true(), sourcetype), '
+    'sourcetype=="ubiquiti:unifi:ocsf", "UniFi gateway syslog", sourcetype=="adguard:querylog", "AdGuard DNS query log (clients may have fallen back to the gateway)", true(), sourcetype), '
     'user="", src="", detail=object." (index=".index." sourcetype=".sourcetype.") has sent nothing for ".count." minutes (limit ".limit.")" '
     "| eval first_seen=last_seen | convert ctime(first_seen) ctime(last_seen) ",
     "stop the Vault audit device (vault audit disable) or Cribl's route for a source for 20 minutes",
     suppress="host,object", period="6h", window=("-24h", "now"),
-    description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
+    description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog, the AdGuard DNS query log) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
 
 # Falco is quiet when nothing happens, so its alerts can't show it is running. The OTel
 # host agent reports the falco process's uptime every minute (hostmetrics process
