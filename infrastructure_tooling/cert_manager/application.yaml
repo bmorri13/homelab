@@ -1,0 +1,36 @@
+# cert-manager on k3s-01: the upstream chart. Issues the Let's Encrypt
+# certificates for every *.bmosan.com ingress through the bmosan-cert
+# ClusterIssuer (Cloudflare DNS-01, prod_cert_issuer.yaml).
+#
+# Created in the Argo CD UI originally; committed so the version is on record.
+# There is no app-of-apps, so a change here does nothing until it is applied:
+#   kubectl apply -f infrastructure_tooling/cert_manager/application.yaml
+#
+# Upgrading: one minor version at a time (cert-manager's guidance), on the latest
+# patch, after reading docs/releases/upgrading/upgrading-<from>-<to>.md in
+# cert-manager/website and checking the release supports the cluster's
+# Kubernetes version. 1.20 supports Kubernetes 1.32 to 1.35; 1.21 needs 1.33+.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-k3s
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.20.5
+    helm:
+      parameters:
+        - name: crds.enabled
+          value: "true"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
