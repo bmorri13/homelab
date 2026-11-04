@@ -247,7 +247,7 @@ AK_TAIL = (
 )
 det("HL - Authentik login failures",
     "T1110.001", "Credential Access", "medium", "DET0551",
-    "`hl_authentik_event` ak_action=login_failed "
+    "`hl_authentik_event` | search ak_action=login_failed "
     "| eval user=coalesce(ak_login_user, ak_user), src=ak_src, stage=coalesce(ak_stage, \"unknown\"), action=ak_action "
     "| where NOT match(stage, \"(?i)mfa|otp|webauthn\") "
     + AK_TAIL +
@@ -259,7 +259,7 @@ det("HL - Authentik login failures",
 
 det("HL - Authentik MFA failed after a correct password",
     "T1078", "Initial Access", "high", "DET0927",
-    "`hl_authentik_event` ak_action=login_failed "
+    "`hl_authentik_event` | search ak_action=login_failed "
     "| eval user=coalesce(ak_login_user, ak_user), src=ak_src, stage=coalesce(ak_stage, \"unknown\"), action=ak_action "
     "| where match(stage, \"(?i)mfa|otp|webauthn\") "
     + AK_TAIL +
@@ -270,7 +270,7 @@ det("HL - Authentik MFA failed after a correct password",
 
 det("HL - Authentik break-glass admin or impersonation",
     "T1078.001", "Initial Access", "high", "DET0465",
-    "`hl_authentik_event` ((ak_action=login ak_user=akadmin) OR ak_action=impersonation_started) "
+    "`hl_authentik_event` | search (ak_action=login ak_user=akadmin) OR ak_action=impersonation_started "
     "| eval user=ak_user, src=ak_src, stage=null(), action=ak_action "
     + AK_TAIL +
     "| eval detail=\"actions=\".mvjoin(actions, \",\").\" (akadmin is deactivated; a login means a recovery key was used)\", host=\"authentik\", object=\"auth.bmosan.com\" ",
@@ -345,6 +345,18 @@ det("HL - Log source stopped sending",
     "stop the Vault audit device (vault audit disable) or Cribl's route for a source for 20 minutes",
     suppress="host,object", period="6h", window=("-24h", "now"),
     description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog, the AdGuard DNS query log) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
+
+det("HL - Detection search failing",
+    "T1685", "Defense Impairment", "high", "DET0497",
+    "index=_internal sourcetype=scheduler log_level=ERROR component=SavedSplunker savedsearch_id=\"*;85_detections;HL - *\" "
+    "| rex field=savedsearch_id \";85_detections;(?<object>HL - .+)$\" "
+    "| rex field=_raw \"message=\\\"(?<error>[^\\\"]+)\" "
+    "| stats count min(_time) as first_seen max(_time) as last_seen latest(error) as error by object "
+    "| eval host=\"security-tooling-01\", user=\"\", src=\"\", detail=count.\" failed runs: \".error "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "add a syntax error to a copy of an HL - search, or check index=_internal sourcetype=scheduler log_level=ERROR",
+    suppress="object", period="6h",
+    description="An HL - detection errored when the scheduler ran it, so it isn't detecting anything. Found after the Authentik detections failed every run for their first hour without anyone knowing.")
 
 # Falco is quiet when nothing happens, so its alerts can't show it is running. The OTel
 # host agent reports the falco process's uptime every minute (hostmetrics process
