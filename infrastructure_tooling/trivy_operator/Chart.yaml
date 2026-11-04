@@ -1,0 +1,9 @@
+apiVersion: v2
+name: trivy-operator-homelab
+description: Trivy Operator on k3s-01 - vulnerabilities, misconfigurations, RBAC and exposed secrets in what is actually running
+type: application
+version: 0.1.0
+dependencies:
+  - name: trivy-operator
+    version: 0.38.1
+    repository: https://aquasecurity.github.io/helm-charts

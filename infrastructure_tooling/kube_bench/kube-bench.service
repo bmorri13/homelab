@@ -1,0 +1,14 @@
+[Unit]
+Description=kube-bench: CIS k3s benchmark (homelab kube_bench)
+Documentation=https://github.com/bmorri13/homelab/tree/main/infrastructure_tooling/kube_bench
+After=k3s.service
+
+[Service]
+Type=oneshot
+# One line per check ("[FAIL] 1.1.20 Ensure that ...") to the journal; the OTel agent
+# ships it and Cribl's hec_in sends it to index=security as sourcetype=kube-bench.
+ExecStart=/usr/local/lib/kube-bench/kube-bench run --config-dir /usr/local/lib/kube-bench/cfg --benchmark k3s-cis-1.9 --noremediations
+SyslogIdentifier=kube-bench
+StandardOutput=journal
+StandardError=journal
+Nice=10
