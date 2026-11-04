@@ -24,8 +24,10 @@ HEC_URL = os.environ.get("HEC_URL", "https://192.168.4.11:8443/services/collecto
 HEC_CA_FILE = os.environ.get("HEC_CA_FILE", "/etc/homelab-ca/homelab-ca.crt")
 HEC_INDEX = "ai_agents"
 HEC_SOURCETYPE = "homelab:agent"
-# For links in Slack messages: the full MagicDNS name resolves on any tailnet device (phones too).
-SPLUNK_WEB = "https://security-tooling-01.tail25c6fe.ts.net:8000"
+# For links in Slack messages: Splunk Web through Traefik and Authentik (tailnet-only; the
+# name is in public DNS, so it resolves on any tailnet device, phones too). The old
+# MagicDNS name on port 8000 stopped working when 8000 was closed to all but k3s-01.
+SPLUNK_WEB = os.environ.get("SPLUNK_WEB", "https://splunk.bmosan.com")
 
 STATE_DIR = os.environ.get("STATE_DIRECTORY", "/state")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
