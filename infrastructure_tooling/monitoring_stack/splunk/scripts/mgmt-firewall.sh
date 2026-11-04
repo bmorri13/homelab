@@ -51,11 +51,18 @@ allow_only CRIBL-UI "$CRIBL_UI_ALLOWED" 9000 tcp
 iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdstport 8088 --ctdir ORIGINAL -j CRIBL-HEC 2>/dev/null || true
 for proto in udp tcp; do ip6tables -w -D INPUT -p "$proto" --dport 8088 -j DROP 2>/dev/null || true; done
 
-# Docker also publishes these ports on [::]. IPv6 connections go through
-# Docker's userland proxy (a host process), so INPUT applies, not DOCKER-USER. The
-# only IPv6 address here is Tailscale's, and nothing sends over IPv6: drop them.
+# Two paths skip DOCKER-USER, so these ports are dropped there as well:
+# - Tailscale's ts-forward chain sits ahead of DOCKER-USER in FORWARD and accepts
+#   everything arriving on tailscale0. Drop the ports on that interface in the raw
+#   table, before Docker's DNAT; Tailscale doesn't touch it. Nothing uses them over the
+#   tailnet. (8089 is published on the LAN address only, so it isn't reachable there.)
+# - Docker also publishes them on [::]. IPv6 connections go through Docker's userland
+#   proxy (a host process), so INPUT applies. The only IPv6 address here is
+#   Tailscale's, and nothing sends over IPv6.
 for port in 514 5514 8443 9000; do
     for proto in udp tcp; do
+        rule=(-i tailscale0 -p "$proto" --dport "$port" -j DROP)
+        iptables -w -t raw -C PREROUTING "${rule[@]}" 2>/dev/null || iptables -w -t raw -I PREROUTING 1 "${rule[@]}"
         rule=(-p "$proto" --dport "$port" -j DROP)
         ip6tables -w -C INPUT "${rule[@]}" 2>/dev/null || ip6tables -w -I INPUT 1 "${rule[@]}"
     done
