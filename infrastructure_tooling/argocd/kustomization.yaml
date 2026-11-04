@@ -4,7 +4,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: argocd
 resources:
-  - https://github.com/argoproj/argo-cd//manifests/cluster-install?ref=v3.4.13
+  - https://github.com/argoproj/argo-cd//manifests/cluster-install?ref=v3.6.1
 patches:
   # argocd-cm and argocd-rbac-cm belong to the argocd-config app
   # (infrastructure_tooling/argocd_config). Applying upstream's copies would

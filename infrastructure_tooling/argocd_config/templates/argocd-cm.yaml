@@ -36,7 +36,7 @@ data:
   #
   # From Argo CD 3.0 upstream ships default exclusions and ignoreResourceUpdates
   # in its own argocd-cm. This chart owns argocd-cm (infrastructure_tooling/argocd
-  # leaves upstream's copy out), so they are copied in below, from v3.4.13, minus
+  # leaves upstream's copy out), so they are copied in below, from v3.6.1, minus
   # core Endpoints: the authentik app manages two selectorless Endpoints from Git
   # (cribl-leader, splunk-web), and an excluded kind can't be synced.
   resource.exclusions: |
@@ -112,7 +112,9 @@ data:
     jqPathExpressions:
       - '.metadata.annotations."notified.notifications.argoproj.io"'
       - '.metadata.annotations."argocd.argoproj.io/refresh"'
+      - '.metadata.annotations."argocd.argoproj.io/refresh-timestamp"'
       - '.metadata.annotations."argocd.argoproj.io/hydrate"'
+      - '.metadata.annotations."argocd.argoproj.io/hydrate-timestamp"'
       - '.operation'
   resource.customizations.ignoreResourceUpdates.autoscaling_HorizontalPodAutoscaler: |
     jqPathExpressions:
