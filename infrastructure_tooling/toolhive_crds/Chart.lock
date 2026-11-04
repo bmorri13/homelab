@@ -1,6 +1,6 @@
 dependencies:
 - name: toolhive-operator-crds
   repository: oci://ghcr.io/stacklok/toolhive
-  version: 0.61.0
-digest: sha256:435a3ff79e7f57cf390f8cef88e0e1485e4dbba7f980465e224711ae29933ef2
-generated: "2026-11-03T19:02:56.436166772Z"
+  version: 0.62.0
+digest: sha256:5dad1c2a30cfe04b47c7e698e6f5c0c64f58e40938aeb3b8b93a448160611596
+generated: "2026-11-04T19:20:46.438875962Z"
