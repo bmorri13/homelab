@@ -102,6 +102,15 @@ if ! ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; th
     echo "cribl: HEC input hec_tls (HTTPS, port 8443) created"
     cribl_commit_deploy "Add HEC input hec_tls (deploy.sh)"
 fi
+# NetFlow/IPFIX from the UniFi gateway (2026-11-04): created from the repo seed on a
+# group seeded before it existed.
+if ! ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/netflow" >/dev/null; then
+    python3 -c 'import json, sys, yaml; c = yaml.safe_load(open(sys.argv[1]))["inputs"]["netflow"]; c["id"] = "netflow"; print(json.dumps(c))' \
+        cribl/local/cribl/inputs.yml |
+        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/m/$GROUP/system/inputs" --data @- >/dev/null
+    echo "cribl: NetFlow input netflow (UDP 2055) created"
+    cribl_commit_deploy "Add NetFlow input netflow (deploy.sh)"
+fi
 # Plain-HTTP HEC is retired: every sender uses hec_tls (2026-11-03).
 if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec" >/dev/null; then
     ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/system/inputs/hec" >/dev/null

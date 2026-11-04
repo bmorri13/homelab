@@ -1,0 +1,30 @@
+functions:
+  - id: eval
+    filter: "true"
+    conf:
+      add:
+        - name: index
+          value: "'network'"
+        - name: sourcetype
+          value: "'netflow'"
+        - name: host
+          value: (__srcIpPort || '').split(':')[0] || host
+    description: One event per flow record into index=network; host is the exporter's address.
+  - id: serialize
+    filter: "true"
+    conf:
+      type: json
+      dstField: _raw
+      fields:
+        - "!_*"
+        - "!cribl*"
+        - "!index"
+        - "!sourcetype"
+        - "!host"
+        - "!source"
+        - "*"
+    description: >-
+      The NetFlow source emits structured records with no _raw; serialize the flow fields
+      to JSON so Splunk gets them (props: 85_netflow, KV_MODE = json).
+asyncFuncTimeout: 1000
+output: default
