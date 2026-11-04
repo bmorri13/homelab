@@ -1,0 +1,26 @@
+# Argo CD Application for AdGuard Home. Apply once:
+#   kubectl apply -f infrastructure_tooling/adguard/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: adguard
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/adguard/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: adguard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest
