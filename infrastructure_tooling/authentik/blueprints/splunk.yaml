@@ -1,0 +1,81 @@
+# Splunk Web logs in through Authentik with SAML (Splunk's Developer license includes
+# it). Follows Authentik's Splunk Enterprise guide: a long-lived signing keypair, the
+# role/mail/realName attributes Splunk reads, and Splunk roles as application
+# entitlements. Splunk maps the entitlement splunk-admin to its admin role
+# (monitoring_stack/splunk/apps/00_homelab_auth).
+#
+# The keypair splunk-saml-signing was generated once inside Authentik (README.md); its
+# public certificate is monitoring_stack/splunk/auth/authentik-saml.crt.
+version: 1
+metadata:
+  name: homelab - Splunk SAML
+entries:
+  - model: authentik_providers_saml.samlpropertymapping
+    id: splunk-role
+    identifiers:
+      name: "Splunk: role"
+    attrs:
+      saml_name: role
+      expression: return [entitlement.name for entitlement in request.user.app_entitlements(provider.application)]
+  - model: authentik_providers_saml.samlpropertymapping
+    id: splunk-mail
+    identifiers:
+      name: "Splunk: mail"
+    attrs:
+      saml_name: mail
+      expression: return request.user.email
+  - model: authentik_providers_saml.samlpropertymapping
+    id: splunk-real-name
+    identifiers:
+      name: "Splunk: realName"
+    attrs:
+      saml_name: realName
+      expression: return request.user.name
+
+  - model: authentik_providers_saml.samlprovider
+    id: splunk-provider
+    identifiers:
+      name: splunk
+    attrs:
+      acs_url: https://splunk.bmosan.com/saml/acs
+      audience: https://splunk.bmosan.com
+      sls_url: https://splunk.bmosan.com/saml/logout
+      sp_binding: post
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      signing_kp: !Find [authentik_crypto.certificatekeypair, [name, splunk-saml-signing]]
+      sign_assertion: true
+      sign_response: true
+      # Splunk user names come from the NameID: the Authentik username, e.g. bmo.
+      name_id_mapping: !Find [authentik_providers_saml.samlpropertymapping, [managed, goauthentik.io/providers/saml/username]]
+      property_mappings:
+        - !KeyOf splunk-role
+        - !KeyOf splunk-mail
+        - !KeyOf splunk-real-name
+  - model: authentik_core.application
+    id: splunk-app
+    identifiers:
+      slug: splunk
+    attrs:
+      name: Splunk
+      provider: !KeyOf splunk-provider
+      meta_launch_url: https://splunk.bmosan.com
+      policy_engine_mode: any
+  # Only authentik Admins may open it, and they get Splunk's admin role.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf splunk-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+    attrs:
+      order: 0
+  - model: authentik_core.applicationentitlement
+    id: splunk-admin
+    identifiers:
+      app: !KeyOf splunk-app
+      name: splunk-admin
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf splunk-admin
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+    attrs:
+      order: 0

@@ -40,6 +40,18 @@ cribl:
   # the outpost through a Service at this fixed address instead.
   forwardAuthClusterIP: 10.43.200.11
 
+# Splunk Web (templates/splunk.yaml). No forward auth: Splunk logs in through Authentik
+# itself with SAML (blueprints/splunk.yaml). The Splunk host's firewall lets only
+# k3s-01 reach port 8000.
+splunk:
+  host: splunk.bmosan.com
+  tlsSecretName: splunk-bmosan-com-tls
+  # Splunk Web's cert (homelab CA, scripts/tls-certs.sh) has this name.
+  web:
+    ip: 192.168.4.11
+    port: 8000
+    serverName: splunk-homelab
+
 # Authentik's database: the official image, one replica, on k3s-01's local-path storage.
 # (The upstream chart's PostgreSQL option is the Bitnami chart, which no longer has free
 # images.)

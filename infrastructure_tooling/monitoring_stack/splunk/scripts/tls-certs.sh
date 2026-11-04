@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Issue the TLS certificates for Splunk's management port (8089), the Cribl Leader
-# API (9000) and the Cribl Worker's HEC input (8443) from a small homelab CA kept on
+# Issue the TLS certificates for Splunk's management port (8089), Splunk Web (8000),
+# the Cribl Leader API (9000) and the Cribl Worker's HEC input (8443) from a small homelab CA kept on
 # this host. The CA is created on
 # the first run. Its certificate is public: the MCP gateway on k3s-01 trusts it via
 # toolhive_mcp/files/homelab-ca.crt. Its key never leaves /root/homelab-ca.
 # The CA can only sign names under bmosan.com, a few host names, and private IPs.
 # A leaf certificate is reissued when it is missing, expires within 30 days, was
 # signed by a different CA, or its names differ from the ones below. Prints
-# "changed: splunk", "changed: cribl" or "changed: cribl-worker" for each one it
-# wrote, so deploy.sh knows what to restart.
+# "changed: splunk", "changed: splunk-web", "changed: cribl" or "changed: cribl-worker"
+# for each one it wrote, so deploy.sh knows what to restart.
 # Run on security-tooling-01 as root (deploy.sh calls it).
 set -euo pipefail
 
@@ -93,6 +93,16 @@ if [[ -f "$SPLUNK_DIR/etc/auth/cacert.pem" ]] && needs_issue "$splunk_out/splunk
     chmod 700 "$splunk_out"
     chmod 600 "$splunk_out"/*
     echo "changed: splunk"
+fi
+
+# Splunk Web (8000): a separate key and cert with the same names. Traefik on k3s-01
+# checks it against the CA when it serves splunk.bmosan.com.
+if [[ -f "$SPLUNK_DIR/etc/auth/cacert.pem" ]] && needs_issue "$splunk_out/web.crt" "$splunk_san"; then
+    issue web "$splunk_out" splunk-homelab "$splunk_san"
+    chown "$(stat -c '%u:%g' "$SPLUNK_DIR/etc")" "$splunk_out" "$splunk_out/web.key" "$splunk_out/web.crt"
+    chmod 700 "$splunk_out"
+    chmod 600 "$splunk_out/web.key" "$splunk_out/web.crt"
+    echo "changed: splunk-web"
 fi
 
 # Cribl Leader: separate key and cert, plus the CA for the container healthcheck.

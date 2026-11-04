@@ -74,12 +74,26 @@ sync_apps() {
     if [[ -n "$changes" ]]; then echo "apps changed:"; echo "$changes"; else echo "apps unchanged"; fi
 }
 
+# Authentik's SAML signing cert (public), which Splunk checks Splunk Web logins
+# against (apps/00_homelab_auth). Appends to $changes when it changes.
+install_idp_cert() {
+    local owner dir="$DATA_DIR/etc/auth/idpCerts"
+    owner=$(stat -c '%u:%g' "$DATA_DIR/etc")
+    install -d -o "${owner%:*}" -g "${owner#*:}" -m 700 "$dir"
+    if ! cmp -s auth/authentik-saml.crt "$dir/authentik-saml.crt"; then
+        install -o "${owner%:*}" -g "${owner#*:}" -m 644 auth/authentik-saml.crt "$dir/authentik-saml.crt"
+        changes+=" idpCerts/authentik-saml.crt"
+        echo "SAML IdP cert updated"
+    fi
+}
+
 if [[ -d "$DATA_DIR/etc/system" ]]; then
     # Splunk has started before: sync first, so a fix to an app that stops splunkd
     # from starting can still be deployed.
     sync_apps
+    install_idp_cert
     docker compose up -d --remove-orphans
-    if [[ -n "$changes" ]] || cert_changed splunk; then docker compose restart splunk; fi
+    if [[ -n "$changes" ]] || cert_changed splunk || cert_changed splunk-web; then docker compose restart splunk; fi
     echo "waiting for splunk to become healthy..."
     wait_healthy
 else
@@ -90,6 +104,7 @@ else
     wait_healthy
     issue_certs
     sync_apps
+    install_idp_cert
     if [[ -n "$changes" ]]; then
         docker compose restart splunk
         wait_healthy
@@ -149,4 +164,4 @@ echo "cribl: healthy"
 if [[ ! -f "$ARCHIVE_DIR/.splunk-archive" ]]; then
     echo "WARNING: $ARCHIVE_DIR/.splunk-archive not found - nightly config backups and frozen-bucket archiving will fail until the Unraid share is mounted" >&2
 fi
-echo "done: Splunk https://$(hostname):8000  Cribl https://cribl.bmosan.com"
+echo "done: Splunk https://splunk.bmosan.com  Cribl https://cribl.bmosan.com"

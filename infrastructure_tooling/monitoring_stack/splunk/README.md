@@ -50,14 +50,14 @@ Cribl picks the index for every event. Data older than the retention below, or p
 
 | Port | Service | Notes |
 |---|---|---|
-| `8000` | Splunk Web (HTTPS, self-signed) | |
+| `8000` | Splunk Web (HTTPS, homelab CA) | k3s-01 only (`SPLUNK_WEB_ALLOWED`): Traefik serves it as `https://splunk.bmosan.com`, which logs in through Authentik. See [Splunk Web login](#splunk-web-login). |
 | `8089` | Splunk REST API + MCP Server app (HTTPS, homelab CA) | Published on 192.168.4.11 only. `scripts/mgmt-firewall.sh` drops everything but k3s-01 and local containers. |
 | `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | k3s-01 only (`CRIBL_UI_ALLOWED`): the MCP gateway, and Traefik serving the UI at `https://cribl.bmosan.com` behind Authentik. Cribl's Free license has no external login, so Authentik's forward auth sits in front of Cribl's own login. |
 | `514` tcp/udp | Cribl syslog → `infra` | Closed: nothing sends to it. To use it, add the sender to `SYSLOG_INFRA_ALLOWED`. |
 | `5514` tcp/udp | Cribl syslog → `network` | UniFi gateways only (`SYSLOG_NETWORK_ALLOWED`). |
 | `8443` | Cribl HEC (HTTPS, homelab CA), input `hec_tls` | OTel collectors and the homelab agents. Requires `CRIBL_HEC_TOKEN`. Server LAN only (`HEC_ALLOWED`, default 192.168.4.0/24). |
 
-Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 514, 5514, 8443 and 9000 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). Tailscale's own `ts-forward` chain runs ahead of `DOCKER-USER` and accepts everything arriving on `tailscale0`, so the script also drops those ports on that interface in the `raw` table, before Docker's DNAT. 8089 is published on the LAN address only, so the tailnet can't reach it. The allowlists are comma-separated CIDRs, defaulted in the script so the boot-time unit (which has no `.env`) applies the same rules. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
+Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 514, 5514, 8000, 8443 and 9000 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). Tailscale's own `ts-forward` chain runs ahead of `DOCKER-USER` and accepts everything arriving on `tailscale0`, so the script also drops those ports on that interface in the `raw` table, before Docker's DNAT. 8089 is published on the LAN address only, so the tailnet can't reach it. The allowlists are comma-separated CIDRs, defaulted in the script so the boot-time unit (which has no `.env`) applies the same rules. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
 
 ### Cribl routing
 
@@ -163,6 +163,14 @@ The agents use a second user, `mcp-agent`, with the read-only `mcp_agent` role: 
 
 The Leader serves Cribl's MCP server at `https://192.168.4.11:9000/api/v1/mcp`. On the free license every user is an admin, so MCP clients get the full set of 16 tools, including the ones that change pipelines (`setPipelineConfig`) and edit search notebooks. The MCP tools call the Leader API at the Leader's own interface address, so the Leader sits alone on the `cribl-leader` compose network at a fixed `192.168.237.2`, which is in its cert, and trusts the homelab CA through `NODE_EXTRA_CA_CERTS`. Cribl session tokens expire after an hour (`api.authTokenTTL`, default 3600 s, also used for UI sessions), so the gateway needs something that logs in and refreshes the token rather than a static bearer token.
 
+## Splunk Web login
+
+`https://splunk.bmosan.com` (tailnet only) is Splunk Web behind Traefik on k3s-01 (`infrastructure_tooling/authentik/templates/splunk.yaml`). Splunk sends the login to Authentik with SAML (`apps/00_homelab_auth`), so every login needs Authentik's second factor. Members of Authentik's `authentik Admins` group get the application entitlement `splunk-admin`, which Splunk maps to its `admin` role; the user name is the Authentik user name. Splunk Web presents a homelab-CA cert (`web.crt`, `scripts/tls-certs.sh`), which Traefik verifies.
+
+- Authentik signs with the keypair `splunk-saml-signing` (RSA 4096, valid 100 years), generated once inside Authentik so its key never left it. Its public cert is `auth/authentik-saml.crt`; `deploy.sh` copies it to `etc/auth/idpCerts/`. If the keypair is ever replaced, export the new cert there and redeploy.
+- Local users still work: the REST API and its tokens (`mcp-gateway`, `mcp-agent`), and the local `admin` as break-glass at `https://splunk.bmosan.com/en-US/account/login?loginType=splunk`. If Traefik or Authentik is down, tunnel to the host instead: `ssh -L 8000:127.0.0.1:8000 root@security-tooling-01`, then `https://localhost:8000/en-US/account/login?loginType=splunk`. *HL - Splunk local login* reports every local login that doesn't come from the host itself.
+- SAML users can't own scheduled searches: Splunk can't look them up while they're logged out (Authentik has no SAML attribute query). Keep scheduled searches and alerts in the repo's apps, which run as `nobody`.
+
 ## Splunk apps
 
 Everything Splunk loads from this repo lives in `apps/`, one directory per app, synced to `/srv/splunk/etc/apps/` by `deploy.sh`.
@@ -231,7 +239,7 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 
 ## Detections
 
-`apps/85_detections` holds the `HL - ...` saved searches: 21 detections mapped to MITRE ATT&CK v20 (technique, tactic, and the v20 detection strategy `DET####` the logic follows where MITRE has one). They are generated by `build_detections.py` in the app; edit that, rerun it and commit both. Each detection's description says how to test it.
+`apps/85_detections` holds the `HL - ...` saved searches: 25 detections mapped to MITRE ATT&CK v20 (technique, tactic, and the v20 detection strategy `DET####` the logic follows where MITRE has one). They are generated by `build_detections.py` in the app; edit that, rerun it and commit both. Each detection's description says how to test it.
 
 | Area | Detections |
 |---|---|
@@ -239,12 +247,13 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 | Vault audit | audit device changed (T1685), root token used (T1078.001), auth method or policy changed (T1556), permission-denied burst and first read of a secret by an identity (T1555.006) |
 | Hosts | Tailscale SSH login from a new identity/host/source (T1021.004), Proxmox login failures (T1110.001), sensitive commands over SSH or sudo: stopping security tools, cron and authorized_keys, writes to PAM/sudoers/sshd_config, account changes, firewall flush, log or history clearing, download piped to a shell (T1685 and others) |
 | UniFi | admin login from a new source or a failure (T1078.001), configuration change (T1686), a device on an isolated network blocked from reaching another Internal network (T1046) |
+| Logins (Authentik, Splunk Web) | three or more failed Authentik logins (T1110.001), an Authentik second factor failing after a correct password (T1078), the deactivated `akadmin` logging in or an admin impersonating a user (T1078.001), a local Splunk Web login that skipped Authentik (T1078.001) |
 | MCP gateway | denied call, write-capable tool, or first call from a client identity |
 | Telemetry | a host that stopped sending metrics for 15 minutes; a log feed that stopped while its host is up (k3s API audit, Vault audit and k3s container logs after 15 minutes, a host's journald after 30, or 60 on the Proxmox nodes, the UniFi gateway after 8 hours); Falco not running for 10 minutes, from its process heartbeat in `index=metrics` (all T1685) |
 
 - Most run every 15 minutes over `[-20m@m, -5m@m)`; the telemetry ones look back 24 hours to now. "First seen" detections search their own 14- or 30-day baseline. All suppress repeats per entity (1 to 24 hours).
 - Every finding is written to `index=security sourcetype=homelab:detection` as one JSON event (Log Event action), with `detection`, `severity`, `technique`, `tactic`, `attack_strategy`, `host`, `user`, `src`, `object` and `detail`. This is the queue the security agent reads.
-- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The exceptions to "Splunk does not post to Slack" are two searches in `85_homelab_ops` that watch what the agents depend on, and use `homelab_slack`: the agents' own watchdog, *Agents - not running or failing* (a stopped agent can't report itself), and *Splunk - health degraded* (a splunkd health feature yellow or red for 15 minutes, checked every 10).
+- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The exceptions to "Splunk does not post to Slack" are two searches in `85_homelab_ops` that watch what the agents depend on, and use `homelab_slack`: the agents' own watchdog, *Agents - not running or failing* (a stopped agent can't report itself), *Splunk - health degraded* (a splunkd health feature yellow or red for 15 minutes, checked every 10), and *Splunk - license expiring* (the Developer license within 30 days of expiry; when it lapses Splunk falls back to Free, with no logins and no alerts).
 - The `homelab_slack` alert action (`bin/homelab_slack.py`) is attached only to those two searches, and kept as a fallback if the agents are down for long. To use it elsewhere, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
 
   ```bash

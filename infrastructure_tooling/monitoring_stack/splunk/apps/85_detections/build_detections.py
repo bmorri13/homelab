@@ -240,6 +240,56 @@ det("HL - Isolated network device tried to reach a trusted network",
     suppress="src", period="1h",
     description="A device on an isolated network tried to open a connection to another Internal network and the firewall blocked it. Isolated devices have no reason to do this, so any attempt is worth a look; a scan or repeated tries suggests the device is compromised.")
 
+# ---- Authentik and Splunk Web logins ------------------------------------------------------
+AK_TAIL = (
+    '| stats count min(_time) as first_seen max(_time) as last_seen values(stage) as stages values(action) as actions by user src '
+    '| convert ctime(first_seen) ctime(last_seen) '
+)
+det("HL - Authentik login failures",
+    "T1110.001", "Credential Access", "medium", "DET0551",
+    "`hl_authentik_event` ak_action=login_failed "
+    "| eval user=coalesce(ak_login_user, ak_user), src=ak_src, stage=coalesce(ak_stage, \"unknown\"), action=ak_action "
+    "| where NOT match(stage, \"(?i)mfa|otp|webauthn\") "
+    + AK_TAIL +
+    "| where count>=3 "
+    "| eval detail=count.\" failed logins, stage=\".mvjoin(stages, \",\"), host=\"authentik\", object=\"auth.bmosan.com\" ",
+    "enter a wrong password three times at https://auth.bmosan.com",
+    suppress="user,src", period="1h",
+    description="Three or more failed logins (wrong user name or password) for one user from one source within 15 minutes. Authentik guards Splunk Web and the Cribl UI.")
+
+det("HL - Authentik MFA failed after a correct password",
+    "T1078", "Initial Access", "high", "DET0927",
+    "`hl_authentik_event` ak_action=login_failed "
+    "| eval user=coalesce(ak_login_user, ak_user), src=ak_src, stage=coalesce(ak_stage, \"unknown\"), action=ak_action "
+    "| where match(stage, \"(?i)mfa|otp|webauthn\") "
+    + AK_TAIL +
+    "| eval detail=count.\" failed second-factor checks, stage=\".mvjoin(stages, \",\").\". The password was accepted.\", host=\"authentik\", object=\"auth.bmosan.com\" ",
+    "log in at https://auth.bmosan.com with the right password and a wrong TOTP code",
+    suppress="user,src", period="1h",
+    description="The password was right but the second factor failed: someone may have the password.")
+
+det("HL - Authentik break-glass admin or impersonation",
+    "T1078.001", "Initial Access", "high", "DET0465",
+    "`hl_authentik_event` ((ak_action=login ak_user=akadmin) OR ak_action=impersonation_started) "
+    "| eval user=ak_user, src=ak_src, stage=null(), action=ak_action "
+    + AK_TAIL +
+    "| eval detail=\"actions=\".mvjoin(actions, \",\").\" (akadmin is deactivated; a login means a recovery key was used)\", host=\"authentik\", object=\"auth.bmosan.com\" ",
+    "kubectl -n authentik exec deploy/authentik-worker -- ak create_recovery_key 1 akadmin, open the link, then deactivate akadmin again",
+    suppress="user,src", period="1h",
+    description="The built-in akadmin account logged in (it is deactivated, so only through a recovery key), or an admin started impersonating a user.")
+
+det("HL - Splunk local login",
+    "T1078.001", "Initial Access", "high", "DET0465",
+    # The CIM add-on rewrites action to success/failure; the raw text keeps it.
+    "index=_audit \"action=login attempt\" method=Splunk "
+    "| where NOT (src==\"127.0.0.1\" OR src==\"192.168.4.11\" OR cidrmatch(\"172.16.0.0/12\", src)) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(info) as results by user src "
+    "| eval host=\"security-tooling-01\", object=\"Splunk Web\", detail=\"results=\".mvjoin(results, \",\").\" (a local Splunk user, which skips Authentik and its second factor)\" "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "log in at https://splunk.bmosan.com/en-US/account/login?loginType=splunk as admin",
+    suppress="user,src", period="1h",
+    description="Someone logged in to Splunk Web as a local user (the admin break-glass) instead of through Authentik. Logins from the host itself (deploy scripts, docker exec) are excluded.")
+
 # ---- MCP gateway ---------------------------------------------------------------------------
 det("HL - MCP gateway write tool, denial or new client",
     "T1078", "Initial Access", "medium", "DET0927",
