@@ -31,7 +31,7 @@ spec:
           # whose bundled tools carried 23 critical CVEs (Trivy, 2026-11-04).
           initContainers:
             - name: tools
-              image: docker.io/library/busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+              image: docker.io/library/busybox:1.38.0-musl@sha256:80e38f9a1b39188b8bdb28879178edb322a4402b081a9aedda1924609decd6f6
               command: [sh, -c, 'cp /bin/busybox /tools/busybox && cd /tools && for a in $(./busybox --list); do ln -sf busybox "$a"; done']
               securityContext:
                 allowPrivilegeEscalation: false
@@ -46,7 +46,7 @@ spec:
                 - {name: HOME, value: /tmp}
                 - {name: PATH, value: /tools:/bin:/usr/bin:/usr/local/bin}
                 - name: TARGET_IMAGE
-                  value: docker.io/library/busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+                  value: docker.io/library/busybox:1.38.0-musl@sha256:80e38f9a1b39188b8bdb28879178edb322a4402b081a9aedda1924609decd6f6
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities: {drop: [ALL]}
