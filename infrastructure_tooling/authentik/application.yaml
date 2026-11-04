@@ -22,7 +22,15 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
     managedNamespaceMetadata:
       labels:
         pod-security.kubernetes.io/enforce: restricted
         pod-security.kubernetes.io/enforce-version: latest
+  # The API server adds status.phase to the database's volumeClaimTemplate.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: authentik-postgres
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]?.status

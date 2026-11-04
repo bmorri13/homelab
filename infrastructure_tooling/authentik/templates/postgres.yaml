@@ -65,13 +65,18 @@ spec:
       volumes:
         - name: run
           emptyDir: {}
+  # apiVersion, kind and volumeMode are the API server's defaults, spelled out so Argo CD
+  # sees no difference (status is ignored in application.yaml).
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
         annotations:
           argocd.argoproj.io/sync-options: Prune=false,Delete=false
       spec:
         accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
         storageClassName: {{ .Values.postgres.storageClass }}
         resources:
           requests:

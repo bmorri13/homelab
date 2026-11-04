@@ -1,0 +1,123 @@
+# https://cribl.bmosan.com: the Cribl Leader UI, tailnet-only, behind Authentik.
+# Traefik sends each request to Authentik's embedded outpost first (forward auth); the
+# Cribl application (blueprints/cribl.yaml) admits only authentik Admins. Cribl's own
+# login follows, because the Free license has no external login.
+
+# The outpost, at a fixed address Traefik can reach without cluster DNS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-forward-auth
+spec:
+  clusterIP: {{ .Values.cribl.forwardAuthClusterIP }}
+  selector:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: authentik
+  ports:
+    - {name: http, port: 80, targetPort: 9000, protocol: TCP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik-forward-auth
+spec:
+  forwardAuth:
+    address: http://{{ .Values.cribl.forwardAuthClusterIP }}/outpost.goauthentik.io/auth/traefik
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-authentik-username
+---
+# The Leader outside the cluster: a Service without a selector, and its one endpoint.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cribl-leader
+  annotations:
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: {{ .Release.Namespace }}-cribl-leader@kubernetescrd
+spec:
+  ports:
+    - {name: https, port: {{ .Values.cribl.leader.port }}, targetPort: {{ .Values.cribl.leader.port }}, protocol: TCP}
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: cribl-leader
+subsets:
+  - addresses:
+      - ip: {{ .Values.cribl.leader.ip }}
+    ports:
+      - {name: https, port: {{ .Values.cribl.leader.port }}, protocol: TCP}
+---
+# Traefik verifies the Leader's cert against the homelab CA only.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: homelab-ca
+type: Opaque
+stringData:
+  ca.crt: |
+    {{- .Files.Get "files/homelab-ca.crt" | nindent 4 }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: cribl-leader
+spec:
+  serverName: {{ .Values.cribl.leader.serverName }}
+  rootCAsSecrets:
+    - homelab-ca
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cribl
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-tailnet-only@kubernetescrd,{{ .Release.Namespace }}-authentik-forward-auth@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.cribl.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cribl-leader
+                port:
+                  number: {{ .Values.cribl.leader.port }}
+  tls:
+    - hosts:
+        - {{ .Values.cribl.host }}
+      secretName: {{ .Values.cribl.tlsSecretName }}
+---
+# The outpost's own paths on the Cribl host (login start and callback), without forward
+# auth. Shares the cert issued for the Ingress above.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cribl-outpost
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-tailnet-only@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.cribl.host }}
+      http:
+        paths:
+          - path: /outpost.goauthentik.io
+            pathType: Prefix
+            backend:
+              service:
+                name: authentik-server
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - {{ .Values.cribl.host }}
+      secretName: {{ .Values.cribl.tlsSecretName }}

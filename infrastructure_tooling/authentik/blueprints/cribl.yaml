@@ -1,0 +1,39 @@
+version: 1
+metadata:
+  name: homelab - Cribl UI forward auth
+entries:
+  # Forward auth for one host, served by the outpost embedded in the server.
+  - model: authentik_providers_proxy.proxyprovider
+    id: cribl-provider
+    identifiers:
+      name: cribl
+    attrs:
+      mode: forward_single
+      external_host: https://cribl.bmosan.com
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      access_token_validity: hours=12
+  - model: authentik_core.application
+    id: cribl-app
+    identifiers:
+      slug: cribl
+    attrs:
+      name: Cribl
+      provider: !KeyOf cribl-provider
+      meta_launch_url: https://cribl.bmosan.com
+      policy_engine_mode: any
+  # Only authentik Admins may open it.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf cribl-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+    attrs:
+      order: 0
+  - model: authentik_outposts.outpost
+    identifiers:
+      managed: goauthentik.io/outposts/embedded
+    attrs:
+      name: authentik Embedded Outpost
+      type: proxy
+      providers:
+        - !KeyOf cribl-provider

@@ -7,7 +7,7 @@
 | Splunk Web | SAML (Splunk's own SSO) | The Developer license includes `SAMLAuth`. |
 | Cribl UI | Traefik forward auth in front of the Leader (`cribl.bmosan.com`) | Cribl's Free license has no external login (`remote_auth: 0`), so Authentik guards the route and Cribl's own login still follows. |
 
-This chart deploys Authentik itself. The Splunk and Cribl wiring come in later changes.
+This chart deploys Authentik and the Cribl route. The Splunk wiring comes in a later change.
 
 ## What's here
 
@@ -17,7 +17,9 @@ This chart deploys Authentik itself. The Splunk and Cribl wiring come in later c
 - **No Kubernetes API access** (`serviceAccount.create: false`). The Cribl forward auth uses the outpost embedded in the server, so Authentik never deploys outposts of its own.
 - **Blueprints** (`blueprints/*.yaml`, mounted from a ConfigMap): Authentik configuration kept in Git. The worker applies each one when it changes and re-applies it every hour, so UI edits to these objects revert.
   - `require-mfa.yaml`: the default login flow's MFA stage requires TOTP or WebAuthn, and makes a user without either enrol one before the login completes.
+  - `cribl.yaml`: a forward-auth proxy provider for `cribl.bmosan.com`, the Cribl application (open to `authentik Admins` only), and the provider bound to the embedded outpost.
 - **Ingress**: Traefik, cert-manager DNS-01, `tailnet-only` middleware (403 to anything outside the tailnet ranges).
+- **Cribl UI** (`templates/cribl.yaml`): `https://cribl.bmosan.com`, tailnet-only. Traefik sends each request to the embedded outpost (`authentik-forward-auth` middleware) and, once Authentik allows it, on to the Leader at `https://192.168.4.11:9000`, a Service without a selector plus its Endpoints. Traefik checks the Leader's cert against the homelab CA (`files/homelab-ca.crt`) for the name `cribl-homelab`. `/outpost.goauthentik.io` on the same host goes to Authentik without forward auth, for the login start and callback. Traefik runs on the host network and can't resolve cluster DNS names, so the outpost is reached through the Service `authentik-forward-auth` at a fixed `10.43.200.11`. The Leader's firewall (`monitoring_stack/splunk/scripts/mgmt-firewall.sh`) accepts port 9000 only from k3s-01.
 
 ## Outside Git
 
@@ -29,14 +31,22 @@ This chart deploys Authentik itself. The Splunk and Cribl wiring come in later c
   ```
 
   `secret_key` must never change after the first start: it signs sessions and derives IDs. `bootstrap_password` is read only on the very first start, as the password of the built-in `akadmin` user. Read it in the Vault UI to log in the first time.
-- **Cloudflare DNS**: `A auth.bmosan.com → 100.124.194.87` (k3s-01's tailnet IP), DNS-only, like `vault`, `mcp` and `apiary`.
-- **Argo CD Application**, applied once: `kubectl apply -f infrastructure_tooling/authentik/application.yaml`.
+- **Cloudflare DNS**: `A auth.bmosan.com` and `A cribl.bmosan.com → 100.124.194.87` (k3s-01's tailnet IP), DNS-only, like `vault`, `mcp` and `apiary`.
+- **Argo CD Application**: `kubectl apply -f infrastructure_tooling/authentik/application.yaml`. Argo CD doesn't manage the Application itself, so re-apply it after changing that file.
 
 ## First login
 
 1. Log in at `https://auth.bmosan.com` as `akadmin` with `bootstrap_password`.
 2. Authentik asks you to enrol a second factor (TOTP app or passkey) before the login completes, as `require-mfa.yaml` requires.
 3. Create your own user, add it to the `authentik Admins` group, log in as that user (enrolling its own second factor), then deactivate `akadmin`.
+
+## Break-glass
+
+`akadmin` is deactivated. If you're locked out, this prints a one-time admin login link for it (valid one year; treat it like a password):
+
+```bash
+kubectl -n authentik exec deploy/authentik-worker -- ak create_recovery_key 1 akadmin
+```
 
 ## Logs
 
