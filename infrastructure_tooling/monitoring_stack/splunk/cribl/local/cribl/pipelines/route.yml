@@ -40,16 +40,6 @@ routes:
     filter: __inputId.startsWith('splunk_hec:hec')
     clones: []
     output: splunk
-  - id: netflow
-    name: netflow
-    final: true
-    disabled: false
-    pipeline: netflow
-    description: NetFlow/IPFIX from the UniFi gateway
-    enableOutputExpression: false
-    filter: __inputId.startsWith('netflow:netflow')
-    clones: []
-    output: splunk
   - id: unrouted
     name: unrouted
     final: true
