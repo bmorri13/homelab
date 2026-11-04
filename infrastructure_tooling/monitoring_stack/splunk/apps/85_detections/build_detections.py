@@ -75,6 +75,8 @@ det("HL - Kubernetes workload created by hand",
     "T1610", "Execution", "medium", "DET0249",
     "`hl_k8s_audit` objectRef.resource IN (pods, deployments, daemonsets, statefulsets, jobs, cronjobs) verb=create responseStatus.code<400 "
     "| where NOT `hl_k8s_platform_user` AND NOT match('user.username', \"^system:serviceaccount:(arc-runners|toolhive-mcp):\") "
+    # Trivy Operator runs each image scan as a Job in its own namespace.
+    "| where NOT ('user.username'==\"system:serviceaccount:trivy-system:trivy-operator\" AND 'objectRef.namespace'==\"trivy-system\" AND 'objectRef.resource'==\"jobs\") "
     "| eval privileged=if(match(_raw, \"\\\"privileged\\\":true|\\\"hostNetwork\\\":true|\\\"hostPID\\\":true|\\\"hostPath\\\"\"), \"yes\", \"no\") "
     + K8S_TAIL.replace("values(verb) as verbs", "values(verb) as verbs values(privileged) as privileged").replace(
         'detail="verbs="', 'detail="privileged_or_host_access=".mvjoin(privileged, ",")." verbs="'),
@@ -284,7 +286,9 @@ det("HL - Authentik break-glass admin or impersonation",
 det("HL - Splunk local login",
     "T1078.001", "Initial Access", "high", "DET0465",
     # The CIM add-on rewrites action to success/failure; the raw text keeps it.
-    "index=_audit \"action=login attempt\" method=Splunk "
+    # NOT search_id=*: _audit also logs every search with its text, and this search's
+    # own text contains the terms (and src=="127.0.0.1"), so it matched itself.
+    "index=_audit \"action=login attempt\" method=Splunk NOT search_id=* "
     "| where NOT (src==\"127.0.0.1\" OR src==\"192.168.4.11\" OR cidrmatch(\"172.16.0.0/12\", src)) "
     "| stats count min(_time) as first_seen max(_time) as last_seen values(info) as results by user src "
     "| eval host=\"security-tooling-01\", object=\"Splunk Web\", detail=\"results=\".mvjoin(results, \",\").\" (a local Splunk user, which skips Authentik and its second factor)\" "
