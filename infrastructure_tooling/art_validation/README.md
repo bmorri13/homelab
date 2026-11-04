@@ -11,7 +11,7 @@ Its first run (2026-11-04) found a real gap: *HL - Sensitive command run over SS
 Only on two places, so production machines are never touched:
 
 - **ubuntu-desktop-01** (host tests): a low-stakes desktop VM that already has the OTel agent and Falco. `host/` installs a script and a weekly systemd timer.
-- **The `art-validation` namespace on k3s-01** (Kubernetes tests): a CronJob whose service account `art-runner` may do exactly these tests in that namespace and nothing else (`k8s/rbac.yaml`). Restricted Pod Security.
+- **The `art-validation` namespace on k3s-01** (Kubernetes tests): a CronJob whose service account `art-runner` may do exactly these tests in that namespace and nothing else (`k8s/rbac.yaml`). Restricted Pod Security. The runner is the official `registry.k8s.io/kubectl` image at the cluster's version, with a static busybox shell copied in by an init container (the kubectl image has no shell).
 
 Both run weekly, Sunday 06:00 UTC.
 

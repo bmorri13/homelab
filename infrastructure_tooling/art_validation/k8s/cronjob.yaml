@@ -26,14 +26,27 @@ spec:
             runAsUser: 65534
             runAsGroup: 65534
             seccompProfile: {type: RuntimeDefault}
+          # The official kubectl image (distroless, matches the k3s 1.31 server) has no
+          # shell, so a static busybox is copied in for the script. Replaced alpine/k8s,
+          # whose bundled tools carried 23 critical CVEs (Trivy, 2026-11-04).
+          initContainers:
+            - name: tools
+              image: docker.io/library/busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+              command: [sh, -c, 'cp /bin/busybox /tools/busybox && cd /tools && for a in $(./busybox --list); do ln -sf busybox "$a"; done']
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: tools, mountPath: /tools}
           containers:
             - name: runner
-              image: docker.io/alpine/k8s:1.31.13@sha256:7a319b15cfc99c9aaa27ec9891d6b4ca24632b795908591c7b0ba89b03549e0a
-              command: [bash, /scripts/art-validation.sh]
+              image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+              command: [/tools/sh, /scripts/art-validation.sh]
               env:
                 - {name: HOME, value: /tmp}
+                - {name: PATH, value: /tools:/bin:/usr/bin:/usr/local/bin}
                 - name: TARGET_IMAGE
-                  value: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+                  value: docker.io/library/busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities: {drop: [ALL]}
@@ -42,6 +55,12 @@ spec:
                 limits: {memory: 256Mi}
               volumeMounts:
                 - {name: scripts, mountPath: /scripts, readOnly: true}
+                - {name: tools, mountPath: /tools, readOnly: true}
+                - {name: tmp, mountPath: /tmp}
           volumes:
             - name: scripts
               configMap: {name: art-validation-scripts}
+            - name: tools
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
