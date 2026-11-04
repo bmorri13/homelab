@@ -48,6 +48,16 @@
         "infrastructure_tooling/homelab_agents/image/**"
       ],
       "groupName": "homelab-agents image"
+    },
+    {
+      "description": "Authentik's database (infrastructure_tooling/authentik): a new Postgres major can't open the old data directory (and 18 moved the image's data path), so a major bump would break the Authentik login for Splunk and Cribl. Patch and minor updates within the major still come through. Move majors by hand with a dump and restore.",
+      "matchPackageNames": [
+        "docker.io/library/postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
     }
   ]
 }
