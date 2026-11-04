@@ -58,7 +58,7 @@ Rollback: `qm rollback 103 <name>` on proxmox3. This returns the whole VM to the
 |---|---|---|---|
 | 1 | 1.32.13 | 3.6 (chart 39), from 2.11 | Nothing else: Argo CD 3.4, cert-manager 1.17 and the rest support 1.32. **Done 2026-11-04.** |
 | 2 | 1.33 | chart 40 | cert-manager 1.17 stops at 1.33, so it had to reach 1.20+ before step 3: **done 2026-11-04, now 1.20.5** (1.20 supports 1.32 to 1.35; move to 1.21 at step 4) |
-| 3 | 1.34 | chart 40 | Argo CD 3.4 → 3.6 here (3.6 is tested on 1.34+) |
+| 3 | 1.34 | chart 40 | Argo CD 3.4 → 3.6 here (3.6 is tested on 1.34+). **Done 2026-11-04.** External Secrets 0.18 → 2.14 (`../external_secrets_operator`) |
 | 4 | 1.35, 1.36 | chart 40 | External Secrets 0.18 and Vault 1.18 need upgrading on the way |
 
 Step 2 (1.33.13+k3s2), **done 2026-11-04**, brings Traefik 3.7.8 on chart 40.1.4. Its rollout hung with the new pod Pending, because on one node it can't get host ports 80 and 443 while the old pod holds them. `traefik-config.yaml` now stops the old pod first (`updateStrategy`). With our config it renders the same as chart 39 apart from the image. Kubernetes 1.33 deprecates core `Endpoints`, so applying the two in `authentik` gives warnings only. Moving them to EndpointSlices also needs EndpointSlice taken out of Argo CD's exclusions (`argocd_config`).

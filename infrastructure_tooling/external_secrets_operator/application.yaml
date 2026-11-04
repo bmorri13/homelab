@@ -1,0 +1,35 @@
+# External Secrets Operator on k3s-01: the upstream chart. Turns the
+# ExternalSecrets in each app into Kubernetes Secrets from Vault, through the
+# vault-backend ClusterSecretStore (../eso_cluster_provider_helm).
+#
+# Created in the Argo CD UI originally; committed so the version is on record.
+# There is no app-of-apps, so a change here does nothing until it is applied and
+# synced (it has no automated sync, on purpose: a bad ESO sync would stop secret
+# refreshes everywhere):
+#   kubectl apply -f infrastructure_tooling/external_secrets_operator/application.yaml
+#   then sync external-secrets-operator in Argo CD.
+#
+# ServerSideApply: since 0.19 the CRDs are too big for client-side apply's
+# last-applied annotation.
+#
+# Upgrading: only the latest minor is supported. Read the release notes from the
+# running version on (breaking changes are flagged), check the Kubernetes version
+# in docs/introduction/stability-support.md, and server-side dry-run the chart's
+# render first. Secrets already written stay in place if ESO is down.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets-operator
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: 2.14.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
