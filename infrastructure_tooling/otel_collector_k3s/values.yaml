@@ -39,7 +39,7 @@ opentelemetry-collector:
       disableLeaderElection: true   # one node, one collector: nothing to elect
 
   # Read-only access to Trivy Operator's reports (infrastructure_tooling/trivy_operator),
-  # for the k8sobjects/trivy receiver below.
+  # for the k8s_objects/trivy receiver below.
   clusterRole:
     rules:
       - apiGroups: [aquasecurity.github.io]
@@ -124,7 +124,7 @@ opentelemetry-collector:
             if: 'attributes.ts != nil'
       # Trivy Operator's reports, a full copy every 12 hours (they are rescanned daily).
       # Each object becomes one event; transform/trivy names its sourcetype by kind.
-      k8sobjects/trivy:
+      k8s_objects/trivy:
         objects:
           - {name: vulnerabilityreports, group: aquasecurity.github.io, mode: pull, interval: 12h}
           - {name: exposedsecretreports, group: aquasecurity.github.io, mode: pull, interval: 12h}
@@ -225,7 +225,7 @@ opentelemetry-collector:
           processors: [memory_limiter, resource/host, transform/k8s_audit, batch]
           exporters: [splunk_hec]
         logs/trivy:
-          receivers: [k8sobjects/trivy]
+          receivers: [k8s_objects/trivy]
           processors: [memory_limiter, resource/host, transform/trivy, batch]
           exporters: [splunk_hec]
         metrics:
