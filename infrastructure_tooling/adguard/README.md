@@ -22,7 +22,8 @@ A DNS resolver for the LAN on k3s-01, there to log every query to Splunk: which 
 
 DHCP hands out two DNS servers: AdGuard first, the gateway second. A client that gets no answer from AdGuard asks the gateway, which is what every client uses today.
 
-- Linux with systemd-resolved (the VMs here): moves to the next server when the current one stops answering, and stays there until that one fails or the network link is reconfigured. So after an AdGuard outage those hosts may keep using the gateway: DNS works, but their queries are missing from the log until their next DHCP renewal or reboot.
+- Linux with systemd-resolved (the VMs here): moves to the next server when the current one stops answering, and stays there until that one fails. So after an AdGuard outage those hosts keep using the gateway: DNS works, but their queries are missing from the log until systemd-resolved restarts (`systemctl restart systemd-resolved`, or a reboot).
+- How fast the fallback is depends on what broke. Tested on 2026-11-04 by scaling the pod to zero: kube-proxy then rejects port 53 on 192.168.4.98 outright, and the VMs switched to the gateway at once (lookups took 0.01 s). If the whole k3s-01 VM is down nothing answers at all, so a client waits for its resolver timeout (a few seconds) once before switching.
 - Windows and macOS: retry the second server after about a second without an answer.
 - k3s-01 runs AdGuard and also gets it from DHCP. If k3s or the pod is down, k3s-01 itself falls back to the gateway like any other host.
 - *HL - Log source stopped sending* reports the AdGuard query log going quiet for 30 minutes, which is what a fallback looks like.
@@ -31,11 +32,11 @@ Keep UniFi's own **Ad Blocking** off on networks that use AdGuard: with it on, t
 
 ## Rollout
 
-Server LAN (192.168.4.0/24) first. In UniFi Network, edit that network's DHCP settings (or with the UniFi API) and set:
+In UniFi Network, edit the network's DHCP settings (or with the UniFi API) and set:
 
 - DNS Server: Manual. `192.168.4.98`, then `192.168.4.1`.
 
-Clients pick it up at their next DHCP renewal (lease 24 h), or right away with `networkctl renew eth0` on a VM. Check a client with `resolvectl status`, then its queries in Splunk:
+Clients get the new servers at their next DHCP renewal (lease 24 h), or right away with `networkctl renew eth0`. On the VMs that isn't enough to move them: systemd-resolved keeps using the gateway while it still answers, because it is still in the list. Restart it so it starts from the first server: `networkctl renew eth0 && systemctl restart systemd-resolved`. Check a client with `resolvectl status` (Current DNS Server: 192.168.4.98), then its queries in Splunk:
 
 ```
 index=network sourcetype=adguard:querylog src=<client IP> | head
@@ -43,7 +44,9 @@ index=network sourcetype=adguard:querylog src=<client IP> | head
 
 Widen to other networks once it has run cleanly for a while.
 
-**Rollback:** set that network's DNS back to Auto. Clients return to the gateway at their next renewal, or `networkctl renew eth0`.
+**Rollback:** set that network's DNS back to Auto. Clients return to the gateway at their next renewal, or `networkctl renew eth0 && systemctl restart systemd-resolved`.
+
+Live since 2026-11-04 on the server LAN (192.168.4.0/24) and 192.168.3.0/24. Not on the isolated networks: their firewall policy blocks them from reaching the server LAN, so AdGuard could never answer them.
 
 ## Outside Git
 
