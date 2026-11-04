@@ -34,13 +34,32 @@ This chart deploys Authentik and the routes for both apps.
 
   `secret_key` must never change after the first start: it signs sessions and derives IDs. `bootstrap_password` is read only on the very first start, as the password of the built-in `akadmin` user. Read it in the Vault UI to log in the first time.
 - **Cloudflare DNS**: `A auth.bmosan.com`, `A cribl.bmosan.com` and `A splunk.bmosan.com → 100.124.194.87` (k3s-01's tailnet IP), DNS-only, like `vault`, `mcp` and `apiary`.
-- **SAML signing keypair** `splunk-saml-signing`, generated once inside Authentik (RSA 4096, 100 years, as Authentik's Splunk guide recommends) so the private key never left it. Its public cert is in `monitoring_stack/splunk/auth/authentik-saml.crt`:
+- **SAML signing keypair** `splunk-saml-signing`: a self-signed RSA 4096 certificate, valid 100 years, generated inside Authentik so the private key never left it. Its public cert is in `monitoring_stack/splunk/auth/authentik-saml.crt`. It has to be self-signed: Authentik's own `CertificateBuilder` (and the UI's Generate button) issue certificates from Authentik's internal CA, which Splunk rejects ("unable to get local issuer certificate", logged as "failed to verify signature with cert"). To regenerate it:
 
   ```bash
   kubectl -n authentik exec -i deploy/authentik-worker -- ak shell -c "
-  from authentik.crypto.builder import CertificateBuilder
-  b = CertificateBuilder('splunk-saml-signing'); b.build(validity_days=36500, subject_alt_names=['auth.bmosan.com']); b.save()"
+  import datetime
+  from cryptography import x509
+  from cryptography.x509.oid import NameOID
+  from cryptography.hazmat.primitives import hashes, serialization
+  from cryptography.hazmat.primitives.asymmetric import rsa
+  from authentik.crypto.models import CertificateKeyPair
+  key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+  name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'splunk-saml-signing'), x509.NameAttribute(NameOID.ORGANIZATION_NAME, 'bmosan homelab')])
+  now = datetime.datetime.now(datetime.timezone.utc)
+  cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+      .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(minutes=5))
+      .not_valid_after(now + datetime.timedelta(days=36500))
+      .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+      .sign(key, hashes.SHA256()))
+  kp, _ = CertificateKeyPair.objects.get_or_create(name='splunk-saml-signing')
+  kp.certificate_data = cert.public_bytes(serialization.Encoding.PEM).decode()
+  kp.key_data = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+  kp.save()
+  print(kp.certificate_data)"
   ```
+
+  Then commit the printed certificate as `auth/authentik-saml.crt` and redeploy the Splunk stack.
 - **Argo CD Application**: `kubectl apply -f infrastructure_tooling/authentik/application.yaml`. Argo CD doesn't manage the Application itself, so re-apply it after changing that file.
 
 ## First login
