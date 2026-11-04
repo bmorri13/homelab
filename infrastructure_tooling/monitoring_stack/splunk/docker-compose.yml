@@ -16,7 +16,7 @@ services:
       - SPLUNK_PASSWORD=${SPLUNK_PASSWORD:?set SPLUNK_PASSWORD in .env}
       - SPLUNK_HTTP_ENABLESSL=true
     ports:
-      - "8000:8000"   # Splunk Web (HTTPS, self-signed)
+      - "8000:8000"   # Splunk Web (HTTPS, homelab CA): k3s-01 only, served as splunk.bmosan.com
       # REST API + the Splunk MCP Server app, for the MCP gateway on k3s-01. LAN
       # address only, and scripts/mgmt-firewall.sh drops every other source.
       - "${SPLUNK_MGMT_BIND:-192.168.4.11}:8089:8089"

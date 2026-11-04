@@ -34,6 +34,8 @@ DETECTION_RUNBOOKS = [
     ("HL - SSH", "logins.md"),
     ("HL - Proxmox", "logins.md"),
     ("HL - UniFi admin", "logins.md"),
+    ("HL - Authentik", "logins.md"),
+    ("HL - Splunk local login", "logins.md"),
     ("HL - UniFi configuration", "unifi-config.md"),
     ("HL - Sensitive command", "host-commands.md"),
     ("HL - MCP gateway", "mcp-gateway.md"),

@@ -1,7 +1,9 @@
-# Login detections (new SSH source/host, Proxmox login failures, UniFi admin logins)
+# Login detections (new SSH source/host, Proxmox login failures, UniFi admin logins, Authentik, Splunk local login)
 
 Sources: `index=infra sourcetype=linux_secure` (Tailscale SSH: ts_user, src; sudo; Proxmox pvedaemon auth failures), `index=audit` UniFi admin events.
 
 Known: VMs are reached with Tailscale SSH (100.x sources). tag:openclaw is the OpenClaw/Hermes agent doing health checks. Terraform and Packer use API tokens, so a Proxmox password failure is a person or something guessing.
 
 Check: is the source a known Tailscale device of the owner (same source used for other logins in 30 days)? Did the login succeed afterwards, and what commands followed (`eventtype=homelab_tailscale_ssh_command`)? For Proxmox failures: the user named, the source IP (rhost), how many attempts, and whether a success from the same source followed. For UniFi: source IP and whether it's on the LAN or a known remote-access path.
+
+Authentik (`auth.bmosan.com`, tailnet-only) is the login for Splunk Web and the Cribl UI, with a required second factor. Its events are in `index=k8s k8s.namespace.name=authentik "Created Event"` (JSON: `action`, `client_ip`, `user.username`, `context.username`, `context.stage.name`). The owner's account is `bmo`; `akadmin` is deactivated and only comes back through a recovery key, so an akadmin login is break-glass or an intruder. An MFA failure after a correct password means the password may be known: check whether a successful login followed, from where, and what that session did (`action=login`, `authorize_application`, model changes). For Splunk local logins: Splunk Web normally logs in through Authentik; a local login (`index=_audit "action=login attempt" method=Splunk`) is the admin break-glass. Check the source, then what that user did next in `index=_audit`.
