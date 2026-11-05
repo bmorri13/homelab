@@ -6,6 +6,10 @@ metadata:
     app: {{ .Release.Name }}
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the data volume holds an embedded MariaDB, and two
+  # pods must never run it on the same directory at once.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: {{ .Release.Name }}
