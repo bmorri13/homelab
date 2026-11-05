@@ -65,6 +65,8 @@ Step 2 (1.33.13+k3s2), **done 2026-11-04**, brings Traefik 3.7.8 on chart 40.1.4
 
 Step 3 (1.34.13+k3s1) brings Traefik 3.7.15 on chart 40.1.7. With our config, the only differences from step 2 are the image and a dropped toleration for the `master` taint, which k3s no longer sets. Argo CD goes to 3.6.1 in the same change (`../argocd`), applied after k3s is on 1.34. External Secrets 0.18 is tested only up to 1.33. It runs on 1.34 untested until its own upgrade, which comes next. If it failed, the Secrets it has already written would stay in place.
 
+Step 4a (1.35.10+k3s1) changes only Kubernetes: it bundles the same containerd (2.2.10), Traefik (3.7.15, chart 40.1.7, same defaults), CoreDNS, metrics-server and local-path as step 3. Kubernetes 1.35 refuses to run on cgroup v1 (k3s-01 is on cgroup v2) and drops the kubelet `--pod-infra-container-image` flag (not set here).
+
 Traefik 3 changes for this cluster:
 - The Ingress routes, `ipAllowList` and forwardAuth middlewares, and ServersTransports already use the `traefik.io` API that v3 reads.
 - Selectorless Services (`authentik/cribl-leader`, `authentik/splunk-web`) work through the EndpointSlices Kubernetes mirrors from their Endpoints.
