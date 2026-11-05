@@ -4,7 +4,7 @@ A DaemonSet that sends pod logs, Kubernetes events and Kubernetes metrics from k
 
 | Data | Receiver | Splunk sourcetype | Index (set by Cribl) |
 |---|---|---|---|
-| Pod logs (`/var/log/pods`) | `file_log`, from the `logsCollection` preset | `kube:container` | `k8s`; `apps` for alexprinter, stirling-pdf; `audit` for vault and toolhive |
+| Pod logs (`/var/log/pods`) | `file_log`, from the `logsCollection` preset | `kube:container` | `k8s`; `apps` for alexprinter; `audit` for vault and toolhive |
 | Kubernetes events | `k8s_events` | `kube:events` | same rules, by event namespace |
 | Usage metrics: node, pod, container, volume (CPU, memory working set against requests and limits, filesystem, network) | `kubeletstats`, from the `kubeletMetrics` preset | metric | `metrics` |
 | Cluster state, the kube-state-metrics equivalent: pod phase, container restarts and readiness, desired vs ready replicas, node conditions | `k8s_cluster`, from the `clusterMetrics` preset | metric | `metrics` |

@@ -60,7 +60,7 @@ Each exception is scoped to a known-good image, process or namespace. The rule s
 
 The k8saudit rules (`falco-k8saudit` in `falco_k3s/values.yaml`) have their own exceptions: k3s's control-plane identities are allowed users, and *Pod Created in Kube Namespace* ignores the local-path provisioner's helper pods. The audit log records pods at Metadata level, so that rule's image allow-list can never match, and the exception is by service account. *Attach/Exec Pod* ignores the ARC homelab runner set's service account exec'ing into its own `-workflow` job pods (Kubernetes container mode runs every job step that way).
 
-Application namespaces (apiary, alexprinter, stirling-pdf) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that is in the k3s API audit log (`index=audit sourcetype=kube:apiserver:audit`), with Falco's Kubernetes audit rules running on it (`falco-k8saudit`).
+Application namespaces (apiary, alexprinter) still alert on API contact. Apiary alerts only when its pod starts, so it is left alerting. Falco can't show what an agent does through the kubectl MCP server; that is in the k3s API audit log (`index=audit sourcetype=kube:apiserver:audit`), with Falco's Kubernetes audit rules running on it (`falco-k8saudit`).
 
 ## AI agent rules (`rules.d/ai_agents.yaml`)
 
