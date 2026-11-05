@@ -4,13 +4,14 @@
 # Upstream's image is node:20-slim (Debian 12, Node 20, which went end of life in
 # April 2026). Trivy found 8 critical CVEs in it at v0.9.0: 6 in Debian packages,
 # tar from the npm bundled in the base, and proxy-addr from express. This builds
-# the same upstream commit, pins proxy-addr to the fixed 2.0.8, and runs it on a
-# distroless Node runtime with no shell, no package manager and no npm.
+# the same upstream commit, raises the vulnerable npm dependencies to fixed
+# versions (overrides.json, pnpm overrides within the same major version), and runs
+# it on a distroless Node runtime with no shell, no package manager and no npm.
 #
 # UPSTREAM_REF is the commit of the upstream tag (v0.9.0). To move to a new release:
-# set it to that tag's commit, check its packageManager pnpm version, and drop the
-# proxy-addr override once upstream's lock has 2.0.8 or later. The two Chainguard
-# digests are bumped by Renovate, together.
+# set it to that tag's commit, check its packageManager pnpm version, and drop each
+# override in overrides.json once upstream's lock has that version or later. The
+# two Chainguard digests are bumped by Renovate, together.
 ARG NODE_DEV=cgr.dev/chainguard/node:latest-dev@sha256:d0db506a46ecf9fca69413576d9621988d1e879956e8f9241c87d7fb5a200a68
 ARG NODE_RUNTIME=cgr.dev/chainguard/node:latest@sha256:4ad7301975908b87d321af8b9ed41630dc69015976269965ee459c27541df252
 
@@ -23,9 +24,11 @@ ADD --keep-git-dir=false https://github.com/argoproj-labs/mcp-for-argocd.git#${U
 WORKDIR /src
 # Non-interactive pnpm (it aborts without a TTY when it needs to purge node_modules).
 ENV CI=true
+COPY overrides.json /tmp/overrides.json
 RUN npm install --global "pnpm@${PNPM_VERSION}" \
- && npm pkg set pnpm.overrides.proxy-addr=2.0.8 \
+ && node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json")); p.pnpm={...(p.pnpm||{}), overrides:{...((p.pnpm||{}).overrides||{}), ...JSON.parse(fs.readFileSync("/tmp/overrides.json"))}}; fs.writeFileSync("package.json", JSON.stringify(p, null, 2))' \
  && pnpm install --no-frozen-lockfile \
+ && for pkg in $(node -p 'Object.keys(require("/tmp/overrides.json")).join(" ")'); do pnpm why --prod "$pkg" | grep -E "^${pkg} " || true; done \
  && pnpm run build \
  && pnpm prune --prod
 
