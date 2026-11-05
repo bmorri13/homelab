@@ -12,5 +12,5 @@
 | [Core infrastructure ingress](kubernetes/ingress.md) | Ingresses for chart-less tooling |
 | [GitHub Actions Runner Controller](kubernetes/arc.md) | Ephemeral CI runners on Kubernetes |
 | [Secondary K3s cluster](secondary-cluster.md) | docker-compose-03-k3s and the Tailscale operator |
-| [Applications](applications.md) | Alex Printer tracker, Uptime Kuma, Stirling PDF |
+| [Applications](applications.md) | Alex Printer tracker, Stirling PDF |
 | [Monitoring](monitoring.md) | Current stack links, and the original Elastic & Cribl write-up |
