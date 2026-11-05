@@ -66,3 +66,7 @@ http://bmo-nuc.com:31080/
         - Value: <enter your secret value here>
 
 - You now have a local secrets store setup on your cluster and are ready to set up a GitOps tie in to leveraging these secrets in your Cluster
+
+## Upgrades
+
+The Vault Application and the upgrade procedure (backup, restart into the new version, unseal) are in [`infrastructure_tooling/vault`](../../infrastructure_tooling/vault/README.md).
