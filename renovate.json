@@ -57,6 +57,17 @@
       "groupName": "homelab-agents image"
     },
     {
+      "description": "pydantic pins pydantic-core to one exact version, so pydantic-core only moves when pydantic does (re-locking with the uv pip compile command in requirements.txt picks it up). Renovate bumped it on its own once (#295), to a version pydantic couldn't use and with no Python 3.14 wheel, and the image build failed.",
+      "matchFileNames": [
+        "infrastructure_tooling/homelab_agents/image/**"
+      ],
+      "matchPackageNames": [
+        "pydantic-core",
+        "pydantic_core"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Authentik's database (infrastructure_tooling/authentik): a new Postgres major can't open the old data directory (and 18 moved the image's data path), so a major bump would break the Authentik login for Splunk and Cribl. Patch and minor updates within the major still come through. Move majors by hand with a dump and restore.",
       "matchPackageNames": [
         "docker.io/library/postgres"

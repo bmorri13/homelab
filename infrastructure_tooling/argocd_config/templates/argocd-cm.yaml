@@ -37,8 +37,10 @@ data:
   # From Argo CD 3.0 upstream ships default exclusions and ignoreResourceUpdates
   # in its own argocd-cm. This chart owns argocd-cm (infrastructure_tooling/argocd
   # leaves upstream's copy out), so they are copied in below, from v3.6.1, minus
-  # core Endpoints: the authentik app manages two selectorless Endpoints from Git
-  # (cribl-leader, splunk-web), and an excluded kind can't be synced.
+  # Endpoints and EndpointSlice: the authentik app manages two EndpointSlices from
+  # Git (cribl-leader, splunk-web, for Services without a selector), and an
+  # excluded kind can't be synced. Tracking is by annotation, so the slices
+  # Kubernetes generates for other Services aren't mistaken for Argo CD's own.
   resource.exclusions: |
 {{- if .arc.enabled }}
     - apiGroups:
@@ -51,10 +53,6 @@ data:
         - "*"
 {{- end }}
 {{- if .upstreamDefaults.enabled }}
-    - apiGroups:
-        - discovery.k8s.io
-      kinds:
-        - EndpointSlice
     - apiGroups:
         - coordination.k8s.io
       kinds:
@@ -95,7 +93,8 @@ data:
 {{- end }}
 {{- if .upstreamDefaults.enabled }}
   # Changes Argo CD doesn't need to refresh an app for (upstream's defaults, minus
-  # Endpoints for the same reason as above).
+  # Endpoints). Changes to an EndpointSlice don't trigger a refresh, but drift in
+  # the two from Git is still found and healed at the next periodic reconcile.
   resource.customizations.ignoreResourceUpdates.all: |
     jsonPointers:
       - /status

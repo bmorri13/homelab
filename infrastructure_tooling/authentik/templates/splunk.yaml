@@ -13,15 +13,20 @@ spec:
   ports:
     - {name: https, port: {{ .Values.splunk.web.port }}, targetPort: {{ .Values.splunk.web.port }}, protocol: TCP}
 ---
-apiVersion: v1
-kind: Endpoints
+# EndpointSlice, as for cribl-leader (templates/cribl.yaml).
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
   name: splunk-web
-subsets:
-  - addresses:
-      - ip: {{ .Values.splunk.web.ip }}
-    ports:
-      - {name: https, port: {{ .Values.splunk.web.port }}, protocol: TCP}
+  labels:
+    kubernetes.io/service-name: splunk-web
+    endpointslice.kubernetes.io/managed-by: argocd.homelab
+addressType: IPv4
+endpoints:
+  - addresses: [{{ .Values.splunk.web.ip | quote }}]
+    conditions: {ready: true}
+ports:
+  - {name: https, port: {{ .Values.splunk.web.port }}, protocol: TCP}
 ---
 # Traefik verifies Splunk Web's cert against the homelab CA only (Secret homelab-ca,
 # templates/cribl.yaml).

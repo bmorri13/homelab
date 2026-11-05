@@ -40,15 +40,21 @@ spec:
   ports:
     - {name: https, port: {{ .Values.cribl.leader.port }}, targetPort: {{ .Values.cribl.leader.port }}, protocol: TCP}
 ---
-apiVersion: v1
-kind: Endpoints
+# An EndpointSlice rather than core Endpoints, which Kubernetes deprecated in 1.33.
+# The managed-by label keeps Kubernetes' own controllers off it.
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
   name: cribl-leader
-subsets:
-  - addresses:
-      - ip: {{ .Values.cribl.leader.ip }}
-    ports:
-      - {name: https, port: {{ .Values.cribl.leader.port }}, protocol: TCP}
+  labels:
+    kubernetes.io/service-name: cribl-leader
+    endpointslice.kubernetes.io/managed-by: argocd.homelab
+addressType: IPv4
+endpoints:
+  - addresses: [{{ .Values.cribl.leader.ip | quote }}]
+    conditions: {ready: true}
+ports:
+  - {name: https, port: {{ .Values.cribl.leader.port }}, protocol: TCP}
 ---
 # Traefik verifies the Leader's cert against the homelab CA only.
 apiVersion: v1
