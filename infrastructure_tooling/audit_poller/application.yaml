@@ -1,0 +1,27 @@
+# Argo CD Application for the audit poller. Create Vault kv/audit-poller first (README.md),
+# then apply once:
+#   kubectl apply -f infrastructure_tooling/audit_poller/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: audit-poller
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/audit_poller/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: audit-poller
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest
