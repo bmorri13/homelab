@@ -67,6 +67,10 @@ Step 3 (1.34.13+k3s1) brings Traefik 3.7.15 on chart 40.1.7. With our config, th
 
 Step 4a (1.35.10+k3s1) changes only Kubernetes: it bundles the same containerd (2.2.10), Traefik (3.7.15, chart 40.1.7, same defaults), CoreDNS, metrics-server and local-path as step 3. Kubernetes 1.35 refuses to run on cgroup v1 (k3s-01 is on cgroup v2) and drops the kubelet `--pod-infra-container-image` flag (not set here).
 
+Step 4a, 1.35.10+k3s1, was **done 2026-11-05**. Traefik and Vault didn't restart, because the bundled components were unchanged.
+
+Step 4b (1.36.6+k3s1) also keeps Traefik (3.7.15, chart 40.1.7, same defaults), CoreDNS, metrics-server and local-path. Containerd moves 2.2.10 → 2.3.7. The earlier steps moved containerd 1.7 → 2.2 without restarting running containers, and k3s-01 has no custom containerd config template. None of the Kubernetes 1.36 urgent notes apply here (a renamed volume metric, scheduler plugin interfaces, flex-volumes in kubeadm).
+
 Traefik 3 changes for this cluster:
 - The Ingress routes, `ipAllowList` and forwardAuth middlewares, and ServersTransports already use the `traefik.io` API that v3 reads.
 - Selectorless Services (`authentik/cribl-leader`, `authentik/splunk-web`) work through the EndpointSlices Kubernetes mirrors from their Endpoints.
