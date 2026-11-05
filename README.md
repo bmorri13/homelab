@@ -38,7 +38,7 @@ Setup guides, moved out of this README into [`docs/`](docs/README.md):
   - [Core infrastructure ingress](docs/kubernetes/ingress.md)
   - [GitHub Actions Runner Controller (ARC)](docs/kubernetes/arc.md)
 - [Secondary K3s cluster (docker-compose-03-k3s)](docs/secondary-cluster.md)
-- [Applications](docs/applications.md): Alex Printer tracker, Stirling PDF
+- [Applications](docs/applications.md): Alex Printer tracker
 - [Monitoring](docs/monitoring.md)
 
 ## Component READMEs

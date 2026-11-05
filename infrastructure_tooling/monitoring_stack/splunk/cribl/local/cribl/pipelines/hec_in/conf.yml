@@ -197,7 +197,7 @@ functions:
             : ['network', 'infra', 'k8s', 'apps', 'audit', 'ai_agents', 'security', 'cribl', 'unrouted'].includes(index) ? index
             : /claude|codex|agent/i.test(__e['service.name'] || '') ? 'ai_agents'
             : __e['k8s.namespace.name'] == 'vault' ? 'audit'
-            : ['alexprinter', 'stirling-pdf'].includes(__e['k8s.namespace.name']) ? 'apps'
+            : __e['k8s.namespace.name'] == 'alexprinter' ? 'apps'
             : __e['k8s.namespace.name'] ? 'k8s'
             : __e['container.name'] ? 'apps'
             : 'infra'
