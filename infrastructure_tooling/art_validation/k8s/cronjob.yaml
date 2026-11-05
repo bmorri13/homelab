@@ -40,7 +40,7 @@ spec:
                 - {name: tools, mountPath: /tools}
           containers:
             - name: runner
-              image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+              image: registry.k8s.io/kubectl:v1.36.6@sha256:0650805141538d13ccbb6bb9e0dd647bc415bc002898357970211c4d47224396
               command: [/tools/sh, /scripts/art-validation.sh]
               env:
                 - {name: HOME, value: /tmp}
