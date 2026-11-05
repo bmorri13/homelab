@@ -246,8 +246,8 @@ mcpServers:
           app.kubernetes.io/name: argocd-server
         ports: [8080]
     spec:
-      # v0.9.0, built from commit 23b1fdd of this repo.
-      image: ghcr.io/bmorri13/mcp-for-argocd@sha256:6bb098ac5a22328fafed8ad887d454a08a62fb9f55bdeaa3a8b4203b6b17da14
+      # v0.9.0, built from commit 26e83f7 of this repo.
+      image: ghcr.io/bmorri13/mcp-for-argocd@sha256:e8ca50796b1d69a666bf0fed01b507b5c4671777000aebf26912428436176f5d
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 3000
