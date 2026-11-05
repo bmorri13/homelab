@@ -1,0 +1,73 @@
+# Build argoproj-labs/mcp-for-argocd on Chainguard Node
+# (infrastructure_tooling/mcp_for_argocd_image), smoke-test it, and push it to
+# ghcr.io/bmorri13/mcp-for-argocd:
+#   push to main      -> :main and :sha-<commit>
+#   push to a branch  -> :<branch> and :sha-<commit> (for testing before merge)
+# The gateway runs it pinned by digest (toolhive_mcp values, mcpServers.argocd).
+# GitHub-hosted runners: the ARC runners for this repo can't build images.
+name: mcp-for-argocd image
+
+on:
+  push:
+    paths:
+      - infrastructure_tooling/mcp_for_argocd_image/**
+      - .github/workflows/mcp-for-argocd-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: mcp-for-argocd-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build (local, for the smoke test)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infrastructure_tooling/mcp_for_argocd_image
+          platforms: linux/amd64
+          load: true
+          tags: mcp-for-argocd:test
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Smoke test
+        run: infrastructure_tooling/mcp_for_argocd_image/smoke-test.sh mcp-for-argocd:test
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/bmorri13/mcp-for-argocd
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=long
+
+      - name: Push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infrastructure_tooling/mcp_for_argocd_image
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          provenance: false
