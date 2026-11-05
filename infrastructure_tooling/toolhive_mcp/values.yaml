@@ -231,7 +231,9 @@ mcpServers:
       description: >-
         Argo CD on k3s-01: applications, sync and health status, resource
         trees, events and workload logs. Read-only.
-    # The Argo project's MCP server (argoproj-labs/mcp-for-argocd). It calls
+    # The Argo project's MCP server (argoproj-labs/mcp-for-argocd), rebuilt on
+    # Chainguard Node in this repo (infrastructure_tooling/mcp_for_argocd_image):
+    # upstream's node:20-slim image had 8 critical CVEs and an end-of-life Node. It calls
     # argocd-server in-cluster over HTTPS as the Argo CD account mcp-gateway,
     # which has an API key only and role:readonly (argocd_config chart). MCP_READ_ONLY
     # also leaves out create/update/delete/sync/run_resource_action, so those
@@ -244,7 +246,8 @@ mcpServers:
           app.kubernetes.io/name: argocd-server
         ports: [8080]
     spec:
-      image: ghcr.io/argoproj-labs/mcp-for-argocd:v0.9.0@sha256:dffc6c719d8635be2d5f2c8ad1c0178540325da4b40da0b373307e12b4c48f86
+      # v0.9.0, built from commit 23b1fdd of this repo.
+      image: ghcr.io/bmorri13/mcp-for-argocd@sha256:6bb098ac5a22328fafed8ad887d454a08a62fb9f55bdeaa3a8b4203b6b17da14
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 3000
@@ -271,6 +274,8 @@ mcpServers:
       podTemplateSpec:
         spec:
           automountServiceAccountToken: false
+          imagePullSecrets:
+            - name: mcp-ghcr-pull
           securityContext:
             runAsNonRoot: true
             # The image's USER.
@@ -466,6 +471,16 @@ externalSecrets:
   secretStoreName: vault-backend
   refreshInterval: 1h
   secrets:
+    # GHCR pull credential for images built in this repo (read:packages only),
+    # the same Vault entry the homelab agents use. Pulls
+    # ghcr.io/bmorri13/mcp-for-argocd (mcpServers.argocd).
+    mcp-ghcr-pull:
+      enabled: true
+      vaultPath: kv/apiary-ghcr-pull
+      keys: [username, token]
+      templateType: kubernetes.io/dockerconfigjson
+      template:
+        .dockerconfigjson: '{"auths":{"ghcr.io":{"auth":"{{ printf "%s:%s" .username .token | b64enc }}"}}}'
     # UniFi local account for unifi-network (create it with the "View Only"
     # role). Set it in Apiary, then enable this and the server together.
     unifi-network-mcp:
