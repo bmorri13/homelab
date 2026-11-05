@@ -13,3 +13,14 @@ put 99-k3s-traefik.conf /etc/sysctl.d/99-k3s-traefik.conf 644
 sysctl --system >/dev/null
 # k3s watches this directory and re-applies the Traefik chart when the file changes.
 put traefik-config.yaml /var/lib/rancher/k3s/server/manifests/traefik-config.yaml 600
+
+# CIS hardening (README.md, "CIS benchmark").
+if ! cmp -s k3s-hardening.conf /etc/systemd/system/k3s.service.d/10-hardening.conf; then
+    install -D -m 644 k3s-hardening.conf /etc/systemd/system/k3s.service.d/10-hardening.conf
+    systemctl daemon-reload
+    echo "updated /etc/systemd/system/k3s.service.d/10-hardening.conf (applies from the next k3s start)"
+fi
+chmod 600 /var/lib/rancher/k3s/server/tls/*.crt
+if k3s kubectl get --raw /readyz >/dev/null 2>&1; then
+    ./default-serviceaccounts.sh
+fi
