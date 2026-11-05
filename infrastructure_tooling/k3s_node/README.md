@@ -59,9 +59,9 @@ Rollback: `qm rollback 103 <name>` on proxmox3. This returns the whole VM to the
 | 1 | 1.32.13 | 3.6 (chart 39), from 2.11 | Nothing else: Argo CD 3.4, cert-manager 1.17 and the rest support 1.32. **Done 2026-11-04.** |
 | 2 | 1.33 | chart 40 | cert-manager 1.17 stops at 1.33, so it had to reach 1.20+ before step 3: **done 2026-11-04, now 1.20.5** (1.20 supports 1.32 to 1.35; move to 1.21 at step 4) |
 | 3 | 1.34 | chart 40 | Argo CD 3.4 → 3.6 here (3.6 is tested on 1.34+). **Done 2026-11-04.** External Secrets 0.18 → 2.14 (`../external_secrets_operator`) |
-| 4 | 1.35, 1.36 | chart 40 | External Secrets 0.18 and Vault 1.18 need upgrading on the way: **done 2026-11-04/05** (ESO 2.14.0, Vault 2.0.4). cert-manager 1.21 (supports 1.33 to 1.36) |
+| 4 | 1.35, 1.36 | chart 40 | External Secrets 0.18 and Vault 1.18 upgraded on the way (ESO 2.14.0, Vault 2.0.4), and cert-manager to 1.21.3 (supports 1.33 to 1.36). **Done 2026-11-05: k3s-01 is on 1.36.6.** |
 
-Step 2 (1.33.13+k3s2), **done 2026-11-04**, brings Traefik 3.7.8 on chart 40.1.4. Its rollout hung with the new pod Pending, because on one node it can't get host ports 80 and 443 while the old pod holds them. `traefik-config.yaml` now stops the old pod first (`updateStrategy`). With our config it renders the same as chart 39 apart from the image. Kubernetes 1.33 deprecates core `Endpoints`, so applying the two in `authentik` gives warnings only. Moving them to EndpointSlices also needs EndpointSlice taken out of Argo CD's exclusions (`argocd_config`).
+Step 2 (1.33.13+k3s2), **done 2026-11-04**, brings Traefik 3.7.8 on chart 40.1.4. Its rollout hung with the new pod Pending, because on one node it can't get host ports 80 and 443 while the old pod holds them. `traefik-config.yaml` now stops the old pod first (`updateStrategy`). With our config it renders the same as chart 39 apart from the image. Kubernetes 1.33 deprecates core `Endpoints`. The two in `authentik` are now EndpointSlices, and `argocd_config` no longer excludes EndpointSlice.
 
 Step 3 (1.34.13+k3s1) brings Traefik 3.7.15 on chart 40.1.7. With our config, the only differences from step 2 are the image and a dropped toleration for the `master` taint, which k3s no longer sets. Argo CD goes to 3.6.1 in the same change (`../argocd`), applied after k3s is on 1.34. External Secrets 0.18 is tested only up to 1.33. It runs on 1.34 untested until its own upgrade, which comes next. If it failed, the Secrets it has already written would stay in place.
 
@@ -69,9 +69,9 @@ Step 4a (1.35.10+k3s1) changes only Kubernetes: it bundles the same containerd (
 
 Step 4a, 1.35.10+k3s1, was **done 2026-11-05**. Traefik and Vault didn't restart, because the bundled components were unchanged.
 
-Step 4b (1.36.6+k3s1) also keeps Traefik (3.7.15, chart 40.1.7, same defaults), CoreDNS, metrics-server and local-path. Containerd moves 2.2.10 → 2.3.7. The earlier steps moved containerd 1.7 → 2.2 without restarting running containers, and k3s-01 has no custom containerd config template. None of the Kubernetes 1.36 urgent notes apply here (a renamed volume metric, scheduler plugin interfaces, flex-volumes in kubeadm).
+Step 4b, 1.36.6+k3s1, was **done 2026-11-05**: no pod restarted, and Vault stayed unsealed. It keeps Traefik (3.7.15, chart 40.1.7, same defaults), CoreDNS, metrics-server and local-path. Containerd moves 2.2.10 → 2.3.7. The earlier steps moved containerd 1.7 → 2.2 without restarting running containers, and k3s-01 has no custom containerd config template. None of the Kubernetes 1.36 urgent notes apply here (a renamed volume metric, scheduler plugin interfaces, flex-volumes in kubeadm).
 
 Traefik 3 changes for this cluster:
 - The Ingress routes, `ipAllowList` and forwardAuth middlewares, and ServersTransports already use the `traefik.io` API that v3 reads.
-- Selectorless Services (`authentik/cribl-leader`, `authentik/splunk-web`) work through the EndpointSlices Kubernetes mirrors from their Endpoints.
+- The Services without a selector (`authentik/cribl-leader`, `authentik/splunk-web`) have EndpointSlices of their own in Git, which Traefik 3 reads.
 - Traefik's internal port moves from 9000 to 8080 on the host.

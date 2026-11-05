@@ -26,7 +26,7 @@ spec:
             runAsUser: 65534
             runAsGroup: 65534
             seccompProfile: {type: RuntimeDefault}
-          # The official kubectl image (distroless, matches the k3s 1.31 server) has no
+          # The official kubectl image (distroless, matches the k3s 1.36 server) has no
           # shell, so a static busybox is copied in for the script. Replaced alpine/k8s,
           # whose bundled tools carried 23 critical CVEs (Trivy, 2026-11-04).
           initContainers:
@@ -40,7 +40,7 @@ spec:
                 - {name: tools, mountPath: /tools}
           containers:
             - name: runner
-              image: registry.k8s.io/kubectl:v1.31.14@sha256:74a458e9b800947f4bd1875be5213e8f31f4f2d1e6639548bf05145387ad07bb
+              image: registry.k8s.io/kubectl:v1.36.6@sha256:0650805141538d13ccbb6bb9e0dd647bc415bc002898357970211c4d47224396
               command: [/tools/sh, /scripts/art-validation.sh]
               env:
                 - {name: HOME, value: /tmp}
