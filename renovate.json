@@ -57,6 +57,13 @@
       "groupName": "homelab-agents image"
     },
     {
+      "description": "The mcp-for-argocd image (infrastructure_tooling/mcp_for_argocd_image): both Chainguard Node digests build the same image, so they move in one PR, and the image must be rebuilt and its new digest pinned in toolhive_mcp values (mcpServers.argocd) after merge.",
+      "matchFileNames": [
+        "infrastructure_tooling/mcp_for_argocd_image/**"
+      ],
+      "groupName": "mcp-for-argocd image"
+    },
+    {
       "description": "pydantic pins pydantic-core to one exact version, so pydantic-core only moves when pydantic does (re-locking with the uv pip compile command in requirements.txt picks it up). Renovate bumped it on its own once (#295), to a version pydantic couldn't use and with no Python 3.14 wheel, and the image build failed.",
       "matchFileNames": [
         "infrastructure_tooling/homelab_agents/image/**"
