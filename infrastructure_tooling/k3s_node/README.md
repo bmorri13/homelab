@@ -8,8 +8,22 @@ What k3s-01 needs on the host itself, which Argo CD can't apply, and how k3s is 
 | `99-k3s-traefik.conf` | `/etc/sysctl.d/` | Traefik runs as non-root on the host network and must bind 80 and 443 |
 | `traefik-config.yaml` | `/var/lib/rancher/k3s/server/manifests/` | Traefik on the host network, no Service (there is no load balancer) |
 | `k3s-version` | | The k3s release and its binary's SHA-256, for `upgrade-k3s.sh` |
+| `k3s-hardening.conf` | `/etc/systemd/system/k3s.service.d/10-hardening.conf` | CIS 1.1.20: sets the server's PKI certificates to 600 every time k3s starts (k3s writes them 644, and again when it rotates them) |
+| `default-serviceaccounts.sh` | (run by `install.sh`) | CIS 5.1.5: sets `automountServiceAccountToken: false` on every namespace's `default` ServiceAccount |
 
 The API audit settings are separate: `../k3s_audit`.
+
+## CIS benchmark
+
+kube-bench (`../kube_bench`, monthly, `k3s-cis-1.9`) reported 5 failures on 1.31 and on 1.36. After this hardening:
+
+| Check | State |
+|---|---|
+| 1.1.20 PKI certificates 600 | Fixed (`k3s-hardening.conf`, `install.sh`) |
+| 1.2.26 `--etcd-cafile` | Doesn't apply: k3s-01 uses SQLite (kine), not etcd |
+| 5.1.3 Minimize wildcards in Roles and ClusterRoles | Accepted. The wildcard roles belong to components that manage arbitrary resources: Argo CD's application controller and server, the built-in `cluster-admin`, k3s's cloud controller manager, the local-path provisioner and the ToolHive operator |
+| 5.1.5 Default ServiceAccounts not used | Fixed (`default-serviceaccounts.sh`). AdGuard, alexprinter and Authentik ran on `default`. Only Authentik used its token: its automatic "Local Kubernetes Cluster" outpost integration polls `/version`. The embedded outpost doesn't need the API, so that integration now shows as disconnected in Authentik's admin |
+| 5.1.6 Tokens only mounted where necessary | Partly. Pods on `default` no longer get a token. Pods whose own ServiceAccount needs the API (operators, Argo CD, External Secrets, the gateway) still fail this check by design |
 
 On a rebuilt node, run `install.sh` and `../k3s_audit/install.sh` (see its README) before the Argo CD apps sync. Copy the directory over and run as root:
 
