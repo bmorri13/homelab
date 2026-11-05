@@ -91,7 +91,7 @@ The daily news app's backend (`news-backend` in compose project `bmosan-news` on
 1. Keep an index the collector set, if it is one of the indexes above.
 2. `service.name` containing claude, codex, or agent → `ai_agents`.
 3. k8s namespace `vault`, `toolhive-mcp`, `toolhive-system` → `audit`.
-4. k8s namespace `alexprinter`, `stirling-pdf`, `uptime-kuma` → `apps`.
+4. k8s namespace `alexprinter`, `stirling-pdf` → `apps`.
 5. Any other k8s namespace → `k8s`.
 6. A `container.name` field (Docker hosts) → `apps`.
 7. Everything else → `infra`.

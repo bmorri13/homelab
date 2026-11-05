@@ -540,10 +540,10 @@ kubectl -n toolhive-mcp get vmcp homelab -o jsonpath='{.status.discoveredBackend
 - **Health:** `kubectl -n toolhive-mcp get vmcp homelab` (`PHASE`/`READY`);
   per-backend status in `.status.discoveredBackends`. ArgoCD health covers
   every object.
-- **Uptime Kuma:** an HTTP monitor on
-  `http://vmcp-homelab.toolhive-mcp.svc:4483/health` works from the
-  `uptime-kuma` namespace (NetworkPolicy `allow-health-checks`). The public
-  URL won't work from in-cluster pods: they are not tailnet sources.
+- **HTTP health probe:** `http://vmcp-homelab.toolhive-mcp.svc:4483/health`.
+  To let a monitoring namespace reach it, add it to
+  `networkPolicy.healthCheckFromNamespaces` (NetworkPolicy `allow-health-checks`).
+  The public URL won't work from in-cluster pods: they are not tailnet sources.
 - **Audit:** `kubectl -n toolhive-mcp logs deploy/homelab -c vmcp | grep audit_event`.
   Each event carries `subjects.user_id` (the client SA), the tool, and
   `outcome` (`success` / `denied`).

@@ -766,8 +766,7 @@ networkPolicy:
     - virtualmcpserver
     - mcpserver
   # Namespaces allowed to reach the vMCP's unauthenticated /health on 4483
-  # (e.g. an uptime-kuma HTTP monitor on
-  # http://vmcp-homelab.toolhive-mcp.svc:4483/health). /mcp on the same port
-  # still requires a token.
-  healthCheckFromNamespaces:
-    - uptime-kuma
+  # (e.g. an HTTP monitor on http://vmcp-homelab.toolhive-mcp.svc:4483/health).
+  # /mcp on the same port still requires a token. Empty: nothing probes it now
+  # (Uptime Kuma, the only user, was removed), so no policy is rendered.
+  healthCheckFromNamespaces: []
