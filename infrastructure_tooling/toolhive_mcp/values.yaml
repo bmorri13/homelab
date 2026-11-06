@@ -89,7 +89,7 @@ mcpServers:
     spec:
       # Pinned by digest. Runs as root by
       # default (no USER in its Dockerfile); forced non-root below.
-      image: ghcr.io/sirkirby/unifi-network-mcp:0.44.0@sha256:de690e741b5713f45c811defd443964bdb6f02ba3c44e6777dbc5fe093e28a92
+      image: ghcr.io/sirkirby/unifi-network-mcp:0.45.0@sha256:5c14d804e23b714850b58c4b45b722aeed9159d0acf47b182a3bfa92d2d17e7c
       # stdio: the server never opens an HTTP listener (avoids the upstream
       # 0.0.0.0 + Host-header-allowlist exposure); ToolHive's proxy runner
       # speaks streamable-http on its behalf.
@@ -176,7 +176,7 @@ mcpServers:
       - cidr: 192.168.4.11/32
         ports: [9000]
     spec:
-      image: python:3.15.2-slim@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0
+      image: python:3.15.2-slim@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 8080
@@ -246,8 +246,8 @@ mcpServers:
           app.kubernetes.io/name: argocd-server
         ports: [8080]
     spec:
-      # v0.9.0, built from commit 26e83f7 of this repo.
-      image: ghcr.io/bmorri13/mcp-for-argocd@sha256:e8ca50796b1d69a666bf0fed01b507b5c4671777000aebf26912428436176f5d
+      # v0.9.0, built from commit 0a907ab of this repo.
+      image: ghcr.io/bmorri13/mcp-for-argocd@sha256:a18c02468b1e733b5639db4ffe189a32e45bec941a2abc2e3dfe31303c0db2bb
       transport: streamable-http
       proxyPort: 8080
       mcpPort: 3000
