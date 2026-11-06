@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.10
+# syntax=docker/dockerfile:1.28
 # argoproj-labs/mcp-for-argocd, rebuilt on Chainguard's Node images.
 #
 # Upstream's image is node:20-slim (Debian 12, Node 20, which went end of life in
@@ -12,8 +12,8 @@
 # set it to that tag's commit, check its packageManager pnpm version, and drop each
 # override in overrides.json once upstream's lock has that version or later. The
 # two Chainguard digests are bumped by Renovate, together.
-ARG NODE_DEV=cgr.dev/chainguard/node:latest-dev@sha256:d0db506a46ecf9fca69413576d9621988d1e879956e8f9241c87d7fb5a200a68
-ARG NODE_RUNTIME=cgr.dev/chainguard/node:latest@sha256:4ad7301975908b87d321af8b9ed41630dc69015976269965ee459c27541df252
+ARG NODE_DEV=cgr.dev/chainguard/node:latest-dev@sha256:c7f590868bea9868f3f45d83f3fc852e6f070ab4f7637ca2a0b24b60b211c53a
+ARG NODE_RUNTIME=cgr.dev/chainguard/node:latest@sha256:23b71e5423b7267348e64207c88223f4388fb483aa38b7dbf6356da0d02cd1f8
 
 FROM ${NODE_DEV} AS build
 # v0.9.0
