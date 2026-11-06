@@ -178,6 +178,53 @@ det("HL - Proxmox login failures",
     suppress="src,user", period="1h",
     description="Failed logins to the Proxmox web UI or API. Nothing logs in with a password routinely (Terraform and Packer use API tokens), so one failure is reported.")
 
+det("HL - Proxmox user, token or permission changed",
+    "T1098", "Persistence", "high", "",
+    'index=audit sourcetype=pve:access method IN (POST, PUT, DELETE) status<400 '
+    '| where match(uri, "/access/(users|groups|roles|acl|domains|tfa|password)") '
+    '| eval user=pve_user, src=replace(src, "^::ffff:", ""), object=method." ".uri '
+    '| stats count min(_time) as first_seen max(_time) as last_seen values(host) as hosts by user src object '
+    '| eval host=mvjoin(hosts, ","), detail=count." API writes" '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "make a temporary API token and use it to POST /api2/json/access/users/root@pam/token/hl-test, then delete both",
+    suppress="user,src,object", period="4h",
+    description="A Proxmox user, API token, group, role, ACL, realm or second factor was changed through the web UI or API. pveum on a node's shell doesn't pass through pveproxy, so it isn't seen here.")
+
+det("HL - Proxmox VM or container destroyed",
+    "T1485", "Impact", "high", "",
+    'index=infra sourcetype=linux:journald "starting task" (qmdestroy OR vzdestroy) '
+    '| rex "<(?<user>[^>]+)>" | rex "UPID:[^:]+:[^:]+:[^:]+:[^:]+:(?<task>[^:]+):(?<guest>[^:]*):" '
+    '| where NOT user="root@pam!packer" '
+    '| eval src="", object=task." ".guest '
+    '| stats count min(_time) as first_seen max(_time) as last_seen by host user src object '
+    '| eval detail=count." destroy tasks" '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "qm create 9999 on a Proxmox node, then qm destroy 9999",
+    suppress="host,user,object", period="4h",
+    description="A guest was destroyed by anything other than Packer's API token, which removes its build VMs every week (the only destroys in the 30 days to 2026-11-05).")
+
+det("HL - GitHub main branch changed outside a pull request",
+    "T1195.002", "Initial Access", "high", "",
+    'index=audit sourcetype=github:activity ref="refs/heads/main" activity_type IN (push, force_push, branch_deletion) '
+    "| eval user='actor.login', src=\"\", host=\"github\", object=repo.\" \".activity_type "
+    '| stats count min(_time) as first_seen max(_time) as last_seen values(after) as commits by host user src object '
+    '| eval detail="commits=".mvjoin(commits, ",") '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "push directly to main (or force-push) on a repository in GITHUB_REPOS",
+    suppress="user,object", period="24h",
+    description="Argo CD deploys from main, and every change reaches it through a merged pull request (the last 100 on 2026-11-05). A direct push, force push or branch deletion skipped review.")
+
+det("HL - Audit source polling failing",
+    "T1685", "Defense Impairment", "medium", "DET0497",
+    'index=audit sourcetype=audit_poller:status status=error '
+    "| stats count min(_time) as first_seen max(_time) as last_seen latest(error) as error by poll_source "
+    "| where count>=3 "
+    '| eval host="audit-poller", user="", src="", object=poll_source, detail=count." failed polls: ".error '
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "put a wrong token in Vault kv/audit-poller and wait for three runs",
+    suppress="object", period="6h", window=("-65m@m", "-5m@m"), cron="5 * * * *",
+    description="The audit poller couldn't read Cloudflare, Tailscale or GitHub three times in an hour: usually an expired or revoked token.")
+
 SENSITIVE = (
     "(?i)(systemctl\\s+(stop|disable|mask)\\s+\\S*(falco|otelcol|tailscaled|auditd|cribl|splunk)"
     "|authorized_keys|crontab\\s+(-e|-r|\\S+\\.\\w+)|(sed\\s+-i|tee|>|vi|vim|nano|cp|mv)\\s*[^;|]*/etc/(pam\\.d|sudoers|ssh/sshd_config)"
@@ -336,22 +383,22 @@ det("HL - Host stopped sending telemetry",
 # "Host stopped sending telemetry".
 det("HL - Log source stopped sending",
     "T1685", "Defense Impairment", "high", "DET0497",
-    '| tstats max(_time) as last_seen where (index=audit sourcetype IN ("kube:apiserver:audit", "hashicorp_vault_audit_log")) '
+    '| tstats max(_time) as last_seen where (index=audit sourcetype IN ("kube:apiserver:audit", "hashicorp_vault_audit_log", "audit_poller:status")) '
     'OR (index=k8s sourcetype="kube:container") OR (index=infra sourcetype="linux:journald") '
     'OR (index=network sourcetype IN ("ubiquiti:unifi:ocsf", "adguard:querylog")) by index sourcetype host '
     "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-15m by host] "
     '| eval limit=case(sourcetype=="ubiquiti:unifi:ocsf", 480, sourcetype=="linux:journald" AND match(host, "^proxmox"), 60, '
-    'sourcetype=="linux:journald", 30, sourcetype=="adguard:querylog", 30, true(), 15) '
+    'sourcetype=="linux:journald", 30, sourcetype=="adguard:querylog", 30, sourcetype=="audit_poller:status", 45, true(), 15) '
     "| eval count=round((now()-last_seen)/60) "
     '| where count>limit AND NOT (sourcetype=="linux:journald" AND isnull(host_metrics)) '
     '| eval object=case(sourcetype=="kube:apiserver:audit", "k3s API audit log", sourcetype=="hashicorp_vault_audit_log", "Vault audit log", '
     'sourcetype=="kube:container", "k3s container logs", sourcetype=="linux:journald", "journald", '
-    'sourcetype=="ubiquiti:unifi:ocsf", "UniFi gateway syslog", sourcetype=="adguard:querylog", "AdGuard DNS query log (clients may have fallen back to the gateway)", true(), sourcetype), '
+    'sourcetype=="ubiquiti:unifi:ocsf", "UniFi gateway syslog", sourcetype=="adguard:querylog", "AdGuard DNS query log (clients may have fallen back to the gateway)", sourcetype=="audit_poller:status", "Audit poller (Cloudflare, Tailscale, GitHub)", true(), sourcetype), '
     'user="", src="", detail=object." (index=".index." sourcetype=".sourcetype.") has sent nothing for ".count." minutes (limit ".limit.")" '
     "| eval first_seen=last_seen | convert ctime(first_seen) ctime(last_seen) ",
     "stop the Vault audit device (vault audit disable) or Cribl's route for a source for 20 minutes",
     suppress="host,object", period="6h", window=("-24h", "now"),
-    description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog, the AdGuard DNS query log) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
+    description="A log feed that normally never goes quiet for long (k3s API audit, Vault audit, k3s container logs, each host's journald, the UniFi gateway's syslog, the AdGuard DNS query log, the audit poller) has sent nothing past its limit while its host is still up. Turning audit logging off looks like this, and so does a broken pipeline.")
 
 det("HL - Detection search failing",
     "T1685", "Defense Impairment", "high", "DET0497",
