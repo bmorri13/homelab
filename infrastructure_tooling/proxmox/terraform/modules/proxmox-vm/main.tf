@@ -64,9 +64,9 @@ resource "proxmox_virtual_environment_vm" "vm" {
     datastore_id = var.disk_storage
   }
 
-  # Ensure VM starts on creation
-  started = true
-  on_boot = true
+  # Power state; true unless the VM is deliberately parked
+  started = var.started
+  on_boot = var.on_boot
 
   # Set timeout for operations (in seconds)
   timeout_create = 1800

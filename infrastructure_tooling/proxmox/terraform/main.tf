@@ -202,6 +202,11 @@ module "siem_agent_test_vm" {
   memory         = 24576
   disk_size      = "250"
 
+  # Parked: the lab is idle and proxmox3's RAM can't hold every VM at full size.
+  # Set both to true to bring it back, after checking the node has 24 GB free.
+  started = false
+  on_boot = false
+
   # Shared configuration
   disk_storage   = var.disk_storage
   network_bridge = var.network_bridge
