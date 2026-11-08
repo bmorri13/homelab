@@ -90,6 +90,15 @@
         "registry.k8s.io/kubectl"
       ],
       "allowedVersions": "<1.37.0"
+    },
+    {
+      "description": "Chainguard rebuilds its latest images about daily, so each digest would otherwise open a new PR right after the last one merges. Check them weekly, Mondays before 06:00 UTC.",
+      "matchPackageNames": [
+        "cgr.dev/chainguard/**"
+      ],
+      "schedule": [
+        "* 0-5 * * 1"
+      ]
     }
   ]
 }
