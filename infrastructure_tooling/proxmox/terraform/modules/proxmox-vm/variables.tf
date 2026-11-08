@@ -85,3 +85,15 @@ variable "ssh_public_keys" {
   type        = string
   default     = ""
 }
+
+variable "started" {
+  description = "Whether the VM should be running"
+  type        = bool
+  default     = true
+}
+
+variable "on_boot" {
+  description = "Whether the VM starts when the Proxmox node boots"
+  type        = bool
+  default     = true
+}
