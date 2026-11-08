@@ -12,7 +12,7 @@
 # set it to that tag's commit, check its packageManager pnpm version, and drop each
 # override in overrides.json once upstream's lock has that version or later. The
 # two Chainguard digests are bumped by Renovate, together.
-ARG NODE_DEV=cgr.dev/chainguard/node:latest-dev@sha256:6e9255f8d62e662455e834f357db7d9512d208a616cee5257b56180509601649
+ARG NODE_DEV=cgr.dev/chainguard/node:latest-dev@sha256:81d77836dacab0c421ab4fbbf1cc2ffe56f9bc64793c1b077bbc1a30d61e1c05
 ARG NODE_RUNTIME=cgr.dev/chainguard/node:latest@sha256:6a066f8decea77c67ef2772a78fad81df7a78a346d0b22a05fc9dac14537f2b0
 
 FROM ${NODE_DEV} AS build
