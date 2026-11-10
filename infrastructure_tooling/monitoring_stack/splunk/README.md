@@ -39,7 +39,7 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
-| `audit` | Kubernetes API audit log (k3s-01), Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
+| `audit` | Kubernetes API audit log (k3s-01), Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins, Cloudflare, Tailscale and GitHub audit events (`infrastructure_tooling/audit_poller`), Proxmox API writes (`pve:access`) | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
 | `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`), and findings from the ATT&CK detections (`homelab:detection`, `apps/85_detections`) | 90 days |
 | `metrics` | Metric index (`mstats`): host, container, Kubernetes and Proxmox metrics from the OTel collectors, 60 s resolution. Not archived; capped at 30 GB | 90 days |
@@ -196,6 +196,7 @@ Current base apps:
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`), and `src` for UniFi IDS/IPS findings, which the OCSF-CIM add-on leaves unmapped.
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
+- `85_audit_sources`: parsing for Cloudflare, Tailscale and GitHub audit events (`infrastructure_tooling/audit_poller`) and Proxmox API writes (`pve:access`).
 - `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
 - `85_linux_auth`: adds to the Unix and Linux add-on's `linux_secure` parsing: Tailscale SSH logins (`tailscaled` "audit: SSH login", how the Ubuntu VMs are reached), Proxmox web UI and API logins (`pvedaemon`/`pveproxy`), sudo sessions in the Ubuntu 24.04 log format, and the sudo command line. Each Tailscale SSH session's command (or login shell) is mapped to CIM Endpoint Processes, with `parent_process_name=tailscaled`, the local `user`, the tailnet identity `ts_user` and `src`.
 - `85_secret_leaks`: the hourly backstop alert for credentials that got past Cribl's masking (see [Secret masking](#secret-masking)).

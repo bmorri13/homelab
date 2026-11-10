@@ -1,0 +1,12 @@
+# Holds each source's position and recently sent event IDs. If it's lost, the next run
+# reads the last 24 hours again, which only repeats some events in Splunk.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audit-poller-state
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 16Mi

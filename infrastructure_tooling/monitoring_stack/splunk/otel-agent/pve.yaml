@@ -5,7 +5,25 @@
 # so every node's pvestatd pushes to its own local collector: node, per-guest (VM and
 # LXC: CPU, memory, disk and network I/O) and storage-pool metrics, about every 10 s.
 # The listener is bound to localhost, so nothing on the network can write to it.
+#
+# Also tails pveproxy's access log for writes to the Proxmox API (users, tokens,
+# permissions, guest changes). Tasks and logins are already in journald; these aren't.
+# GETs are dropped: the web UI polls several times a second.
 receivers:
+  filelog/pve_access:
+    include: [/var/log/pveproxy/access.log]
+    start_at: end
+    storage: file_storage
+    operators:
+      - type: filter
+        expr: 'body not matches "\"(POST|PUT|DELETE) "'
+      - type: regex_parser
+        regex: '^(?P<src>\S+) \S+ (?P<pve_user>\S+) \[(?P<when>[^\]]+)\] "(?P<method>[A-Z]+) (?P<uri>\S+) [^"]*" (?P<status>\d+)'
+        timestamp:
+          parse_from: attributes.when
+          layout: '%d/%m/%Y:%H:%M:%S %z'
+      - type: remove
+        field: attributes.when
   otlp/pve:
     protocols:
       http:
@@ -30,8 +48,29 @@ processors:
   interval/pve:
     interval: 60s
 
+exporters:
+  splunk_hec/pve_access:
+    token: ${env:CRIBL_HEC_TOKEN}
+    endpoint: https://192.168.4.11:8443/services/collector
+    tls:
+      ca_file: /etc/otelcol-contrib/homelab-ca.crt
+    source: pveproxy
+    sourcetype: pve:access
+    index: audit
+    splunk_app_name: homelab-otel-agent
+    sending_queue:
+      enabled: true
+      storage: file_storage
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 0
+
 service:
   pipelines:
+    logs/pve_access:
+      receivers: [filelog/pve_access]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [splunk_hec/pve_access]
     metrics/pve:
       receivers: [otlp/pve]
       # resourcedetection sets host to the node that collected it, as for host metrics.

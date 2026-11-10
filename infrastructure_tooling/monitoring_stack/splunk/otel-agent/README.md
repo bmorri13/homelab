@@ -6,7 +6,7 @@ The OpenTelemetry Collector (contrib, 0.163.2) as a systemd service on VMs and P
 |---|---|---|---|
 | `base` | `base.yaml` | journald (info and above): sshd, sudo, logind, systemd, kernel, Proxmox services. Host metrics, and the `falco` process's uptime (`process.uptime`, the heartbeat for *HL - Falco not running*) | `infra`; metrics to `metrics` |
 | `docker` | `base.yaml` + `docker.yaml` | the above, plus every container's stdout/stderr and per-container metrics | `apps` for containers |
-| `pve` | `base.yaml` + `pve.yaml` | the base role, plus Proxmox's own node, guest and storage metrics (Proxmox nodes only) | `metrics` |
+| `pve` | `base.yaml` + `pve.yaml` | the base role, plus Proxmox's own node, guest and storage metrics, and writes to the Proxmox API from pveproxy's access log (`pve:access`) (Proxmox nodes only) | `metrics`; `audit` |
 
 Container logs carry `container.name`, `container.image.name`, `compose.project`, and `compose.service`. They come from the Docker API through the `docker_observer` extension, with `include_all_containers: true` and a `port == 0` rule. That combination is the documented way to get one log receiver per container; without it the observer makes one per exposed port and duplicates logs. Docker itself is not reconfigured. Splunk and Cribl container logs are excluded because they already reach Splunk.
 
