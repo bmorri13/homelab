@@ -27,6 +27,12 @@ trivy-operator:
     metricsFindingsEnabled: false
 
   trivy:
+    # Pinned here instead of taking the chart's default, so Renovate can see it.
+    # 0.76.2 is rebuilt on Alpine 3.24.3 (fixes brotli CVE-2026-111497).
+    image:
+      registry: mirror.gcr.io
+      repository: aquasec/trivy
+      tag: 0.76.2
     # Only what is worth acting on; also keeps each report small enough for one
     # Splunk event.
     severity: HIGH,CRITICAL
