@@ -3,11 +3,16 @@ name: Terraform Apply
 on:
   workflow_dispatch:
     inputs:
-      auto_approve:
-        description: 'Auto-approve apply (skip manual approval)'
+      max_changes:
+        description: 'Max resources the plan may update, replace or delete (raise only after reading the plan)'
         required: false
-        default: false
-        type: boolean
+        default: 1
+        type: number
+
+# Never run two applies against the same state at once, and never cancel one midway.
+concurrency:
+  group: terraform-proxmox
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -36,6 +41,8 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ env.TF_VERSION }}
+          # The wrapper echoes extra lines to stdout, which breaks `terraform show -json`
+          terraform_wrapper: false
 
       - name: Create Terraform Variables File
         working-directory: ${{ env.WORKING_DIR }}
@@ -93,21 +100,44 @@ jobs:
         env:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
-      - name: Terraform Apply
+      # Fail closed before a wide apply: one apply that touched every VM shut them all
+      # down, including this runner's own VM. Reads the same tfplan that is applied below.
+      - name: Guard Plan Size
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
-            terraform apply -auto-approve tfplan
-          else
-            terraform apply tfplan
-          fi
+          plan_json="$(terraform show -json tfplan)"
+          printf '%s' "$plan_json" | node -e '
+            const max = (process.env.MAX_CHANGES || "").trim() === "" ? NaN : Number(process.env.MAX_CHANGES);
+            if (!Number.isInteger(max) || max < 0) {
+              console.error(`max_changes must be a non-negative integer, got "${process.env.MAX_CHANGES}"`);
+              process.exit(1);
+            }
+            const plan = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const risky = (plan.resource_changes || []).filter(rc =>
+              rc.change.actions.some(a => a === "update" || a === "delete"));
+            const lines = risky.map(rc => `- \`${rc.address}\`: ${rc.change.actions.join(", ")}`);
+            const summary = [`## Plan guard: ${risky.length} update/replace/delete (max ${max})`, ...lines].join("\n");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
+            console.log(summary);
+            if (risky.length > max) {
+              console.error(`Refusing to apply: ${risky.length} resources would be updated, replaced or deleted (max_changes=${max}). Read the plan, then re-run with a higher max_changes if intended.`);
+              process.exit(1);
+            }
+          '
+        env:
+          MAX_CHANGES: ${{ inputs.max_changes }}
+          CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply tfplan
         env:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
       - name: Cleanup Temporary Files
         if: always()
         working-directory: ${{ env.WORKING_DIR }}
-        run: rm -f terraform.tfvars
+        run: rm -f terraform.tfvars tfplan
 
       - name: Apply Summary
         if: success()
