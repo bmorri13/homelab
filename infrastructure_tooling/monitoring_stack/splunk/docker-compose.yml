@@ -101,6 +101,9 @@ services:
       - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
       - CRIBL_DIST_MODE=worker
       - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@cribl:4200?group=default
+      # Trust the homelab CA (written by tls-certs.sh) for the Worker's own HTTPS
+      # calls to Splunk, such as a Splunk Search collector or a Splunk HEC destination.
+      - NODE_EXTRA_CA_CERTS=/opt/cribl/tls/ca.crt
     ports:
       - "514:9514/udp"    # syslog: Proxmox, Unraid, other hosts -> index=infra
       - "514:9514/tcp"
