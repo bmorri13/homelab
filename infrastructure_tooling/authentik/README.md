@@ -146,6 +146,8 @@ kubectl -n authentik logs job/authentik-postgres-backup-manual
 kubectl -n authentik delete job authentik-postgres-backup-manual
 ```
 
+A failed or missing backup is reported by the Splunk alert "Authentik - database backup failed or missing" (`85_homelab_ops`): it posts to Slack when no dump has been written for 26 hours.
+
 ### Test a restore
 
 This restores the newest dump into a throwaway Postgres inside one pod on the backup volume, so the dump never leaves the cluster, and prints row counts. Compare them with the live database:
