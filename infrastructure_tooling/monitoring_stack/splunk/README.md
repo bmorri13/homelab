@@ -333,11 +333,9 @@ chmod 600 .env
 2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, Splunk Web (8000), the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
-5. Seeds the Cribl Worker Group config once, while the Leader is stopped: from the old single-instance config in `/srv/cribl/local/cribl/` if there is one (the one-time move to Leader + Worker), otherwise from `cribl/local/cribl/`.
-6. Runs `cribl-bootstrap.sh`: switches the Leader API to HTTPS, sets the HEC token from `.env` on a freshly seeded group and deploys the group config to the Worker, creates the HTTPS HEC input `hec_tls` from the old plain-HTTP `hec` input if the group still has that one and removes `hec`, and, on a brand-new Leader still on admin/admin, sets the admin password.
+5. Seeds the Cribl Worker Group config once, from `cribl/local/cribl/`, while the Leader is stopped.
+6. Runs `cribl-bootstrap.sh`: switches the Leader API to HTTPS, sets the HEC token from `.env` on a freshly seeded group and deploys the group config to the Worker, stops with an error if the group has no HTTPS HEC input `hec_tls`, and, on a brand-new Leader still on admin/admin, sets the admin password.
 7. Runs `cribl-packs.sh`, which installs each pack under `cribl/packs/` in the Worker Group through the Leader API when it is missing or its `package.json` version changed, then deploys it to the Worker. Packs must go through the API: a pack copied into Cribl's config directory shows up in the list, but `pack:<id>` references to it don't resolve. The repo owns packs, so an upgrade replaces UI edits made to an installed pack.
-
-Moving from the single-instance Cribl to Leader + Worker loses a minute or two of syslog while the containers are recreated. The OTel collectors buffer and retry HEC, so they lose nothing. Check that `/srv/cribl/state/queues` is empty first (Splunk up, queue drained): the old instance's persistent queue is not carried over.
 
 ### Changing Cribl config
 

@@ -3,8 +3,7 @@
 #  1. Turn on HTTPS for the Leader API (cert from tls-certs.sh) and restart it.
 #  2. After deploy.sh has seeded the Worker Group config (marker file .group-seeded),
 #     set the HEC token from .env, enable the HEC input, and commit and deploy the
-#     group config to the Worker. A group that still has the old plain-HTTP input
-#     (hec, port 8088) gets hec_tls created from it, and hec removed.
+#     group config to the Worker.
 #  3. On a brand-new Leader, still on its default admin/admin login, set the admin
 #     password from .env. This runs last so a failed run can still log in.
 # Once the password has changed, later token or password changes made in the UI are
@@ -67,12 +66,14 @@ for _ in $(seq 1 30); do
 done
 
 # hec_input <id> <port> <tls>: print the JSON for HEC input <id>, enabled, with the
-# token from .env. Starts from the input's current config, or from the plain hec
-# input's when <id> doesn't exist yet. <tls> true: HTTPS with the Worker's cert.
+# token from .env. Starts from the input's current config; fails if <id> doesn't
+# exist. <tls> true: HTTPS with the Worker's cert.
 hec_input() {
     local cur
-    cur=$(ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/$1" ||
-          ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec")
+    cur=$(ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/$1") || {
+        echo "cribl: HEC input $1 not found in group $GROUP; restore it from cribl/local/cribl/inputs.yml" >&2
+        return 1
+    }
     python3 -c '
 import json, os, sys
 i = json.loads(sys.argv[1])["items"][0]
@@ -87,41 +88,17 @@ if sys.argv[4] == "true":
 print(json.dumps(i))' "$cur" "$1" "$2" "$3"
 }
 
-# 2. Freshly seeded Worker Group config: its HEC token is either empty (repo seed)
-# or encrypted with the old single-instance key, which the group cannot decrypt.
+# Every sender uses HEC input hec_tls (HTTPS, port 8443), which comes from the repo
+# seed. Stop here if it has gone missing.
+hec_input hec_tls 8443 true >/dev/null
+
+# 2. Freshly seeded Worker Group config: its HEC token is empty (repo seed).
 if [[ -f "$SEEDED" ]]; then
-    if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; then
-        hec_input hec_tls 8443 true |
-            ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec_tls" --data @- >/dev/null
-        echo "cribl: HEC input enabled"
-    fi
+    hec_input hec_tls 8443 true |
+        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/system/inputs/hec_tls" --data @- >/dev/null
+    echo "cribl: HEC input enabled"
     cribl_commit_deploy "Seed Worker Group config (deploy.sh)"
     rm -f "$SEEDED"
-fi
-if ! ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec_tls" >/dev/null; then
-    hec_input hec_tls 8443 true |
-        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X POST "$API/m/$GROUP/system/inputs" --data @- >/dev/null
-    echo "cribl: HEC input hec_tls (HTTPS, port 8443) created"
-    cribl_commit_deploy "Add HEC input hec_tls (deploy.sh)"
-fi
-# NetFlow was tried and dropped (2026-11-04): exporting it on the UCG-Max turns off
-# hardware offload. Remove its route, pipeline and input from the live group.
-routes_live=$(ccurl -s "${auth[@]}" "$API/m/$GROUP/routes/default" | jq -c '.items[0] // {}')
-if jq -e '(.routes // []) | any(.id == "netflow")' <<<"$routes_live" >/dev/null ||
-    ccurl -sf "${auth[@]}" "$API/m/$GROUP/pipelines/netflow" >/dev/null ||
-    ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/netflow" >/dev/null; then
-    jq -c '.routes |= map(select(.id != "netflow"))' <<<"$routes_live" |
-        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/routes/default" --data @- >/dev/null
-    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/pipelines/netflow" >/dev/null || true
-    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/system/inputs/netflow" >/dev/null || true
-    echo "cribl: NetFlow route, pipeline and input removed"
-    cribl_commit_deploy "Remove NetFlow (deploy.sh)"
-fi
-# Plain-HTTP HEC is retired: every sender uses hec_tls (2026-11-03).
-if ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec" >/dev/null; then
-    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/system/inputs/hec" >/dev/null
-    echo "cribl: plain-HTTP HEC input hec removed"
-    cribl_commit_deploy "Remove plain-HTTP HEC input hec (deploy.sh)"
 fi
 
 # 3. Admin password, only while the default login still works.
