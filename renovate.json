@@ -9,6 +9,34 @@
       "/\\.yml$/"
     ]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "TF_VERSION in the Terraform workflows (both files move in one PR). The provider lock does not depend on the Terraform version, but read the release notes before merging: the plan after merge must still show no changes.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/terraform-[^/]+\\.yml$/"
+      ],
+      "matchStrings": [
+        "TF_VERSION: \"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "hashicorp/terraform",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "PACKER_VERSION in the Packer template workflow.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/proxmox-packer-builder\\.yml$/"
+      ],
+      "matchStrings": [
+        "PACKER_VERSION: \"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "hashicorp/packer",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ],
   "packageRules": [
     {
       "description": "gha-runner-scale-set must match the ARC controller version (arc-controller-k3s, pinned in its ArgoCD app, which Renovate can't see). Upgrade controller and scale sets together by hand.",
