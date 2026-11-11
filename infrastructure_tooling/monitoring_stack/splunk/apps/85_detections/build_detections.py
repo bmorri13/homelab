@@ -66,7 +66,7 @@ def baseline(name, lookup, keys, search, span, cron):
 
 def since_baseline(lookup, span):
     return (f"[| inputlookup {lookup} | stats max(baseline_end) as e "
-            "| appendpipe [| stats count | where count=0] | stats max(e) as e "
+            "| appendpipe [| stats count | where count=0] "
             "| eval e=if(e<=relative_time(now(), \"-20m@m\"), e, null()), "
             f"earliest=floor(max(coalesce(e, 0), relative_time(now(), \"{span}\"))) | return earliest] ")
 
