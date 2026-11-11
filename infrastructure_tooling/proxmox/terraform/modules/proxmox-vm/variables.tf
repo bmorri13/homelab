@@ -38,7 +38,7 @@ variable "memory" {
 }
 
 variable "disk_size" {
-  description = "Disk size (e.g., '50G', '100G')"
+  description = "Disk size in GB (number only, e.g. 50). Grow-only."
   type        = string
   default     = "50"
 }

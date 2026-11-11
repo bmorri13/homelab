@@ -15,7 +15,9 @@ IFS= read -r url || true
 
 # Inside the container: python reads the admin password from the environment and the
 # URL from stdin, and talks to splunkd on 127.0.0.1 with the homelab CA.
-printf '%s' "$url" | docker exec -i -u splunk -e P="$SPLUNK_PASSWORD" splunk /opt/splunk/bin/splunk cmd python3 -c '
+# -e P without a value takes it from docker's own environment, so the password is not
+# in the process list.
+printf '%s' "$url" | P="$SPLUNK_PASSWORD" docker exec -i -u splunk -e P splunk /opt/splunk/bin/splunk cmd python3 -c '
 import base64, json, os, ssl, sys, urllib.parse, http.client
 url = sys.stdin.read().strip()
 ctx = ssl.create_default_context(cafile="/opt/splunk/etc/auth/homelab/cacert.pem")

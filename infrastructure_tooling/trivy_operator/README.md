@@ -13,7 +13,7 @@ Renovate keeps versions current but never says which CVEs are running; guardrail
 
 ## How it runs
 
-- Upstream chart `trivy-operator` 0.38.1 (operator 0.36.1, Trivy 0.76.1; the chart has no digest pinning, so images are pinned by tag), namespace `trivy-system` under the `restricted` Pod Security level, scan jobs included.
+- Upstream chart `trivy-operator` 0.38.1 (operator 0.36.1, Trivy 0.76.2, pinned in `values.yaml`; the chart has no digest pinning, so images are pinned by tag), namespace `trivy-system` under the `restricted` Pod Security level, scan jobs included.
 - One built-in Trivy server holds the vulnerability database for every scan (5 Gi local-path), instead of each scan job downloading it. Two scan jobs at a time; every workload is rescanned daily (`scannerReportTTL: 24h`).
 - Only HIGH and CRITICAL vulnerabilities are recorded: what is worth acting on, and it keeps each report small enough to be one Splunk event.
 - Node checks (`infraAssessmentScannerEnabled`) and compliance reports are off: they need a privileged node collector, and `../kube_bench` runs the CIS k3s benchmark on the host instead.

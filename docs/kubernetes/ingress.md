@@ -1,18 +1,19 @@
 # Core Infrstructure Ingress
-- Deploying the ingress configurations for our main tooling (e.g. Vault and ArgoCD (WIP))
+- How the main tooling (Vault and ArgoCD) is reached
 
-> **Application ingresses now live in their own charts**, not here. A chart that ships its `Ingress` in `templates/` is deployed and owned by ArgoCD — nothing to apply by hand. `ingress_configs/` holds only the ingresses for tooling that is not deployed from a chart in this repo.
+> **Application ingresses live in their own charts**, not in `ingress_configs/`. A chart that ships its `Ingress` in `templates/` is deployed and owned by ArgoCD, so there is nothing to apply by hand.
 >
-> This directory is a standing hazard: anything in it exists only as a manual `kubectl apply` and is invisible to ArgoCD, so it silently disappears on a cluster rebuild. That is how an app ingress once ended up returning 404 on k3s-01. Prefer a chart template for anything new.
+> `ingress_configs/` is a standing hazard: anything in it exists only as a manual `kubectl apply` and is invisible to ArgoCD, so it silently disappears on a cluster rebuild. That is how an app ingress once ended up returning 404 on k3s-01. Nothing in it is part of the current setup. Use a chart template or an ArgoCD app for anything new.
 
-## Setup
-1. Naviate to the `ingress_configs` directory
+## Vault
+- Vault's ingress is the `vault-ingress` ArgoCD app in [`infrastructure_tooling/vault_ingress`](../../infrastructure_tooling/vault_ingress/README.md), reachable only from the tailnet
 
-2. Apply the ingresses for chart-less tooling
+1. Apply the Application
 ```bash
-kubectl apply -f vault-ingress.yaml
+kubectl apply -f infrastructure_tooling/vault_ingress/application.yaml
 ```
 
-3. You should now be able to go to Vault with a secure connction (e.g. https://vault.bmosan.com/ui/)
-    - NOTE: You must natviate to `/ui` in order to get the secure connection
-        - You can most likely add redirects for this, but not worried about this in my homelab currently
+2. You should now be able to go to Vault with a secure connection (e.g. https://vault.bmosan.com/ui/)
+
+## ArgoCD
+- ArgoCD has no ingress. Its UI is reached on k3s-01's NodePorts, see [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd/README.md)

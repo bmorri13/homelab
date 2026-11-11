@@ -197,6 +197,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         headers = {k: v for k, v in self.headers.items() if k.lower() in REQUEST_HEADERS}
 
         conn = None
+        sent = False  # True once the response headers are out: no second response then
         try:
             token = SESSION.token()
             for attempt in (1, 2):
@@ -216,6 +217,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if k.lower() in RESPONSE_HEADERS and k.lower() != "content-length":
                     self.send_header(k, v)
             self.end_headers()
+            sent = True
             if ctype == "application/json":
                 data = resp.read(MAX_RESPONSE + 1)
                 if len(data) > MAX_RESPONSE:
@@ -235,9 +237,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         break
                     self.wfile.write(chunk)
                     self.wfile.flush()
-        except (OSError, http.client.HTTPException, RuntimeError, ValueError) as exc:
+        except (OSError, http.client.HTTPException, RuntimeError, ValueError, KeyError) as exc:
             log(f"{self.command} /mcp failed: {type(exc).__name__}: {exc}")
-            if not self.wfile.closed:
+            if not sent and not self.wfile.closed:
                 try:
                     self._reply(502, b"upstream error\n")
                 except OSError:

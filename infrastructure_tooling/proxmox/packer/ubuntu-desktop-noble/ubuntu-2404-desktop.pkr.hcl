@@ -202,7 +202,7 @@ build {
       "sudo cloud-init clean",
       "sudo rm -f /etc/cloud/cloud.cfg.d/subiquity-disable-cloudinit-networking.cfg",
       "sudo rm -f /etc/netplan/00-installer-config.yaml",
-      "echo 'Ubuntu 24.04 Desktop Template by Packer - Creation Date: $(date)' | sudo tee /etc/issue"
+      "echo \"Ubuntu 24.04 Desktop Template by Packer - Creation Date: $(date)\" | sudo tee /etc/issue"
     ]
   }
 

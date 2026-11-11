@@ -2,12 +2,6 @@ name: Build Proxmox Packer Template
 
 on:
   workflow_dispatch:
-    inputs:
-      force_build:
-        description: 'Force build even if template exists'
-        required: false
-        default: false
-        type: boolean
   schedule:
     - cron: '0 12 * * 1'  # Every Monday at 0800 ET (1200 UTC)
   push:
@@ -282,7 +276,7 @@ jobs:
           echo "## Packer Build Summary (${{ matrix.node }})" >> $GITHUB_STEP_SUMMARY
           echo "- **Template ID:** ${{ matrix.vm_id }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Proxmox Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template Name:** ubuntu-2404-template" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template Name:** ubuntu-2404-$(date -u +%Y%m%d)" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -538,7 +532,7 @@ jobs:
           echo "## Packer Desktop Build Summary (${{ matrix.node }})" >> $GITHUB_STEP_SUMMARY
           echo "- **Template ID:** ${{ matrix.vm_id }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Proxmox Node:** ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template Name:** ubuntu-2404-desktop-template" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template Name:** ubuntu-2404-desktop-$(date -u +%Y%m%d)" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Time:** $(date)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

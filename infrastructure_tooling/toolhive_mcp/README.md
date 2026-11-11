@@ -19,9 +19,11 @@ vMCP "homelab"  (VirtualMCPServer, Service vmcp-homelab:4483, path /mcp)
         ▼
 MCPServer toolhive-docs (proxy runner → server pod)
 MCPServer cribl (proxy runner → login shim → https://192.168.4.11:9000/api/v1/mcp)
+MCPServer argocd (proxy runner → server pod → https://argocd-server.argocd.svc.cluster.local)
 MCPRemoteProxy excalidraw (proxy pod → https://mcp.excalidraw.com/mcp)
 MCPRemoteProxy drawio (proxy pod → https://mcp.draw.io/mcp)
 MCPRemoteProxy splunk (proxy pod → https://192.168.4.11:8089/services/mcp)
+MCPRemoteProxy splunk-agent (proxy pod → https://192.168.4.11:8089/services/mcp, agents only)
 more added via values.yaml
 ```
 
@@ -104,7 +106,7 @@ synced dotfile.
 
 ### Agents
 
-The security and operations agents on coding-box (`agent-sec`, `agent-ops`)
+The security and operations agents (`agent-sec`, `agent-ops`)
 are also ServiceAccounts in `toolhive-clients`, listed under `auth.agents` in
 `values.yaml` with an explicit tool list each. They get none of the client
 rules: an agent sees and can call only its own list (everything else is
@@ -565,8 +567,11 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 | excalidraw remote proxy | 10m / 200m | 32Mi / 128Mi | ~1m, ~15Mi |
 | drawio remote proxy | 10m / 200m | 32Mi / 128Mi | not measured yet |
 | splunk remote proxy | 10m / 200m | 32Mi / 128Mi | ~2m, ~23Mi |
+| splunk-agent remote proxy | 10m / 200m | 32Mi / 128Mi | not measured yet |
 | cribl proxy runner | operator default | operator default | ~5m, ~39Mi |
 | cribl login shim | 10m / 200m | 32Mi / 128Mi | ~6m, ~18Mi |
+| argocd proxy runner | operator default | operator default | not measured yet |
+| argocd server | 10m / 300m | 64Mi / 256Mi | not measured yet |
 
 ## Upgrading ToolHive
 
@@ -622,7 +627,7 @@ Layers, outermost first. Each one was tested against a live request:
    `toolhive-clients`; all pods run non-root with every capability dropped.
    MCP server pods have no ServiceAccount token and no API egress;
    `default-deny` NetworkPolicy plus explicit allows (intra-namespace, DNS,
-   API server for the vMCP/proxy runners, health checks).
+   API server for the vMCP/proxy runners, the agents' pods to the vMCP).
 6. **GitOps:** self-heal reverts drift. Patching the vMCP to `anonymous` auth
    was reverted by ArgoCD within ~4s. Anyone with write access to
    `toolhive-mcp` or to this repo can still change policy, so cluster RBAC and

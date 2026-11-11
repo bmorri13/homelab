@@ -31,12 +31,6 @@ variable "network_bridge" {
   default     = "vmbr0"
 }
 
-variable "gateway" {
-  description = "Network gateway IP address"
-  type        = string
-  default     = "192.168.1.1"
-}
-
 variable "dns_servers" {
   description = "List of DNS servers"
   type        = list(string)

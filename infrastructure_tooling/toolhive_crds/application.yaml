@@ -2,9 +2,9 @@
 # ArgoCD Application for the ToolHive CRDs. Apply once:
 #   kubectl apply -f infrastructure_tooling/toolhive_crds/application.yaml
 #
-# Sync-wave -1 relative to the operator and MCP apps is advisory only (there is
-# no app-of-apps), so on first install apply this one first and wait for it to
-# be Healthy before the others.
+# There is no app-of-apps and there are no sync waves between the ToolHive
+# apps, so on first install apply this one first and wait for it to be Healthy
+# before the others.
 #
 # ServerSideApply: several of these CRDs exceed the 256KiB last-applied
 # annotation limit of client-side apply.

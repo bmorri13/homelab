@@ -2,8 +2,13 @@
 # Issue the TLS certificates for Splunk's management port (8089), Splunk Web (8000),
 # the Cribl Leader API (9000) and the Cribl Worker's HEC input (8443) from a small homelab CA kept on
 # this host. The CA is created on
-# the first run. Its certificate is public: the MCP gateway on k3s-01 trusts it via
-# toolhive_mcp/files/homelab-ca.crt. Its key never leaves /root/homelab-ca.
+# the first run. Its certificate is public, and the repo holds five copies of it, under
+# infrastructure_tooling/: toolhive_mcp/files/homelab-ca.crt (the MCP gateway on k3s-01),
+# authentik/files/homelab-ca.crt (Traefik, for Splunk Web and the Cribl UI),
+# homelab_agents/files/homelab-ca.crt, otel_collector_k3s/files/homelab-ca.crt and
+# monitoring_stack/splunk/otel-agent/homelab-ca.crt (the host agents). If the CA is ever
+# recreated, replace all five and re-run otel-agent/install.sh on every host.
+# Its key never leaves /root/homelab-ca.
 # The CA can only sign names under bmosan.com, a few host names, and private IPs.
 # A leaf certificate is reissued when it is missing, expires within 30 days, was
 # signed by a different CA, or its names differ from the ones below. Prints
@@ -38,7 +43,7 @@ if [[ ! -f "$CA_DIR/ca.key" ]]; then
         2>/dev/null
     chmod 600 "$CA_DIR/ca.key"
     chmod 644 "$CA_DIR/ca.crt"
-    echo "created homelab CA in $CA_DIR (copy ca.crt to toolhive_mcp/files/homelab-ca.crt)" >&2
+    echo "created homelab CA in $CA_DIR (copy ca.crt over all five homelab-ca.crt copies in the repo, listed at the top of this script, then re-run otel-agent/install.sh on every host)" >&2
 fi
 
 # san_list <SAN spec | cert file>: the names, one per line, sorted, as openssl prints them.

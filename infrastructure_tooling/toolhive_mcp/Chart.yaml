@@ -3,4 +3,3 @@ name: toolhive-mcp
 description: ToolHive MCP servers, the vMCP gateway at mcp.bmosan.com, and its auth/network policy
 type: application
 version: 0.1.0
-appVersion: "0.55.2"

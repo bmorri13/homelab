@@ -4,8 +4,9 @@
 # deploy.sh only seeds the group once, so this is how later edits reach Cribl.
 #   ./scripts/cribl-sync-pipelines.sh           apply changes
 #   ./scripts/cribl-sync-pipelines.sh --check   only list what differs
-# Pipelines and routes that exist only in Cribl are left alone. Run on
-# security-tooling-01 as root from the stack directory, after deploy.sh.
+# Pipelines that exist only in Cribl are left alone; the route list is replaced with
+# the repo's, so a route added only in the UI is removed. Run on security-tooling-01
+# as root from the stack directory, after deploy.sh.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

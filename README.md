@@ -5,7 +5,7 @@
 
 | Cluster | Purpose | Key Components |
 |---------|---------|----------------|
-| Primary K3s (`k3s-01` VM on proxmox3) | Main workloads | ArgoCD, Vault, External Secrets, Cert Manager, Traefik, ARC runners, ToolHive MCP gateway, homelab agents, Falco, OTel collector |
+| Primary K3s (`k3s-01` VM on proxmox3) | Main workloads | ArgoCD, Vault, External Secrets, Cert Manager, Traefik, ARC runners, ToolHive MCP gateway, homelab agents, Falco, OTel collector, AdGuard Home, Authentik, Trivy Operator, Apiary, detection validation |
 | docker-compose-03-k3s (on proxmox2) | Secondary | Tailscale Operator, Vault, External Secrets |
 
 ## Architecture
@@ -58,3 +58,11 @@ Each of these lives next to its code:
 | Vault ingress | [vault_ingress](infrastructure_tooling/vault_ingress/README.md) |
 | ESO cluster provider | [eso_cluster_provider_helm](infrastructure_tooling/eso_cluster_provider_helm/README.md) |
 | Proxmox Packer & Terraform | [proxmox](infrastructure_tooling/proxmox/README.md) |
+| Argo CD install | [argocd](infrastructure_tooling/argocd/README.md) |
+| Vault | [vault](infrastructure_tooling/vault/README.md) |
+| k3s-01 node (host settings, k3s upgrades) | [k3s_node](infrastructure_tooling/k3s_node/README.md) |
+| Authentik (login for Splunk Web and the Cribl UI) | [authentik](infrastructure_tooling/authentik/README.md) |
+| AdGuard Home (DNS query logging) | [adguard](infrastructure_tooling/adguard/README.md) |
+| Trivy Operator | [trivy_operator](infrastructure_tooling/trivy_operator/README.md) |
+| kube-bench (CIS benchmark on k3s-01) | [kube_bench](infrastructure_tooling/kube_bench/README.md) |
+| Detection validation (Atomic Red Team style) | [art_validation](infrastructure_tooling/art_validation/README.md) |

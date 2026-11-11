@@ -63,7 +63,7 @@
 > NOTE: You just have all of the additional configuration (e..g. [monitoring_stack/elastic/filebeat.yml](../infrastructure_tooling/monitoring_stack/elastic/filebeat.yml), [monitoring_stack/elastic/logstash.conf](../infrastructure_tooling/monitoring_stack/elastic/logstash.conf), [monitoring_stack/elastic/metricbeat.yml](../infrastructure_tooling/monitoring_stack/elastic/metricbeat.yml), and [monitoring_stack/elastic/.env-example](../infrastructure_tooling/monitoring_stack/elastic/.env-example) file in the same directory as your `docker-compse.yml` file.
 
 ```bash
-mv .env-exmaple .env
+mv .env-example .env
 docker compose up -d
 ```
 2. Once up, in a browser go to `http://<vm_instnace_ip>:5601` and login with the credentials you have in the `.env` file.
@@ -270,5 +270,3 @@ GET /dev_logs/_count
 - [Cribl Edge to Cribl Stream](https://docs.cribl.io/edge/usecase-edge-stream/)
 - [Cribl Stream Persistent Queues](https://docs.cribl.io/stream/persistent-queues/)
 - [Cribl Edge Persistent Queues](https://docs.cribl.io/edge/persistent-queues/)
-
-##### Elastic Links

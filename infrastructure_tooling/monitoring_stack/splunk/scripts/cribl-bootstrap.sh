@@ -8,7 +8,9 @@
 #  3. On a brand-new Leader, still on its default admin/admin login, set the admin
 #     password from .env. This runs last so a failed run can still log in.
 # Once the password has changed, later token or password changes made in the UI are
-# kept. Secrets are passed to curl on stdin so they never appear in the process list.
+# kept. If you change the admin password in the UI, update CRIBL_ADMIN_PASSWORD in .env
+# to match: this script and the other cribl-* scripts log in with it. Secrets are passed
+# to curl on stdin so they never appear in the process list.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -60,7 +62,7 @@ fi
 
 # The config API is not ready for a few seconds after /health turns healthy.
 for _ in $(seq 1 30); do
-    ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/hec" >/dev/null && break
+    ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs" >/dev/null && break
     sleep 2
 done
 

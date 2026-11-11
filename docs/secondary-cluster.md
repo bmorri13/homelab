@@ -1,18 +1,16 @@
 # Secondary K3s Cluster (docker-compose-03-k3s)
 
-This cluster runs on a VM provisioned via Terraform and hosts GitHub Actions runners accessible via Tailscale.
+This cluster runs on a VM provisioned via Terraform and hosts Vault, External Secrets and the Tailscale operator.
 
 ## Components Deployed
 
-> ARC has since moved to the primary cluster, k3s-01 (see [ARC](kubernetes/arc.md)); the ARC rows below are from when it ran here.
+> ARC used to run here; it has since moved to the primary cluster, k3s-01 (see [ARC](kubernetes/arc.md)).
 
 | Component | Namespace | Purpose |
 |-----------|-----------|---------|
 | Vault | `vault` | Secrets management |
 | External Secrets Operator | `external-secrets` | Kubernetes secrets from Vault |
 | Tailscale Operator | `tailscale` | Secure network access via Tailnet |
-| ARC Controller | `arc-systems` | GitHub Actions runner management |
-| ARC Runner Scale Set | `arc-runners` | Ephemeral runner pods |
 
 ## Tailscale Kubernetes Operator
 

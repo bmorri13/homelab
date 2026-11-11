@@ -20,8 +20,12 @@ Rules apply in order, and the first match wins.
 | Leases, events, endpoints, endpointslices | not recorded |
 | Control-plane components (`system:kube-controller-manager`, scheduler, kube-proxy, k3s controller) | not recorded |
 | The kubelet reading and reporting status | not recorded |
-| Reads by infrastructure service accounts (the namespaces Falco also exempts) | not recorded |
-| Anything on Secrets, ConfigMaps, ServiceAccount tokens, Token/Access reviews | `Metadata`: who, what, when, result; never the body |
+| Status subresource updates and patches (core, apps, batch, ToolHive, Argo CD, ARC, cert-manager, External Secrets) | not recorded |
+| Reads by toolhive-mcp service accounts of pods, Services, StatefulSets and ToolHive resources in their own namespace | not recorded |
+| Token and access reviews by kube-system service accounts | not recorded |
+| Reads by infrastructure service accounts (the namespaces Falco also exempts), Secrets and ConfigMaps included | not recorded |
+| Anything else on Secrets, ConfigMaps, ServiceAccount tokens, Token/Access reviews | `Metadata`: who, what, when, result; never the body |
+| Creates, updates, patches, deletes by infrastructure service accounts | `Metadata` |
 | Other creates, updates, patches, deletes (including `pods/exec`) | `Request`: includes the submitted object |
 | Everything else, such as reads by people and application workloads | `Metadata` |
 

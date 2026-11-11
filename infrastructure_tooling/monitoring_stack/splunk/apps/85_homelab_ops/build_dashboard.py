@@ -230,9 +230,9 @@ S["ag_skills"] = (
     "| stats count as Items by Agent Skill | sort Agent - Items"
 )
 
-# Searches that follow the time picker; the rest set their own short windows.
 # Searches with their own fixed window (default: last 24 h).
 WINDOW = {"ag_skills": "-7d"}
+# Searches that follow the time picker; the rest set their own short windows.
 TIMED = {"cpu_busy", "mem_used", "load_per_cpu", "disk_busy", "net_mbps", "disk_mbs", "k8s_phase", "k8s_node"}
 
 # --- visualizations and layout -----------------------------------------------------
@@ -252,7 +252,7 @@ def heading(vid, text):
     y += 40
 
 
-def single(vid, ds, title, red_above=None, unit=""):
+def single(vid, ds, title, red_above=None):
     opts = {"majorValue": "> primary | seriesByIndex(0) | lastPoint()"}
     if red_above is not None:
         opts["majorColor"] = "> majorValue | rangeValue(colors)"
@@ -262,8 +262,6 @@ def single(vid, ds, title, red_above=None, unit=""):
             {"to": red_above + 0.5, "value": "#118832"},
             {"from": red_above + 0.5, "value": "#D41F1F"},
         ]}
-    if unit:
-        v["options"]["unit"] = unit
     viz[vid] = v
 
 

@@ -215,11 +215,3 @@ module "siem_agent_test_vm" {
   vm_username    = "ubuntu"
   vm_password    = var.vm_password
 }
-
-# output "vm_ip_addresses" {
-#   description = "IP addresses of the created VMs"
-#   value = {
-#     splunk_docker_compose_mcp = module.splunk_docker_compose_mcp.ipv4_addresses
-#     github_action_runner      = module.github_action_runner.ipv4_addresses
-#   }
-# }

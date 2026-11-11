@@ -15,8 +15,8 @@ kubectl create ns vault
     - Source
         - Change the `Git` dropdown to `Helm`
         - Repository URL: https://helm.releases.hashicorp.com
-        - Chart: Vault
-        - Version: 0.29.1
+        - Chart: vault
+        - Version: 0.34.1
             - >NOTE: There may be a newer version when you view this
         - Cluster URL: https://kubernetes.default.svc
         - Namesapce: vault
@@ -35,8 +35,8 @@ kubectl exec vault-0 -n vault -- vault operator init -key-shares=1 -key-threshol
 kubectl patch svc vault -n vault -p '{"spec": {"type": "NodePort"}}'
 ```
 
-5. Get the port for your ArgoCD UI frontend
-    - It will be the first port that is connected to port 80
+5. Get the port for your Vault UI frontend
+    - It will be the first port that is connected to port 8200
 ```bash
 kubectl get svc vault -n vault
 ```

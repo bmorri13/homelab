@@ -21,7 +21,7 @@ flowchart LR
         pvem["Proxmox OTLP metrics"]
         k8s["k3s OTel DaemonSet<br/>pod logs, events, cluster metrics"]
         audit["k3s API audit log"]
-        falco["Falco (10 VMs + k3s, k8saudit)"]
+        falco["Falco (7 VMs, 3 Proxmox nodes, k3s + k8saudit)"]
         vaudit["Vault audit"]
         unifi["UniFi syslog + IDS"]
         canary["OpenCanary honeypot"]
@@ -34,7 +34,7 @@ flowchart LR
         direction LR
         cribl["Cribl Stream · hec_in 192.168.4.11:8443 (HTTPS)<br/>secret masking · Falco → OCSF + MITRE<br/>logins → linux_secure · routing, noise drops"]
         idx[("Splunk indexes<br/>security · audit · infra · k8s<br/>apps · network · metrics · ai_agents")]
-        det["18 ATT&CK v20 detections<br/>every 15 min → homelab:detection"]
+        det["26 ATT&CK v20 detections<br/>every 15 min → homelab:detection"]
         alerts["Alerts<br/>Falco, honeypot, secret leaks"]
         dash["Dashboards<br/>Homelab Ops · Homelab Security"]
         wd["Agents watchdog<br/>:05 / :35"]
