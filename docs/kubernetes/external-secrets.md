@@ -28,8 +28,8 @@ kubectl create ns alexprinter
 ```
 
 5. We are now ready to deploy the `ClusterSecretStore`
-    - You will need to update the [deployments.yaml](https://github.com/bmorri13/homelab) to match your cluster or needs
-        - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_cluster_provider_helm/templates/deployments.yaml#L17) line to reflect your correct cluster name and port
+    - You will need to update the [clustersecretstore.yaml](../../infrastructure_tooling/eso_cluster_provider_helm/templates/clustersecretstore.yaml) to match your cluster or needs
+        - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_cluster_provider_helm/templates/clustersecretstore.yaml#L17) line to reflect your correct cluster name and port
 
 6. Within the ArgoCD UI, create a new app with the below parameter
     - General
@@ -45,7 +45,7 @@ kubectl create ns alexprinter
 
 7. We are now ready to deploy the `ExternalSecret`
     - You will need to update the [deployments.yaml](https://github.com/bmorri13/homelab) to match your cluster or needs
-        - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_cluster_provider_helm/templates/deployments.yaml#L17) line to reflect your correct cluster name and port
+        - E.g. you will need to update at least the [server](https://github.com/bmorri13/homelab/blob/main/infrastructure_tooling/eso_cluster_provider_helm/templates/clustersecretstore.yaml#L17) line to reflect your correct cluster name and port
 
 8. Within the ArgoCD UI, create a new app with the below parameter
     - General
