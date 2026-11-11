@@ -134,3 +134,9 @@ if needs_issue "$CRIBL_WORKER_TLS_DIR/hec.crt" "$worker_san"; then
     chmod 644 "$CRIBL_WORKER_TLS_DIR/hec.crt"
     echo "changed: cribl-worker"
 fi
+# The CA, for the Worker's own HTTPS clients (NODE_EXTRA_CA_CERTS in
+# docker-compose.yml), which verify Splunk's cert against it.
+if ! cmp -s "$CA_DIR/ca.crt" "$CRIBL_WORKER_TLS_DIR/ca.crt"; then
+    install -m 644 "$CA_DIR/ca.crt" "$CRIBL_WORKER_TLS_DIR/ca.crt"
+    echo "changed: cribl-worker"
+fi
