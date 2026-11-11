@@ -3,7 +3,8 @@ services:
     # Pinned: the release tag plus its digest (Renovate bumps both).
     image: immauss/openvas:26.07.27.01@sha256:a20fc7b7c96bdb4ddc02624b136235611b4c896dd965e20051a9ca8789d2a70e
     ports:
-      - "9392:9392"
+      # Loopback only by default. Set GVM_BIND_ADDR in .env to listen on another address.
+      - "${GVM_BIND_ADDR:-127.0.0.1}:9392:9392"
     environment:
       - USERNAME=${GVM_ADMIN_USER:-admin}
       # No default: compose refuses to start without a password in .env.
