@@ -12,9 +12,12 @@ so every finding has the same fields. Firing alerts:
     not attached to any search; add `action.homelab_slack = 1` to send directly.
 
 Windows: most run every 15 minutes over [-20m@m, -5m@m), contiguous and late enough
-for indexing lag. "First seen" detections search their own longer baseline.
+for indexing lag. "First seen" detections search their own longer baseline. Each
+detection runs at its own minute in the quarter hour (cron_for) so they don't all
+queue at once.
 """
 import pathlib
+import zlib
 
 SEVERITY = {"low": 2, "medium": 3, "high": 4, "critical": 5}
 
@@ -29,9 +32,20 @@ K8S_TAIL = (
 
 D = []
 
+# Every 15 minutes, at a minute offset taken from a hash of the name: stable when
+# detections are added or reordered, and never a multiple of 5, when the Falco and
+# honeypot alerts (*/5) and the 85_homelab_ops checks start. Windows are relative to
+# the scheduled time, so [-20m@m, -5m@m) still tiles with no gap or overlap.
+OFFSETS = [m for m in range(15) if m % 5]
+
+
+def cron_for(name):
+    m = OFFSETS[zlib.crc32(name.encode()) % len(OFFSETS)]
+    return f'{",".join(str(m + q) for q in (0, 15, 30, 45))} * * * *'
+
 
 def det(name, technique, tactic, severity, strategy, search, test, suppress="user,src,object",
-        period="4h", window=("-20m@m", "-5m@m"), cron="*/15 * * * *", description=""):
+        period="4h", window=("-20m@m", "-5m@m"), cron=None, description=""):
     D.append(dict(name=name, technique=technique, tactic=tactic, severity=severity, strategy=strategy,
                   search=search, test=test, suppress=suppress, period=period, window=window, cron=cron,
                   description=description))
@@ -426,7 +440,7 @@ for d in D:
         f"search = {conf_escape(search)}",
         f'dispatch.earliest_time = {d["window"][0]}',
         f'dispatch.latest_time = {d["window"][1]}',
-        f'cron_schedule = {d["cron"]}',
+        f'cron_schedule = {d["cron"] or cron_for(d["name"])}',
         f'alert.severity = {SEVERITY[d["severity"]]}',
         f'alert.suppress.fields = {d["suppress"]}',
         f'alert.suppress.period = {d["period"]}',
