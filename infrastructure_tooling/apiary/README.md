@@ -20,8 +20,8 @@ values back.
 | Role/RoleBinding in `toolhive-mcp` | get the `apiary-catalog` ConfigMap; get/list MCPServer and MCPRemoteProxy; get/list/patch ExternalSecrets; list/delete pods. |
 | NetworkPolicies | Default deny. Egress only to DNS, Vault, the API server, and public HTTPS (GitHub). |
 
-Everything is behind `enabled` (default `false`) until its Vault entries
-exist and CI has published an image.
+Everything is behind `enabled` in `values.yaml`. It is `true` now that the
+Vault entries exist and CI has published an image; `false` renders nothing.
 
 The list of servers and credentials comes from the `apiary-catalog`
 ConfigMap, rendered by the `toolhive_mcp` chart from its
@@ -87,8 +87,9 @@ printf "%s" "$T" | kubectl -n vault exec -i vault-0 -- env VAULT_TOKEN="$VT" VAU
 kubectl apply -f infrastructure_tooling/apiary/application.yaml
 ```
 
-Then set `enabled: true` and `image.digest` (from the apiary CI run summary)
-in `values.yaml` and merge.
+`enabled: true` and `image.digest` are already set in `values.yaml`. For a new
+build, change `image.tag` and `image.digest` (from the apiary CI run summary)
+and merge.
 
 ## Checks
 

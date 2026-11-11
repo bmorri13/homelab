@@ -60,7 +60,7 @@ apt-get update
 
 ### Windows
 #### Windows Pro
-- Using the (Proxmox - Windows 11 VM (with VirtIO drivers))[https://www.youtube.com/watch?v=eboCDiDpOCs]
+- Using the [Proxmox - Windows 11 VM (with VirtIO drivers)](https://www.youtube.com/watch?v=eboCDiDpOCs)
 > NOTE: This gudie (e.g. needing the extra VirtIO drivers) is needed since Windows requires having the extra drivers to get it installed correctly.
 
 #### Tiny 11 Windows Image Builder
@@ -107,7 +107,7 @@ The `infrastructure_tooling/proxmox/` directory contains comprehensive automatio
 
 **Key Features:**
 - Automated Ubuntu 24.04 template creation with Packer
-- **Parallel template builds** on both Proxmox nodes via GitHub Actions (using ARC runners)
+- **Parallel template builds** on all three Proxmox nodes via GitHub Actions (using ARC runners)
 - Multi-VM provisioning with Terraform
 - Remote state storage in Consul for team collaboration
 - Complete Infrastructure as Code workflow
@@ -117,7 +117,7 @@ The `infrastructure_tooling/proxmox/` directory contains comprehensive automatio
 
 | Workflow | Trigger | Runner | Description |
 |----------|---------|--------|-------------|
-| `proxmox-packer-builder.yml` | Manual, Schedule, Push | `arc-k3s-homelab` | Builds templates on both nodes in parallel |
+| `proxmox-packer-builder.yml` | Manual, Schedule, Push | `arc-k3s-homelab` | Builds templates on all three nodes in parallel |
 | `terraform-validate-and-plan.yml` | Manual, Push/PR | `self-hosted` | Validates and plans Terraform changes |
 | `terraform-apply.yml` | Manual | `self-hosted` | Applies Terraform configuration |
 
@@ -131,7 +131,7 @@ packer build -var-file="secrets.pkrvars.hcl" ubuntu-2404.pkr.hcl
 # Go to Actions > Build Proxmox Packer Template > Run workflow
 
 # Deploy VMs with Terraform
-cd ../terraform
+cd ../../terraform
 terraform plan -var-file="secrets.tfvars"
 terraform apply -var-file="secrets.tfvars"
 ```

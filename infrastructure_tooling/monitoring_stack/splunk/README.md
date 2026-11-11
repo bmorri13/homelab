@@ -23,25 +23,25 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 | Indexed data (`/opt/splunk/var`) | `/srv/splunk/var` on the VM | Hot, warm, and cold on local disk. Capped at 350 GB for the homelab indexes; at the cap the oldest data is frozen (archived, then deleted locally). |
 | Cribl Leader: settings, users, Worker Group config | `/srv/cribl` on the VM | Group config in `groups/default/` (a git repo the Leader commits to). Seeded from `cribl/` on first deploy. |
 | Cribl Worker: pulled config, persistent queue | `/srv/cribl-worker` on the VM | Nothing here that the Leader can't send again, except queued data |
-| TLS certs for 8089 and the Cribl API | `/root/homelab-ca` (CA), `/srv/splunk/etc/auth/homelab/`, `/srv/cribl/local/cribl/auth/homelab-tls/` | Issued and renewed by `scripts/tls-certs.sh`. See [MCP access](#mcp-access). |
-| Frozen archive | Unraid NFS share at `/mnt/unraid-splunk/frozen/<index dir>/` | Raw data of every bucket that ages out, except `cribl` and `unrouted`. Kept forever; see [Frozen archive](#frozen-archive). |
+| TLS certs for 8089, Splunk Web (8000), the Cribl API and the HEC input (8443) | `/root/homelab-ca` (CA), `/srv/splunk/etc/auth/homelab/`, `/srv/cribl/local/cribl/auth/homelab-tls/`, `/srv/cribl-worker-tls/` | Issued and renewed by `scripts/tls-certs.sh`. `/srv/cribl-worker-tls` holds the HEC input's cert and key and is mounted read-only into the Worker. See [MCP access](#mcp-access). |
+| Frozen archive | Unraid NFS share at `/mnt/unraid-splunk/frozen/<index dir>/` | Raw data of every bucket that ages out, except `metrics`, `cribl` and `unrouted`. Kept forever; see [Frozen archive](#frozen-archive). |
 | Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives of about 80 MB each. Files the Splunk image ships in its built-in apps are left out (the image has them); their `local/`, `lookups/` and `metadata/local.meta` are kept. |
 | Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
 
 ### Indexes
 
-Cribl picks the index for every event. Data older than the retention below, or past the 350 GB cap, is frozen: copied to the Unraid share and then deleted locally. `cribl` and `unrouted` are deleted without archiving.
+Cribl picks the index for every event. Data older than the retention below, or past the 350 GB cap, is frozen: copied to the Unraid share and then deleted locally. `metrics`, `cribl` and `unrouted` are deleted without archiving.
 
 | Index | Contents | Retention |
 |---|---|---|
-| `network` | UniFi gateway (OCSF): firewall, IDS/IPS findings, client connects, health events | 90 days |
+| `network` | UniFi gateway (OCSF): firewall, IDS/IPS findings, client connects, health events. AdGuard Home's DNS query log, and Cloudflare Tunnel connector logs | 90 days |
 | `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
 | `audit` | Kubernetes API audit log (k3s-01), Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
 | `ai_agents` | Claude Code, Codex, MCP tool calls, agents we build | 90 days |
-| `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`), and findings from the ATT&CK detections (`homelab:detection`, `apps/85_detections`) | 90 days |
+| `security` | Detections: Falco runtime alerts as OCSF Detection Findings (`cc-falco-ocsf`), findings from the ATT&CK detections (`homelab:detection`, `apps/85_detections`), OpenCanary honeypot events, Trivy Operator reports, and kube-bench results | 90 days |
 | `metrics` | Metric index (`mstats`): host, container, Kubernetes and Proxmox metrics from the OTel collectors, 60 s resolution. Not archived; capped at 30 GB | 90 days |
 | `cribl` | Cribl's own warnings and errors | 14 days |
 | `unrouted` | Matched no route or named a missing index. Should stay empty. | 14 days |
@@ -90,7 +90,7 @@ The daily news app's backend (`news-backend` in compose project `bmosan-news` on
 0. Metric events (`__criblMetrics`, or `index=metrics` from the collector) → `metrics`, before every other rule. The last rule would otherwise move them to an event index, where Splunk silently drops metric data.
 1. Keep an index the collector set, if it is one of the indexes above.
 2. `service.name` containing claude, codex, or agent → `ai_agents`.
-3. k8s namespace `vault`, `toolhive-mcp`, `toolhive-system` → `audit`.
+3. k8s namespace `vault` → `audit`. (ToolHive: only the vMCP gateway's audit records go to `audit`, by an earlier rule; the rest of its logs go to `k8s`.)
 4. k8s namespace `alexprinter` → `apps`.
 5. Any other k8s namespace → `k8s`.
 6. A `container.name` field (Docker hosts) → `apps`.
@@ -102,6 +102,9 @@ Dropped before indexing:
 - successful container health checks (`GET /health`, `/api/health`, `/ready`, and so on)
 - SeaweedFS `LockRing` chatter
 - MOTD news, and routine systemd unit start/stop messages (failures are kept)
+- ArgoCD's routine reconcile chatter (warnings, errors and sync actions are kept)
+- the ARC controller and listener's INFO reconcile loop in `arc-systems` (scale events, warnings and errors are kept)
+- ToolHive's per-request access lines from the MCP servers, and the vMCP cache-sync loop (each tool call is in the vMCP audit record)
 - debug-level lines and debug-severity syslog
 - Cribl's own info-level logs
 
@@ -145,7 +148,7 @@ The MCP gateway on k3s-01 (`infrastructure_tooling/toolhive_mcp`) reaches Splunk
 
 ### Homelab CA
 
-`scripts/tls-certs.sh` keeps a small CA in `/root/homelab-ca` on this VM (key mode 600, never copied off). It can only sign names under `bmosan.com`, `localhost`, this VM's host names, and private IPs (`192.168.0.0/16`, `127.0.0.0/8`), so a leaked key cannot impersonate public sites. It issues 825-day certs for Splunk's port 8089 and the Cribl Leader API, and reissues them within 30 days of expiry on any deploy. The CA cert is public and lives in `toolhive_mcp/files/homelab-ca.crt`, which the gateway trusts.
+`scripts/tls-certs.sh` keeps a small CA in `/root/homelab-ca` on this VM (key mode 600, never copied off). It can only sign names under `bmosan.com`, `localhost`, this VM's host names, and private IPs (`192.168.0.0/16`, `127.0.0.0/8`), so a leaked key cannot impersonate public sites. It issues 825-day certs for Splunk's port 8089, Splunk Web (8000), the Cribl Leader API and the Cribl Worker's HEC input (8443), and reissues them within 30 days of expiry on any deploy. The CA cert is public, and the repo holds five copies of it under `infrastructure_tooling/`: `toolhive_mcp/files/homelab-ca.crt` (which the gateway trusts), `authentik/files/homelab-ca.crt` (Traefik, for Splunk Web and the Cribl UI), `homelab_agents/files/homelab-ca.crt`, `otel_collector_k3s/files/homelab-ca.crt` and `monitoring_stack/splunk/otel-agent/homelab-ca.crt` (the host agents). If the CA is ever recreated, replace all five and re-run `otel-agent/install.sh` on every host.
 
 ### Splunk
 
@@ -181,7 +184,7 @@ Everything Splunk loads from this repo lives in `apps/`, one directory per app, 
 
 | Prefix | Use | Examples |
 |---|---|---|
-| `00_` | Base Splunk config: indexes, inputs, server settings, roles | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles` |
+| `00_` | Base Splunk config: indexes, inputs, server settings, roles, SAML login | `00_homelab_indexes`, `00_homelab_inputs`, `00_homelab_server`, `00_homelab_roles`, `00_homelab_auth` |
 | `85_` | Props, transforms and searches for data we produce: our apps and our Cribl packs' output | `85_ocsf`, `85_hashicorp_vault`, `85_kubernetes_audit`, `85_bmosan_news`, `85_linux_auth`, `85_secret_leaks`, `85_opencanary`, `85_falco`, `85_homelab_ops`, `85_detections` |
 | none | Splunkbase apps, kept under their original names. Installed by hand, not stored in this repo (see [Splunkbase apps](#splunkbase-apps)) | `Splunk_SA_CIM`, `ocsf_cim_addon_for_splunk`, `Splunk_TA_nix` |
 
@@ -191,8 +194,9 @@ Current base apps:
 
 - `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh`, which archives frozen buckets to the Unraid share.
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
-- `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk, and raises splunkd's IOWait health thresholds (`health.conf`) so short I/O bursts from the other containers on this VM don't turn health red.
+- `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk, points splunkd (8089, `server.conf` `[sslConfig]`) and Splunk Web (8000, `web.conf`) at their homelab-CA certs from `scripts/tls-certs.sh`, and raises splunkd's IOWait health thresholds (`health.conf`) so short I/O bursts from the other containers on this VM don't turn health red.
 - `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`. The two MCP roles can also read server status, the health report and the license (`list_introspection`, `list_health`, `license_read`).
+- `00_homelab_auth`: Splunk Web login through Authentik with SAML (`authentication.conf`), mapping the Authentik entitlement `splunk-admin` to the `admin` role. See [Splunk Web login](#splunk-web-login).
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`), and `src` for UniFi IDS/IPS findings, which the OCSF-CIM add-on leaves unmapped.
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
@@ -200,10 +204,13 @@ Current base apps:
 - `85_linux_auth`: adds to the Unix and Linux add-on's `linux_secure` parsing: Tailscale SSH logins (`tailscaled` "audit: SSH login", how the Ubuntu VMs are reached), Proxmox web UI and API logins (`pvedaemon`/`pveproxy`), sudo sessions in the Ubuntu 24.04 log format, and the sudo command line. Each Tailscale SSH session's command (or login shell) is mapped to CIM Endpoint Processes, with `parent_process_name=tailscaled`, the local `user`, the tailnet identity `ts_user` and `src`.
 - `85_secret_leaks`: the hourly backstop alert for credentials that got past Cribl's masking (see [Secret masking](#secret-masking)).
 - `85_falco`: two alerts, run every 5 minutes: one on any Falco finding from the AI agent rules (`falco/rules.d/ai_agents.yaml`), one on every other Falco finding at Warning or above.
-- `85_homelab_ops`: the Homelab Operations dashboard (Dashboard Studio) over `index=metrics`: status tiles, Proxmox nodes, guests and storage, host utilization and saturation, Docker containers, and k3s workloads. The view is generated by `build_dashboard.py` in the app; edit that, rerun it and commit both. See [`otel-agent/`](otel-agent/README.md#metrics) for what is collected.
+- `85_homelab_ops`: the Homelab Operations dashboard (Dashboard Studio) over `index=metrics`: status tiles, Proxmox nodes, guests and storage, host utilization and saturation, Docker containers, and k3s workloads. The view is generated by `build_dashboard.py` in the app; edit that, rerun it and commit both. See [`otel-agent/`](otel-agent/README.md#metrics) for what is collected. It also holds the seven alerts that post to Slack themselves through `homelab_slack` (see [Detections](#detections)).
 - `85_detections`: scheduled detections mapped to MITRE ATT&CK v20, and an optional `homelab_slack` alert action. See [Detections](#detections).
 - `85_homelab_security`: the Homelab Security dashboard (Dashboard Studio): detection findings by severity and ATT&CK technique, every fired alert, Falco rules and events, honeypot connections, logins (CIM `tag=authentication`), Kubernetes API 401/403s and changes made by people, Vault requests and errors, MCP gateway calls and denials, and whether each scheduled detection ran in the last 24 hours. Generated by `build_dashboard.py` in the app; edit that, rerun it and commit both.
 - `85_opencanary`: the OpenCanary honeypot (`infrastructure_tooling/opencanary`) as CIM Intrusion Detection, and an alert, run every 5 minutes, on any connection to it.
+- `85_adguard`: search-time fields for AdGuard Home's DNS query log (`adguard:querylog`), mapped to CIM Network_Resolution names.
+- `85_k8s_posture`: search-time fields for the Trivy Operator reports (`trivy:<kind>`, JSON) and kube-bench's check lines (`kube-bench`: `status`, `check_id`, `check`).
+- `85_toolhive_audit`: JSON field extraction for the MCP gateway's audit records (`toolhive:vmcp:audit`), with `user` and `src` aliased from the client ServiceAccount and client IP.
 
 Adding an index means adding it in `00_homelab_indexes`, routing to it in Cribl (`hec_in` keeps a list of valid indexes), and granting it in `00_homelab_roles`.
 
@@ -257,15 +264,15 @@ Check it with `index=security sourcetype=falco:ocsf | stats count by tag` (expec
 
 - Most run every 15 minutes over `[-20m@m, -5m@m)`; the telemetry ones look back 24 hours to now. "First seen" detections search their own 14- or 30-day baseline. All suppress repeats per entity (1 to 24 hours).
 - Every finding is written to `index=security sourcetype=homelab:detection` as one JSON event (Log Event action), with `detection`, `severity`, `technique`, `tactic`, `attack_strategy`, `host`, `user`, `src`, `object` and `detail`. This is the queue the security agent reads.
-- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The exceptions to "Splunk does not post to Slack" are two searches in `85_homelab_ops` that watch what the agents depend on, and use `homelab_slack`: the agents' own watchdog, *Agents - not running or failing* (a stopped agent can't report itself), *Splunk - health degraded* (a splunkd health feature yellow or red for 15 minutes, checked every 10), *Splunk - license expiring* (the Developer license within 30 days of expiry; when it lapses Splunk falls back to Free, with no logins and no alerts), *Splunk - detection validation failed* (a weekly test in [`../../art_validation`](../../art_validation/README.md) ran and the detection it targets produced no finding), and the Kubernetes posture reports: *Kubernetes - CIS benchmark failures* (monthly, [`../../kube_bench`](../../kube_bench/README.md)), *Trivy - critical vulnerabilities in running images* (weekly) and *Trivy - secret found in a running image* ([`../../trivy_operator`](../../trivy_operator/README.md)).
-- The `homelab_slack` alert action (`bin/homelab_slack.py`) is attached only to those two searches, and kept as a fallback if the agents are down for long. To use it elsewhere, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
+- Splunk does not post to Slack. The security and operations agents read this queue and post their triage to Slack; the webhook URL is kept in Vault at `kv/slack-alerts` (key `webhook_url`). The agents are in [`homelab_agents`](../../homelab_agents/README.md); their run log is `index=ai_agents sourcetype=homelab:agent`. The exceptions to "Splunk does not post to Slack" are seven searches in `85_homelab_ops` that watch what the agents depend on, and use `homelab_slack`: the agents' own watchdog, *Agents - not running or failing* (a stopped agent can't report itself), *Splunk - health degraded* (a splunkd health feature yellow or red for 15 minutes, checked every 10), *Splunk - license expiring* (the Developer license within 30 days of expiry; when it lapses Splunk falls back to Free, with no logins and no alerts), *Splunk - detection validation failed* (a weekly test in [`../../art_validation`](../../art_validation/README.md) ran and the detection it targets produced no finding), and the Kubernetes posture reports: *Kubernetes - CIS benchmark failures* (monthly, [`../../kube_bench`](../../kube_bench/README.md)), *Trivy - critical vulnerabilities in running images* (weekly) and *Trivy - secret found in a running image* ([`../../trivy_operator`](../../trivy_operator/README.md)).
+- The `homelab_slack` alert action (`bin/homelab_slack.py`) is attached only to those seven searches, and kept as a fallback if the agents are down for long. To use it elsewhere, add `action.homelab_slack = 1` to a saved search and copy the webhook from Vault into Splunk's credential store (`storage/passwords`, app `85_detections`, realm `homelab_slack`) without it touching shell history:
 
   ```bash
   read -rs SLACK_URL && printf '%s' "$SLACK_URL" | ssh root@security-tooling-01 /opt/splunk-stack/scripts/set-slack-webhook.sh; unset SLACK_URL
   ```
 
   Paste the value from Vault when it waits for input. The action refuses anything that is not a `https://hooks.slack.com/` URL, and verifies splunkd's TLS certificate with the homelab CA. Failures are logged to `index=_internal sourcetype=splunkd component=sendmodalert`, never with the URL.
-- Known gaps: there is no network flow, DNS or process telemetry outside Falco, so command and control, exfiltration and most discovery are not covered. People's Kubernetes requests are audited with the body, but controllers' are not.
+- Known gaps: there is no network flow or process telemetry outside Falco (DNS queries are logged by AdGuard Home, in `network`), so command and control, exfiltration and most discovery are not covered. People's Kubernetes requests are audited with the body, but controllers' are not.
 
 ## Prerequisites
 
@@ -299,6 +306,14 @@ The `.splunk-archive` marker matters. `archive_bucket.sh` and `backup-etc.sh` wr
 
 The mount uses `soft` and `nofail` so a down Unraid never blocks boot or hangs splunkd. Archives are copied to a `.tmp` name and renamed when complete, so an interrupted copy is retried.
 
+### 3. Packages the scripts need (one time)
+
+```bash
+apt-get install -y jq python3-yaml rsync sysstat
+```
+
+`jq` and `python3-yaml` are used by the Cribl scripts (`cribl-bootstrap.sh`, `cribl-sync-pipelines.sh`, `cribl-test-mask.py`), `rsync` by `deploy.sh`, and `pidstat` from `sysstat` by the `splunk-io-top` unit, which otherwise fails and restarts every 30 seconds.
+
 ## Deploy
 
 ```bash
@@ -314,8 +329,8 @@ chmod 600 .env
 
 `deploy.sh` is safe to re-run. It:
 
-1. Installs and runs the host firewall for ports 8089, 9000, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
-2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
+1. Installs and runs the host firewall for ports 8089, 8000, 9000, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
+2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, Splunk Web (8000), the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
 5. Seeds the Cribl Worker Group config once, while the Leader is stopped: from the old single-instance config in `/srv/cribl/local/cribl/` if there is one (the one-time move to Leader + Worker), otherwise from `cribl/local/cribl/`.
@@ -326,11 +341,11 @@ Moving from the single-instance Cribl to Leader + Worker loses a minute or two o
 
 ### Changing Cribl config
 
-After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. Edit the `default` Worker Group in the Leader UI, then **Commit & Deploy** so the Worker gets the change. To keep a change, copy the changed files from `/srv/cribl/groups/default/local/cribl/` back into `cribl/local/cribl/` and commit them. To push a repo change to a running Cribl, copy the file the other way, `docker compose restart cribl`, then commit and deploy the group in the UI. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
+After the first deploy, the Cribl UI owns its config; `deploy.sh` never overwrites it. Edit the `default` Worker Group in the Leader UI, then **Commit & Deploy** so the Worker gets the change. To keep a change, copy the changed files from `/srv/cribl/groups/default/local/cribl/` back into `cribl/local/cribl/` and commit them. To push a repo change to pipelines or routes to a running Cribl, run `./scripts/cribl-sync-pipelines.sh --check` to list what differs, then `./scripts/cribl-sync-pipelines.sh` to apply it: it updates the pipelines under `cribl/local/cribl/pipelines/` and the route list through the Leader API, then commits and deploys. Pipelines that exist only in Cribl are left alone, but the route list is replaced with the repo's. For `inputs.yml`, `outputs.yml` and `cribl.yml`, copy the file the other way, `docker compose restart cribl`, then commit and deploy the group in the UI. Never commit `auth/` or a file containing a `#42:`-prefixed value (an encrypted secret); `inputs.yml` in the repo keeps `authTokens: []`.
 
 ### License
 
-Install the developer license in Splunk Web under **Settings > Licensing > Add license**. It is stored in `/srv/splunk/etc/licenses` and persists. The license expires after 6 months. When it lapses, indexing continues but search is blocked until a new license is installed, so set a reminder about 2 weeks before expiry.
+Install the developer license in Splunk Web under **Settings > Licensing > Add license**. It is stored in `/srv/splunk/etc/licenses` and persists. The license expires after 6 months. When it lapses Splunk falls back to Free, with no logins and no scheduled searches or alerts, until a new license is installed. *Splunk - license expiring* (`85_homelab_ops`) warns 30 days ahead.
 
 ### Nightly config backup
 
@@ -370,7 +385,7 @@ Change the pinned `image:` tag and digest in `docker-compose.yml`, then run `./s
    ```
 3. `./scripts/deploy.sh`
 
-Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` to `toolhive_mcp/files/homelab-ca.crt`, and re-mint the Splunk MCP token (see below). Indexed data is lost; frozen buckets can be thawed (see [Frozen archive](#frozen-archive)).
+Config, users, dashboards, the license, and Cribl's routes and tokens come back. The homelab CA (`/root/homelab-ca`) is not in the backup: `tls-certs.sh` creates a new one, so copy the new `ca.crt` over all five `homelab-ca.crt` copies in the repo (listed under [Homelab CA](#homelab-ca)), re-run `otel-agent/install.sh` on every host, and re-mint the Splunk MCP token (see [MCP access](#mcp-access)). Indexed data is lost; frozen buckets can be thawed (see [Frozen archive](#frozen-archive)).
 
 ## Host tuning
 

@@ -27,7 +27,7 @@
       "groupName": "ToolHive charts"
     },
     {
-      "description": "The tailscale-operator chart is vendored under charts/ (a bare Chart.yaml bump is a no-op that desyncs Chart.lock), and it is applied to docker-compose-03 by hand, not by Argo CD. Upgrade by hand: see the Tailscale Operator section of README.md.",
+      "description": "The tailscale-operator chart is vendored under charts/ (a bare Chart.yaml bump is a no-op that desyncs Chart.lock), and it is applied to docker-compose-03 by hand, not by Argo CD. Upgrade by hand: see the Tailscale Kubernetes Operator section of docs/secondary-cluster.md.",
       "matchPackageNames": [
         "tailscale-operator"
       ],

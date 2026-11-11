@@ -83,7 +83,7 @@ def security(gw):
             continue
         name = r.get("detection", "")
         runbook = next((f for prefix, f in DETECTION_RUNBOOKS if name.startswith(prefix)), "general.md")
-        key = "|".join(["hl", name, r.get("host", ""), r.get("user", ""), r.get("src", ""), r.get("object", "")])
+        key = "|".join(["hl", name, *(_first(r.get(k)) for k in ("host", "user", "src", "object"))])
         items.append(_item(key, "detection", name, r.get("severity"), r.get("host"), r, runbook))
 
     names = ", ".join(json.dumps(n) for n in ALERTS)

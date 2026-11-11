@@ -43,18 +43,18 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 ```
 
 6. Login to the UI
-- Username: amdin
+- Username: admin
 - Password: outputted results from Step 5
 
 - You are now ready to install your first apps!
 
 ## The install itself
 
-The running install is captured in [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd): the upstream manifests pinned to a release, with this cluster's changes. Upgrades are made there and applied by hand; see its README. The steps below are how it was first installed.
+The running install is captured in [`infrastructure_tooling/argocd`](../../infrastructure_tooling/argocd): the upstream manifests pinned to a release, with this cluster's changes. Upgrades are made there and applied by hand; see its README. The steps above are how it was first installed.
 
 ## ArgoCD server configuration (`argocd-cm`)
 
-ArgoCD's own settings live in [`infrastructure_tooling/argocd_config`](../../infrastructure_tooling/argocd_config), deployed as the `argocd-config` app. Unlike every other app here, its Application manifest **is** committed — losing it would silently reintroduce the problems it prevents. Bootstrap it once:
+ArgoCD's own settings live in [`infrastructure_tooling/argocd_config`](../../infrastructure_tooling/argocd_config), deployed as the `argocd-config` app. Its Application manifest is committed, because losing it would silently reintroduce the problems it prevents. Bootstrap it once:
 
 ```bash
 kubectl apply -f infrastructure_tooling/argocd_config/application.yaml

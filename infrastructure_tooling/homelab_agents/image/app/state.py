@@ -61,6 +61,10 @@ class State:
                 quiet.append(item)
             elif row["triaged"] and now - row["triaged"] < self.renotify:
                 item["triage"] = json.loads(row["triage"]) if row["triage"] else None
+                if item["triage"] is None:
+                    # Triage gave up (TRIAGE_ATTEMPTS failures) and the post didn't happen:
+                    # the error text wasn't stored, so say that much and still report it.
+                    item["triage_error"] = "triage failed on an earlier run"
                 to_repost.append(item)
             else:
                 to_triage.append(item)

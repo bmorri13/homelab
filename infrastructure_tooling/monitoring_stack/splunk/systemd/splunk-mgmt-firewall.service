@@ -1,7 +1,8 @@
 # Installed by scripts/deploy.sh. Applies scripts/mgmt-firewall.sh before Docker
-# starts, so the published port 8089 is never open to the LAN after a reboot.
+# starts, so the published Splunk and Cribl ports are never open to the LAN after a
+# reboot.
 [Unit]
-Description=Restrict Splunk management port 8089 to the MCP gateway
+Description=Restrict the published Splunk and Cribl ports (mgmt-firewall.sh)
 Before=docker.service
 Wants=network-pre.target
 After=network-pre.target

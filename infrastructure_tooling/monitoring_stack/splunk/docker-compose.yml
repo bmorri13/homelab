@@ -12,7 +12,8 @@ services:
     environment:
       - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
       - SPLUNK_START_ARGS=--accept-license
-      # Only applied on first start; change it in the UI afterwards.
+      # Only applied on first start. If you change it in the UI afterwards, update .env
+      # to match: the scripts log in with it.
       - SPLUNK_PASSWORD=${SPLUNK_PASSWORD:?set SPLUNK_PASSWORD in .env}
       - SPLUNK_HTTP_ENABLESSL=true
     ports:

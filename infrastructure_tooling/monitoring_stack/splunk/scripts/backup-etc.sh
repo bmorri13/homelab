@@ -34,7 +34,7 @@ groups=()
 [[ -d "$CRIBL_DIR/groups" ]] && groups=(groups)
 
 excludes=$(mktemp)
-trap 'rm -f "$excludes"' EXIT
+trap 'rm -f "$excludes" "${out:-}.tmp"' EXIT
 # One "<app>/<entry>" line per file or directory the image ships at the top of each
 # built-in app, plus "<app>/metadata/<file>".
 if stock=$(docker exec splunk sh -c 'cd /opt/splunk-etc/apps && find . -mindepth 2 -maxdepth 2 && find . -mindepth 3 -maxdepth 3 -path "./*/metadata/*"' 2>/dev/null) \

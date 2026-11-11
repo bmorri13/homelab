@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic runner for the homelab agents.
 
-    runner.py sec|ops [--dry-run] [--local-login] [--limit N]
+    runner.py sec|ops [--dry-run] [--local-login] [--limit N] [--collect-only] [--self-test]
 
 Runs as a Kubernetes CronJob pod under the agent's own ServiceAccount (agent-sec or
 agent-ops). Each run: read the pod's projected tokens (gateway, Vault), collect the
@@ -437,8 +437,6 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 # through reposts only the cards that didn't go out.
                 post_all(webhook, messages, lambda n: state.mark_notified(cards[n][1]))
                 summary["posted"] = bool(messages)
-        elif notes and webhook and not dry_run:
-            post_all(webhook, slack_messages(agent, [], [], notes))
     except Exception as e:
         status = "error"
         summary["error"] = f"{type(e).__name__}: {e}"[:500]

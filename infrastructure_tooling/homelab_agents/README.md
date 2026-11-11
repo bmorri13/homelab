@@ -16,7 +16,7 @@ Results go to Slack as Block Kit cards, and every run and item is logged to Splu
 | Path | What |
 |---|---|
 | `image/` | The container: `app/` (runner, queues, state, prompts, runbooks), `requirements.txt` (hash-locked, from `requirements.in` with `uv pip compile --generate-hashes`), `select_skills.py`, `Dockerfile`. Layered build on Chainguard images, both pinned by digest: `python:latest-dev` builds the virtualenv (wheels only, hashes checked) and selects the skills; the runtime is `python:latest` (no shell, no package manager, no pip, nonroot UID 65532) with only the venv, the app and the skills, all owned by root |
-| `Chart.yaml`, `values.yaml`, `templates/` | Helm chart: the two CronJobs, the state volume, the NetworkPolicy, the GHCR pull secret |
+| `Chart.yaml`, `values.yaml`, `templates/` | Helm chart: the two CronJobs, the state volume, the NetworkPolicy, the GHCR pull secret, the `homelab-agents-ca` ConfigMap (the homelab CA for HEC, `files/homelab-ca.crt`) |
 | `application.yaml` | Argo CD Application (applied once by hand) |
 | `.github/workflows/homelab-agents-image.yml` | Builds the image on GitHub-hosted runners and pushes `ghcr.io/bmorri13/homelab-agents` (`:main` from main, `:<branch>` from branches, `:sha-<commit>` always) |
 
@@ -79,7 +79,7 @@ sequenceDiagram
 
 The image bakes in a selection of [Splunk's agent skills](https://github.com/splunk/splunk-agent-skills) (Apache-2.0), pinned to one commit (`SKILLS_COMMIT` in the Dockerfile), at `/app/workspace/.claude/skills`. `select_skills.py`:
 - copies only the advisory and diagnostic skills that work from read-only evidence and that some agent uses (9: scheduled-search performance and troubleshooting, search performance, ingestion and HEC, Splunk health, indexes and storage, field extraction and CIM, alerting);
-- drops scripts and other non-Markdown files;
+- drops each skill's `agents/` folder, `evals.json` and scripts (`*.js`, `*.py`, `*.sh`); everything else in the skill folder is kept;
 - strips each skill's `allowed-tools` frontmatter, so no skill can pre-approve a tool.
 
 Skills that need a shell or write files (`splunk-search` via `splunkctl`, the visualization and setup-page builders, Splunk Cloud admin) are left out. Each agent gets its own list (`config.AGENTS[...]["skills"]`).

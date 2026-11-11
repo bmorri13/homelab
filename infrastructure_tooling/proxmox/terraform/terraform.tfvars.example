@@ -8,10 +8,9 @@ proxmox_api_url = "https://your-proxmox-server.example.com:8006/api2/json"
 target_node = "proxmox" # Default node (used if per-VM node not specified)
 
 # Per-VM node overrides (optional - comment out to use default target_node)
-# Available nodes: proxmox (Intel NUC), proxmox2 (Beelink Mini PC)
+# Available nodes: proxmox (Intel NUC), proxmox2 (Beelink Mini PC), proxmox3
 # target_node_splunk            = "proxmox"
 # target_node_github_runner     = "proxmox2"
-# target_node_monitoring_01     = "proxmox"
 # target_node_docker_compose_02 = "proxmox2"
 
 # Storage settings
@@ -19,6 +18,5 @@ disk_storage = "local-lvm" # Your Proxmox storage pool name
 
 # Network settings
 network_bridge = "vmbr0"          # Your network bridge name
-gateway        = "192.168.1.1"    # Your network gateway IP
 dns_servers    = ["8.8.8.8", "8.8.4.4"] # DNS server IPs
 dns_domain     = "home"           # Your local domain

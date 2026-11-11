@@ -14,7 +14,7 @@
         - Revision: HEAD
         - Path: cloudflare-tunnels-helm
         - Cluster URL: https://kubernetes.default.svc
-        - Namesapce: alexprinter
+        - Namespace: alexprinter
 
 - You now have deployed a helm chart that is calling the secret that is stored in Vault successfully
 

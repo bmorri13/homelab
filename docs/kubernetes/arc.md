@@ -37,14 +37,14 @@ KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml helm upgrade --install arc-control
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
   --namespace arc-systems \
   --create-namespace \
-  --version 0.10.1
+  --version 0.15.1
 ```
 
 4. Create the ExternalSecret for the runner:
 ```bash
 KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl create namespace arc-runners
 KUBECONFIG=~/.kube/docker-compose-03-k3s.yaml kubectl apply -f - <<EOF
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: arc-github-token

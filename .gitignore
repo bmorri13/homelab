@@ -13,7 +13,6 @@ credentials.json
 packer-debug.log
 
 # Vault keys and tokens
-vault-keys.json
 *vault-keys.json
 *vault.token
 .vault-token
@@ -22,6 +21,10 @@ vault-keys.json
 .env
 .env.local
 *.local
+
+# Python
+__pycache__/
+*.pyc
 
 # Claude Code files
 .claude/

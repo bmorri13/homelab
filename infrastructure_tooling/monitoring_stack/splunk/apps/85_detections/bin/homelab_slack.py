@@ -14,7 +14,7 @@ import urllib.parse
 
 APP = "85_detections"
 REALM = "homelab_slack"
-# Same card layout and severity scheme as the homelab agents (homelab_agents/app/runner.py).
+# Same card layout and severity scheme as the homelab agents (homelab_agents/image/app/runner.py).
 SEVERITY = {"critical": (":red_circle:", "Critical"), "high": (":large_orange_circle:", "High"),
             "medium": (":large_yellow_circle:", "Warning"), "low": (":large_blue_circle:", "Info")}
 # Result fields shown in the card's field grid, in this order, with their labels.

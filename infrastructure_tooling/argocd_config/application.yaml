@@ -1,8 +1,8 @@
 ---
 # Bootstrap manifest for the argocd-config app.
 #
-# There is no app-of-apps in this repo, so ArgoCD Applications are normally
-# created through the UI and exist nowhere in Git. This one is committed because
+# There is no app-of-apps in this repo, so like the other committed
+# application.yaml files this one is applied by hand. It matters most because
 # it configures ArgoCD itself -- losing it would silently reintroduce the ARC
 # prune loop it exists to prevent.
 #
@@ -19,7 +19,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/bmorri13/homelab
+    repoURL: https://github.com/bmorri13/homelab.git
     targetRevision: HEAD
     path: infrastructure_tooling/argocd_config
   destination:

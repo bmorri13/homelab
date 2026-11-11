@@ -17,7 +17,7 @@ The Vault side is runtime configuration, not managed by Argo CD. To recreate
 it (for example after re-initialising Vault), run as a Vault admin:
 
 ```bash
-vault auth enable -description="k8s-01 service accounts" kubernetes
+vault auth enable -description="k3s-01 service accounts" kubernetes
 vault write auth/kubernetes/config kubernetes_host=https://kubernetes.default.svc:443
 
 vault policy write eso-read - <<'EOF'

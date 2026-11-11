@@ -13,7 +13,7 @@ k3s-01:  falco (DaemonSet) --stdout--> pod log --> OTel DaemonSet --+--> Cribl h
 |---|---|---|
 | VMs: security-tooling-01, github-action-runner, openclaw-claude-01, docker-compose-02, docker-compose-03, splunk-docker-compose-mcp, ubuntu-desktop-01 | `install.sh` (deb, systemd `falco-modern-bpf`) | `config.d/homelab.yaml`, `rules.d/*.yaml` |
 | Proxmox nodes: proxmox, proxmox2, proxmox3 (Debian 13) | `install.sh`, as on the VMs | the same |
-| k3s-01 | Argo CD app `falco-k3s` (`infrastructure_tooling/falco_k3s`) | the same rules, inlined in `values.yaml` as `customRules` |
+| k3s-01 | Argo CD app `falco-k3s` (`infrastructure_tooling/falco_k3s`) | the same config and `rules.d/homelab_exceptions.yaml`, inlined in `values.yaml` as `customRules` (the AI agent rules are only on the VMs) |
 | k3s-01 API audit | `falco-k8saudit` Deployment in the same app, fed by the apiserver audit webhook ([`k3s_audit`](../../k3s_audit/README.md)) | the pinned `k8saudit-rules` set |
 
 ## Install or update a host

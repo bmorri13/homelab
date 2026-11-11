@@ -20,8 +20,8 @@ gha-runner-scale-set:
   # Runner configuration - use this as runs-on value
   runnerScaleSetName: "arc-k3s-cointhieves"
 
-  # One warm runner so a dead listener is visible (see arc_runner_scaleset_daily_news).
-  # Bounded, unlike the bmorri13 scale sets: k3s-01 is a single 4-core node that
+  # One warm runner so a dead listener is visible (see arc_runner_scaleset/values.yaml).
+  # Bounded, unlike the bmorri13 scale set: k3s-01 is a single 4-core node that
   # also runs Vault and ArgoCD, and org repos can queue many jobs at once.
   minRunners: 1
   maxRunners: 3
