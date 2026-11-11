@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 env:
-  PACKER_VERSION: "1.10.0"
+  PACKER_VERSION: "1.16.2"
 
 jobs:
   # One validate cell per template kind. A failure in either cell skips the
