@@ -87,7 +87,7 @@ VALIDATION_SUDO = [re.compile(c) for c in (
     r"(/usr/bin/)?crontab /usr/local/lib/art-validation/work/art-validation\.cron",
     r"(/usr/bin/)?crontab -r",
     r"(/usr/sbin/)?userdel art-validation",
-    r"(/usr/bin/|/bin/)?bash -c history -c # art-validation",
+    r"(/usr/bin/|/bin/)?bash -c '?history -c # art-validation'?",
 )]
 VALIDATION_FALCO = ("ubuntu-desktop-01", "Read sensitive file untrusted", "art-validation-cat /etc/shadow")
 
