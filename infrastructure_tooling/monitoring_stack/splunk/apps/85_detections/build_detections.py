@@ -15,6 +15,11 @@ Windows: most run every 15 minutes over [-20m@m, -5m@m), contiguous and late eno
 for indexing lag. "First seen" detections search their own longer baseline. Each
 detection runs at its own minute in the quarter hour (cron_for) so they don't all
 queue at once.
+
+Three "first seen" detections keep most of their baseline in a KV store lookup that
+an "HL - Baseline: ..." search rebuilds once a day (baseline()), and read raw events
+only from the end of that baseline (since_baseline()). Also writes collections.conf
+and transforms.conf.
 """
 import pathlib
 import zlib
@@ -42,6 +47,36 @@ OFFSETS = [m for m in range(15) if m % 5]
 def cron_for(name):
     m = OFFSETS[zlib.crc32(name.encode()) % len(OFFSETS)]
     return f'{",".join(str(m + q) for q in (0, 15, 30, 45))} * * * *'
+
+
+# "First seen" baselines. Each lookup holds, per key, the last time the key was seen
+# in [-span@d, @d) and baseline_end (that @d), rebuilt by a daily search; the detection
+# then reads raw events only from baseline_end. A key counts as seen before if either
+# part has it, which is the same answer as reading the whole span raw. If the lookup
+# is empty (first deploy, KV store wiped), stale, or ends after the detection window
+# starts, since_baseline falls back to the full span and the lookup is ignored: slower,
+# never blind. Events indexed after the daily rebuild with an older _time are in
+# neither part, so at worst they cause an extra alert, never a missed one.
+B = []
+
+
+def baseline(name, lookup, keys, search, span, cron):
+    B.append(dict(name=name, lookup=lookup, keys=keys, search=search, span=span, cron=cron))
+
+
+def since_baseline(lookup, span):
+    return (f"[| inputlookup {lookup} | stats max(baseline_end) as e "
+            "| appendpipe [| stats count | where count=0] | stats max(e) as e "
+            "| eval e=if(e<=relative_time(now(), \"-20m@m\"), e, null()), "
+            f"earliest=floor(max(coalesce(e, 0), relative_time(now(), \"{span}\"))) | return earliest] ")
+
+
+# After `lookup ... OUTPUT last_seen as baseline_last_seen baseline_end`: in_baseline=1
+# when the key was seen in the span before the window (nested if: no null comparisons).
+def in_baseline(span):
+    return ("| eval in_baseline=if(isnotnull(baseline_last_seen) AND isnotnull(baseline_end), "
+            f"if(baseline_last_seen>=relative_time(now(), \"{span}\") "
+            "AND baseline_end<=relative_time(now(), \"-20m@m\"), 1, 0), 0) ")
 
 
 def det(name, technique, tactic, severity, strategy, search, test, suppress="user,src,object",
@@ -157,28 +192,46 @@ det("HL - Vault permission denied burst",
 
 det("HL - Vault secret read by a new identity",
     "T1555.006", "Credential Access", "medium", "DET0130",
-    "`hl_vault_audit` earliest=-14d@d latest=-5m@m request.operation=read request.path=\"kv/data/*\" "
+    "`hl_vault_audit` " + since_baseline("hl_baseline_vault_reader", "-14d@d")
+    + "latest=-5m@m request.operation=read request.path=\"kv/data/*\" "
     "| eval user='auth.display_name', object='request.path', src='request.remote_address' "
     "| stats count min(_time) as first_seen max(_time) as last_seen latest(src) as src by user object "
     "| where first_seen>=relative_time(now(), \"-20m@m\") "
+    "| lookup hl_baseline_vault_reader user object OUTPUT last_seen as baseline_last_seen baseline_end "
+    + in_baseline("-14d@d") + "| where in_baseline=0 "
     "| eval host=\"vault\", detail=\"first read of this secret by this identity in 14 days\" "
     "| convert ctime(first_seen) ctime(last_seen) ",
     "read a kv secret with an identity that never read it before",
     suppress="user,object", period="24h",
     description="An identity read a KV secret it had not read in the previous 14 days (ESO and AppRole clients read the same paths on a loop, so a new pair stands out).")
 
+baseline("HL - Baseline: Vault secret readers", "hl_baseline_vault_reader", ["user", "object"],
+         "`hl_vault_audit` request.operation=read request.path=\"kv/data/*\" "
+         "| eval user='auth.display_name', object='request.path' "
+         "| stats max(_time) as last_seen by user object ",
+         "-14d@d", "23 0 * * *")
+
 # ---- Hosts: logins and commands --------------------------------------------------------
 det("HL - SSH login from a new source or to a new host",
     "T1021.004", "Lateral Movement", "medium", "DET0596",
-    "index=infra sourcetype=linux_secure eventtype=homelab_tailscale_ssh_login earliest=-30d@d latest=-5m@m "
+    "index=infra sourcetype=linux_secure eventtype=homelab_tailscale_ssh_login "
+    + since_baseline("hl_baseline_ssh_login", "-30d@d") + "latest=-5m@m "
     "| eval who=coalesce(ts_user, user) "
     "| stats count min(_time) as first_seen max(_time) as last_seen by who dest src user "
     "| where first_seen>=relative_time(now(), \"-20m@m\") "
+    "| lookup hl_baseline_ssh_login who dest src user OUTPUT last_seen as baseline_last_seen baseline_end "
+    + in_baseline("-30d@d") + "| where in_baseline=0 "
     "| eval host=dest, object=\"local user \".user, user=who, detail=\"first Tailscale SSH login for this identity, host and source in 30 days\" "
     "| convert ctime(first_seen) ctime(last_seen) ",
     "Tailscale SSH to a host you haven't logged in to for 30 days (or from a new device)",
     suppress="user,host,src", period="24h",
     description="A Tailscale SSH login whose identity, target host and source device were not seen together in the previous 30 days.")
+
+baseline("HL - Baseline: Tailscale SSH logins", "hl_baseline_ssh_login", ["who", "dest", "src", "user"],
+         "index=infra sourcetype=linux_secure eventtype=homelab_tailscale_ssh_login "
+         "| eval who=coalesce(ts_user, user) "
+         "| stats max(_time) as last_seen by who dest src user ",
+         "-30d@d", "26 0 * * *")
 
 det("HL - Proxmox login failures",
     "T1110.001", "Credential Access", "high", "DET0551",
@@ -319,10 +372,14 @@ det("HL - Splunk local login",
 # ---- MCP gateway ---------------------------------------------------------------------------
 det("HL - MCP gateway write tool, denial or new client",
     "T1078", "Initial Access", "medium", "DET0927",
-    "index=audit sourcetype=toolhive:vmcp:audit earliest=-30d@d latest=-5m@m "
+    "index=audit sourcetype=toolhive:vmcp:audit " + since_baseline("hl_baseline_mcp_client", "-30d@d")
+    + "latest=-5m@m "
     "| eval user=coalesce('subjects.user_id', \"unknown\"), tool='target.name', src=coalesce('source.value', \"unknown\") "
     "| eventstats min(_time) as user_first by user "
     "| where _time>=relative_time(now(), \"-20m@m\") "
+    # A client in the baseline was seen before the window: any user_first before it will do.
+    "| lookup hl_baseline_mcp_client user OUTPUT last_seen as baseline_last_seen baseline_end "
+    + in_baseline("-30d@d") + "| eval user_first=if(in_baseline=1, baseline_last_seen, user_first) "
     "| eval reason=case(outcome!=\"success\", \"outcome=\".outcome, "
     "match(tool, \"(?i)(set|update|delete|create|add|remove|edit|block|unblock|reboot|toggle|apply|restart|upgrade|authorize)\"), \"write-capable tool\", "
     "user_first>=relative_time(now(), \"-20m@m\"), \"first call from this client in 30 days\") "
@@ -334,11 +391,16 @@ det("HL - MCP gateway write tool, denial or new client",
     suppress="user,object", period="1h",
     description="Through the MCP gateway: a call that was denied or failed authorization, a write-capable tool (pipeline, notebook, firewall or device changes), or the first call from a client identity in 30 days. ATT&CK v20 has no detection strategy for agent tool abuse; DET0927 (AI-enabled exfiltration, SaaS analytic) is the closest.")
 
+baseline("HL - Baseline: MCP gateway clients", "hl_baseline_mcp_client", ["user"],
+         "index=audit sourcetype=toolhive:vmcp:audit "
+         "| eval user=coalesce('subjects.user_id', \"unknown\") "
+         "| stats max(_time) as last_seen by user ",
+         "-30d@d", "21 0 * * *")
+
 # ---- Telemetry health -------------------------------------------------------------------------
 det("HL - Host stopped sending telemetry",
     "T1685", "Defense Impairment", "high", "DET0497",
-    "| mstats count(system.uptime) as c where index=metrics earliest=-24h latest=now span=1m by host "
-    "| stats max(_time) as last_seen min(_time) as first_seen by host "
+    "| mstats latest_time(system.uptime) as last_seen earliest_time(system.uptime) as first_seen where index=metrics earliest=-24h latest=now by host "
     "| where last_seen<relative_time(now(), \"-15m\") "
     "| eval user=\"\", src=\"\", object=\"otel agent\", count=round((now()-last_seen)/60), detail=\"no host metrics for \".count.\" minutes\" "
     "| convert ctime(first_seen) ctime(last_seen) ",
@@ -390,8 +452,7 @@ det("HL - Detection search failing",
 # node's processes.
 det("HL - Falco not running",
     "T1685", "Defense Impairment", "high", "DET0497",
-    '| mstats count(process.uptime) as c where index=metrics process.executable.name="falco" earliest=-24h latest=now span=1m by host '
-    "| stats max(_time) as last_seen min(_time) as first_seen by host "
+    '| mstats latest_time(process.uptime) as last_seen earliest_time(process.uptime) as first_seen where index=metrics process.executable.name="falco" earliest=-24h latest=now by host '
     "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-10m by host] "
     '| where last_seen<relative_time(now(), "-10m") AND host_metrics>0 '
     '| eval user="", src="", object="falco", count=round((now()-last_seen)/60), detail="falco not running for ".count." minutes; the host is still sending metrics" '
@@ -447,6 +508,29 @@ for d in D:
         *COMMON,
         "",
     ]
-path = pathlib.Path(__file__).parent / "default/savedsearches.conf"
-path.write_text("\n".join(out))
-print(f"wrote {path} ({len(D)} detections)")
+# The baseline rebuilds: not detections (no alert), but named HL - so that
+# "HL - Detection search failing" reports them when they error.
+collections = ["# Generated by build_detections.py; edit that, not this file.",
+               "# KV store baselines for the \"first seen\" HL - detections.", ""]
+transforms = list(collections)
+for b in B:
+    out += [
+        f'[{b["name"]}]',
+        f'description = Rebuilds the {b["lookup"]} KV store lookup once a day: the last time each '
+        f'{", ".join(b["keys"])} was seen in [{b["span"]}, @d). The "first seen" detection reads it instead '
+        'of re-reading the whole span every 15 minutes, and reads raw events itself when it is empty or stale.',
+        f'search = {conf_escape(b["search"].strip())} | eval baseline_end=relative_time(now(), "@d") '
+        f'| outputlookup {b["lookup"]}',
+        f'dispatch.earliest_time = {b["span"]}',
+        "dispatch.latest_time = @d",
+        f'cron_schedule = {b["cron"]}',
+        "enableSched = 1",
+        "",
+    ]
+    collections += [f'[{b["lookup"]}]', "field.last_seen = number", "field.baseline_end = number", ""]
+    transforms += [f'[{b["lookup"]}]', "external_type = kvstore", f'collection = {b["lookup"]}',
+                   f'fields_list = {", ".join(b["keys"] + ["last_seen", "baseline_end"])}', ""]
+here = pathlib.Path(__file__).parent
+for name, lines in (("savedsearches", out), ("collections", collections), ("transforms", transforms)):
+    (here / f"default/{name}.conf").write_text("\n".join(lines))
+print(f"wrote default/savedsearches.conf ({len(D)} detections, {len(B)} baselines), collections.conf, transforms.conf")
