@@ -93,6 +93,9 @@ spec:
                   umask 077
                   out="/backup/authentik-$(date -u +%Y%m%dT%H%M%SZ).dump"
                   trap 'rm -f "$out.tmp"' EXIT
+                  # A new pod can be refused for a few seconds, until the database's
+                  # NetworkPolicy has picked up its address.
+                  for _ in $(seq 1 30); do pg_isready --host=authentik-postgres --quiet && break; sleep 2; done
                   pg_dump --host=authentik-postgres --username=authentik --dbname=authentik \
                     --format=custom --file="$out.tmp"
                   pg_restore --list "$out.tmp" > /dev/null
