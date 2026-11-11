@@ -31,6 +31,14 @@ wait_ready() {
     done
     return 1
 }
+# The OTel collector's k8s_events receiver doesn't recover when its watch fails
+# during an API restart (it logs "Watch channel closed unexpectedly" and stops),
+# so Kubernetes events stop reaching Splunk until the collector restarts.
+restart_collector() {
+    k3s kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent >/dev/null 2>&1 &&
+        echo "restarted the otel collector (k8s_events)" ||
+        echo "could not restart the otel collector; restart it so Kubernetes events resume" >&2
+}
 
 echo "restarting k3s with audit config"
 systemctl restart k3s
@@ -39,15 +47,13 @@ if ! wait_ready; then
     journalctl -u k3s -n 40 --no-pager | grep -i -E "audit|error" >&2 || true
     rm -f /etc/rancher/k3s/config.yaml.d/audit.yaml
     systemctl restart k3s
-    wait_ready && echo "rolled back: k3s is up without auditing" >&2
+    if wait_ready; then
+        echo "rolled back: k3s is up without auditing" >&2
+        restart_collector
+    fi
     exit 1
 fi
-# The OTel collector's k8s_events receiver doesn't recover when its watch fails
-# during an API restart (it logs "Watch channel closed unexpectedly" and stops),
-# so Kubernetes events stop reaching Splunk until the collector restarts.
-k3s kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent >/dev/null 2>&1 &&
-    echo "restarted the otel collector (k8s_events)" ||
-    echo "could not restart the otel collector; restart it so Kubernetes events resume" >&2
+restart_collector
 sleep 5
 if [[ -s /var/log/kubernetes/audit/audit.log ]]; then
     echo "k3s ready; audit log is being written"

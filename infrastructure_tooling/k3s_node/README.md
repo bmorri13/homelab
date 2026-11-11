@@ -61,6 +61,7 @@ Kubernetes moves one minor version at a time, and k3s can't be downgraded, so ea
    - `https://splunk.bmosan.com` and `https://cribl.bmosan.com` reach Authentik.
    - The MCP gateway tools answer.
    - `index=audit` and the k3s OTel collector are still sending.
+   - Kubernetes events still arrive: `index=k8s sourcetype=kube:events earliest=-15m` returns events from after the restart. `upgrade-k3s.sh` restarts the collector for this; if it said it couldn't, run `k3s kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent`.
    - AdGuard answers DNS on 192.168.4.98.
 6. **Delete the snapshot** once it has run cleanly for a day (`qm delsnapshot 103 <name>`). A thin-LVM snapshot grows with every write.
 
