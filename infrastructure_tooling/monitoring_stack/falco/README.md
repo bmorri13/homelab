@@ -1,6 +1,6 @@
 # Falco
 
-Falco 0.45.1 runtime security: kernel syscalls observed through the modern eBPF probe, matched against the default `falco_rules` set. It only detects; nothing is blocked.
+Falco runtime security: kernel syscalls observed through the modern eBPF probe, matched against the default `falco_rules` set. It only detects; nothing is blocked.
 
 Alerts become OCSF Detection Findings in Splunk `index=security`. They carry MITRE ATT&CK techniques from the rule tags and severity from the Falco priority.
 
@@ -27,7 +27,7 @@ The host needs `rsync` (`apt-get install rsync`). Don't use `scp -r` here: once 
 
 `install.sh` sets up the host as follows:
 
-- **Package:** adds Falco's signed apt repository, then installs `falco=0.45.1` and holds it at that version.
+- **Package:** adds Falco's signed apt repository, then installs `falco=$VERSION` (pinned in `install.sh`) and holds it at that version. The repository is GPG-signed, so there is no hash to update: Renovate opens a PR for each new Falco release, and merging changes nothing until `install.sh` is re-run on each host.
 - **Driver:** `modern_ebpf`, so there is no kernel module. It needs kernel 5.8+ with BTF, which every homelab host has.
 - **Updates:** `falcoctl` artifact auto-updates are off, so the rules in effect are the ones in this repo.
 - **Validation:** runs `falco --dry-run` before restarting the service.

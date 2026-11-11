@@ -9,6 +9,11 @@
       "/\\.yml$/"
     ]
   },
+  "argocd": {
+    "managerFilePatterns": [
+      "/(^|/)application\\.yaml$/"
+    ]
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -35,6 +40,57 @@
       "depNameTemplate": "hashicorp/packer",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Host OTel agent (monitoring_stack/splunk/otel-agent/install.sh). SHA256 sits beside VERSION and a regex manager can't compute it, so this waits for Dependency Dashboard approval: see the packageRule for host pins with a checksum.",
+      "managerFilePatterns": [
+        "/^infrastructure_tooling/monitoring_stack/splunk/otel-agent/install\\.sh$/"
+      ],
+      "matchStrings": [
+        "\\nVERSION=(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "open-telemetry/opentelemetry-collector-releases",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Host Falco (monitoring_stack/falco/install.sh). Installed from Falco's GPG-signed apt repository as falco=<VERSION>, so a version-only PR is complete. Merging changes nothing until install.sh is re-run on each host.",
+      "managerFilePatterns": [
+        "/^infrastructure_tooling/monitoring_stack/falco/install\\.sh$/"
+      ],
+      "matchStrings": [
+        "\\nVERSION=(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "falcosecurity/falco",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "kube-bench on k3s-01 (kube_bench/install.sh). SHA256 sits beside VERSION, so this waits for Dependency Dashboard approval.",
+      "managerFilePatterns": [
+        "/^infrastructure_tooling/kube_bench/install\\.sh$/"
+      ],
+      "matchStrings": [
+        "\\nVERSION=(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "aquasecurity/kube-bench",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "k3s on k3s-01 (k3s_node/k3s-version). K3S_SHA256 sits beside it, and upgrade-k3s.sh is run by hand: patch releases within the running minor only, on Dependency Dashboard approval. Release candidates don't match the versioning regex, so they're ignored.",
+      "managerFilePatterns": [
+        "/^infrastructure_tooling/k3s_node/k3s-version$/"
+      ],
+      "matchStrings": [
+        "\\nK3S_VERSION=(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+k3s(?<build>\\d+)$"
     }
   ],
   "packageRules": [
@@ -126,6 +182,56 @@
         "registry.k8s.io/kubectl"
       ],
       "allowedVersions": "<1.37.0"
+    },
+    {
+      "description": "Argo CD Applications that sync a directory of this repo (targetRevision HEAD) have no version to track; their charts and images are tracked through Chart.yaml and values.yaml instead.",
+      "matchManagers": [
+        "argocd"
+      ],
+      "matchDatasources": [
+        "git-tags"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Upstream charts pinned in Argo CD Applications (cert-manager, External Secrets, Vault). There is no app-of-apps, so merging a bump does nothing until the application.yaml is applied (and synced, for ESO and Vault): read the upgrade notes at the top of each file first. Majors wait for Dependency Dashboard approval.",
+      "matchManagers": [
+        "argocd"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "cert-manager upgrades one minor version at a time (see cert_manager/application.yaml), so each minor gets its own PR instead of one jumping straight to the newest.",
+      "matchManagers": [
+        "argocd"
+      ],
+      "matchPackageNames": [
+        "cert-manager"
+      ],
+      "separateMultipleMinor": true
+    },
+    {
+      "description": "Host pins with a hard-coded SHA-256 beside the version (OTel host agent, kube-bench, k3s). Renovate can only change the version, and the installers fail closed on a hash mismatch, so a PR on its own can't be merged. Approve it on the Dependency Dashboard when you are ready to upgrade, then push the new hash to the PR branch before merging: the steps are next to each pin.",
+      "matchFileNames": [
+        "infrastructure_tooling/monitoring_stack/splunk/otel-agent/install.sh",
+        "infrastructure_tooling/kube_bench/install.sh",
+        "infrastructure_tooling/k3s_node/k3s-version"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "k3s moves one minor at a time by hand with upgrade-k3s.sh (see k3s_node/README.md), and other pins (kubectl) are capped to the running minor. Only patch releases of the running minor are offered.",
+      "matchPackageNames": [
+        "k3s-io/k3s"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
     },
     {
       "description": "Chainguard rebuilds its latest images about daily, so each digest would otherwise open a new PR right after the last one merges. Check them weekly, Mondays before 06:00 UTC.",
