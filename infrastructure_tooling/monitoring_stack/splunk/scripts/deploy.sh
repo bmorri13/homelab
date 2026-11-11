@@ -65,11 +65,20 @@ sync_apps() {
         # Compare content only (no -t), and set ownership in the copy itself, so an
         # unchanged app reports nothing and does not trigger a splunkd restart.
         # ._* are macOS AppleDouble files from copying off a Mac; splunkd tries to
-        # parse ._*.conf as config.
+        # parse ._*.conf as config. build_*.py generate files under default/ and only
+        # run in the repo, never in Splunk.
         changes+=$(rsync -rlp --chown="$owner" --delete --checksum --itemize-changes \
             --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
-            --exclude '._*' \
+            --exclude '._*' --exclude '/build_*.py' --exclude '/.gitignore' --exclude '__pycache__/' \
             "$app" "$DATA_DIR/etc/apps/$name/")
+        # Until 2026-11-10 the generators and .gitignore were copied in too, and rsync
+        # never deletes excluded files; remove those copies.
+        for f in "$app"build_*.py "$app".gitignore; do
+            if [[ -e "$DATA_DIR/etc/apps/$name/$(basename "$f")" ]]; then
+                rm -f "$DATA_DIR/etc/apps/$name/$(basename "$f")"
+                echo "removed $name/$(basename "$f")"
+            fi
+        done
     done
     if [[ -n "$changes" ]]; then echo "apps changed:"; echo "$changes"; else echo "apps unchanged"; fi
 }
