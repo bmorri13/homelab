@@ -7,7 +7,7 @@
 #   - validated with --dry-run before the service is restarted
 set -euo pipefail
 
-VERSION=0.45.1
+VERSION=0.45.2
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 cd "$(dirname "$0")"
 
