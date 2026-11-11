@@ -77,9 +77,6 @@ jobs:
           dns_servers    = ["8.8.8.8", "8.8.4.4"]
           dns_domain     = "home"
 
-          # SSH public keys for cloud-init
-          ssh_public_keys = "${{ secrets.SSH_PUBLIC_KEYS }}"
-
           # VM password
           vm_password = "${{ secrets.SSH_PASSWORD }}"
           EOF
