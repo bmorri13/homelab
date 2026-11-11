@@ -77,11 +77,12 @@ mcpServers:
       description: Read-only view of the home UniFi network (clients, devices, events).
     # UniFi Network MCP (github.com/sirkirby/unifi-mcp), read-only. Three
     # independent layers keep it read-only: Cedar only admits readOnlyHint
-    # tools (all 101 reads are annotated; the 106 create/update/delete tools
-    # are not), the server's own policy gates refuse every mutation, and the
-    # UniFi account it uses should have the "View Only" role.
-    # Disabled until its credentials exist in Vault at kv/apiary/shared/unifi-network (set them in Apiary).
-    enabled: false
+    # tools (all 98 reads are annotated; the 106 create/update/delete tools
+    # are not, and an authz.extraPolicies forbid keeps it that way), the
+    # server's own policy gates refuse every mutation, and the UniFi account
+    # it uses has the "View Only" role. Credentials: Vault
+    # kv/apiary/shared/unifi-network (set them in Apiary). See README "UniFi Network".
+    enabled: true
     # Only the UniFi controller, HTTPS (REST + the events websocket).
     egress:
       - cidr: 192.168.1.1/32
@@ -482,11 +483,10 @@ externalSecrets:
       template:
         .dockerconfigjson: '{"auths":{"ghcr.io":{"auth":"{{ printf "%s:%s" .username .token | b64enc }}"}}}'
     # UniFi local account for unifi-network (create it with the "View Only"
-    # role). Set it in Apiary, then enable this and the server together.
+    # role). Set it in Apiary before enabling: an ExternalSecret with no
+    # source turns the ArgoCD app Degraded until the entry exists.
     unifi-network-mcp:
-      # Off until the Vault entry exists (an ExternalSecret with no source
-      # turns the ArgoCD app Degraded). Apiary lists it either way.
-      enabled: false
+      enabled: true
       server: unifi-network
       title: UniFi local account
       description: >-
@@ -741,6 +741,14 @@ authz:
       forbid(principal, action == Action::"call_tool", resource)
       when { resource has name && resource.name like "drawio_*" &&
       !(resource in [Tool::"drawio_create_diagram", Tool::"drawio_search_shapes", Tool::"drawio_get_drawio_reference"]) };
+    # UniFi: read-only tools only, for every caller. Without this a
+    # readOnlyTools, writeTools, agent or per-client entry could admit one of
+    # its write tools; with it, only tools the pinned server annotates
+    # readOnlyHint=true are callable.
+    - >-
+      forbid(principal, action == Action::"call_tool", resource)
+      when { resource has name && resource.name like "unifi-network_*" &&
+      !(resource has readOnlyHint && resource.readOnlyHint == true) };
 
 # ---------------------------------------------------------------------------
 # Ingress: Traefik (hostNetwork on k3s-01), tailnet-only.
