@@ -66,6 +66,11 @@ jobs:
     needs: terraform-validate
     if: github.event_name != 'pull_request'
     environment: prod
+    # Same group as terraform-apply.yml: the plan takes the state lock, so never
+    # run it alongside an apply.
+    concurrency:
+      group: terraform-proxmox
+      cancel-in-progress: false
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
