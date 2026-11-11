@@ -73,4 +73,6 @@ variable "target_node_docker_compose_02" {
   description = "Proxmox node for docker-compose-02 VM (overrides target_node)"
   type        = string
   default     = null
-}# gate check for #357, do not merge
+}
+
+# gate check for #357, do not merge
