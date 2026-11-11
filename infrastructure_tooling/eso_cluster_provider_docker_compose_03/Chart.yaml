@@ -1,0 +1,4 @@
+apiVersion: v2
+name: external-secrets-clusterstore-docker-compose-03
+version: 0.1.0
+description: ClusterSecretStore for the secondary cluster (docker-compose-03-k3s), applied by hand
