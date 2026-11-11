@@ -10,8 +10,8 @@
 Runs Cribl's own preview, so the result is what the Worker would do. The repo
 pipelines are loaded as temporary pipelines (zz_test_*) on the Leader and deleted
 afterwards; nothing is committed or deployed. Run on security-tooling-01 as root
-from the stack directory. Exits 1 if any must-mask line keeps a generated value
-or any must-keep line changes.
+from the stack directory. Exits 1 if any must-mask line keeps a generated value,
+any must-keep line changes, or a metric event (index=metrics) changes.
 """
 import base64
 import json
@@ -84,10 +84,11 @@ class Cribl:
         with urllib.request.urlopen(req, context=self.ctx, timeout=120) as resp:  # nosemgrep: dynamic-urllib-use-detected
             return json.load(resp)
 
-    def preview(self, pipeline, raws):
+    def preview(self, pipeline, raws, index=None):
         out = self.call("POST", f"/m/{GROUP}/preview", {
             "mode": "pipe", "pipelineId": pipeline, "level": 3,
-            "events": [{"_raw": r, "_time": 0, "__id": i} for i, r in enumerate(raws)]})
+            "events": [{"_raw": r, "_time": 0, "__id": i, **({"index": index} if index else {})}
+                       for i, r in enumerate(raws)]})
         return [e["_raw"] for e in sorted(out["items"], key=lambda e: e.get("__id", 0))]
 
 
@@ -171,7 +172,16 @@ def main():
             if before != after:
                 failures += 1
                 print(f"CHANGED {label}: {after[:200]!r}")
-        print(f"{len(must_mask)} must-mask, {len(must_keep)} must-keep, {failures} failed")
+        # Metric data points (index=metrics, set by hec_in) skip the masks; the same
+        # line on an event index must still be masked.
+        label, text, values = must_mask[0]
+        if cribl.preview(pipeline, [text], "metrics")[0] != text:
+            failures += 1
+            print(f"CHANGED metric event: {label}")
+        if any(v in cribl.preview(pipeline, [text], "infra")[0] for v in values):
+            failures += 1
+            print(f"MISSED  {label} with index=infra")
+        print(f"{len(must_mask)} must-mask, {len(must_keep)} must-keep, 2 index checks, {failures} failed")
         return 1 if failures else 0
     finally:
         for pid in reversed(temp):  # splunk_out chains to secret_mask

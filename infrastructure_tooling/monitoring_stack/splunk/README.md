@@ -124,7 +124,7 @@ Cribl runs distributed: a Leader container (`cribl`) and one Worker container (`
    - Do not edit `secret_mask/conf.yml` by hand: change the version in the script and rerun it.
    - To make a rule case-insensitive, the script removes inline flags, which Cribl regexes don't support. A rule may therefore mask slightly more than gitleaks would report.
 
-Masked values become `[REDACTED]` or `[REDACTED <rule>]`. Indexed fields are not masked.
+Masked values become `[REDACTED]` or `[REDACTED <rule>]`. Indexed fields are not masked. Metric data points (`index=metrics`, set only by `hec_in`'s first rule) skip both stages: the metric index stores no `_raw`.
 
 The `85_secret_leaks` app is the backstop. Its hourly alert, *Secret leak - unmasked credential in indexed events*, looks for high-confidence credential formats that still reached Splunk unmasked. It reports the format, index, sourcetype and host, never the value, and appears under Triggered Alerts. If it fires:
 1. Rotate the credential.
