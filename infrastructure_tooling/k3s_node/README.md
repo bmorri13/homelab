@@ -10,6 +10,7 @@ What k3s-01 needs on the host itself, which Argo CD can't apply, and how k3s is 
 | `k3s-version` | | The k3s release and its binary's SHA-256, for `upgrade-k3s.sh` |
 | `k3s-hardening.conf` | `/etc/systemd/system/k3s.service.d/10-hardening.conf` | CIS 1.1.20: sets the server's PKI certificates to 600 every time k3s starts (k3s writes them 644, and again when it rotates them) |
 | `default-serviceaccounts.sh` | (run by `install.sh`) | CIS 5.1.5: sets `automountServiceAccountToken: false` on every namespace's `default` ServiceAccount |
+| (package) `nfs-common` | `apt-get install -y nfs-common` | The kubelet mounts the Authentik database backup volume over NFS (`authentik` chart, `postgres.backup`) |
 
 The API audit settings are separate: `../k3s_audit`.
 

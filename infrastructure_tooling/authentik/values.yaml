@@ -70,20 +70,22 @@ postgres:
   # the Splunk SAML signing key, password hashes and MFA secrets: read "Backup and
   # restore" in README.md before choosing a destination.
   backup:
-    enabled: false
+    enabled: true
     schedule: "45 2 * * *"
     keep: 7
     # pvc: a second local-path volume on k3s-01. Survives database corruption and
     # mistakes, not the loss of the node or its disk.
     # nfs: a PersistentVolume on an NFS export (server and path below). Survives the
     # node; anyone who can read the export can read the dumps.
-    destination: pvc
+    destination: nfs
     pvc:
       storageClass: local-path
       size: 2Gi
     nfs:
-      server: ""
-      path: ""
+      # The Unraid share that also holds the Splunk config backups (Splunk README,
+      # "Unraid NFS share"), in its own directory, mode 700.
+      server: 192.168.1.227
+      path: /mnt/user/splunk/authentik
       size: 2Gi
     activeDeadlineSeconds: 900
     resources:

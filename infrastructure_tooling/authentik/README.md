@@ -126,7 +126,7 @@ The blueprints bring back the session length, the MFA requirement, the Cribl pro
 
 `postgres.backup.enabled: true` adds a CronJob (02:45 UTC) that runs `pg_dump --format=custom` of the `authentik` database with the database's own image (`postgres.image`), so the client always matches the server and Renovate moves both. It reads the password from `authentik-credentials`, writes `authentik-<UTC time>.dump` (mode 600) under a temporary name and renames it once `pg_restore --list` can read it, keeps the newest `keep` (7), and exits non-zero on any failure. It runs as the image's `postgres` user with a read-only root filesystem and no capabilities, and its NetworkPolicy lets it reach only DNS and the database.
 
-The dump holds the SAML signing key, password hashes and MFA secrets, so where it lands is the decision. `postgres.backup.destination`:
+The dump holds the SAML signing key, password hashes and MFA secrets, so where it lands is the decision. It is enabled with `nfs`: the dumps go to `authentik/` (mode 700) on the Unraid `splunk` share, next to the Splunk config backups, and that share's export rules decide who else can read them (Splunk README, "Unraid NFS share"). `postgres.backup.destination`:
 
 | Destination | Survives | Doesn't survive | Notes |
 |---|---|---|---|
