@@ -34,7 +34,6 @@ Setup guides, moved out of this README into [`docs/`](docs/README.md):
   - [Vault](docs/kubernetes/vault.md)
   - [External Secrets Operator](docs/kubernetes/external-secrets.md)
   - [Cert Manager](docs/kubernetes/cert-manager.md)
-  - [MetalLB](docs/kubernetes/metallb.md)
   - [Core infrastructure ingress](docs/kubernetes/ingress.md)
   - [GitHub Actions Runner Controller (ARC)](docs/kubernetes/arc.md)
 - [Secondary K3s cluster (docker-compose-03-k3s)](docs/secondary-cluster.md)
