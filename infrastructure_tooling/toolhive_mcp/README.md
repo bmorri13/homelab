@@ -20,6 +20,7 @@ vMCP "homelab"  (VirtualMCPServer, Service vmcp-homelab:4483, path /mcp)
 MCPServer toolhive-docs (proxy runner → server pod)
 MCPServer cribl (proxy runner → login shim → https://192.168.4.11:9000/api/v1/mcp)
 MCPServer argocd (proxy runner → server pod → https://argocd-server.argocd.svc.cluster.local)
+MCPServer unifi-network (proxy runner → server pod → https://unifi.local, the UniFi gateway)
 MCPRemoteProxy excalidraw (proxy pod → https://mcp.excalidraw.com/mcp)
 MCPRemoteProxy drawio (proxy pod → https://mcp.draw.io/mcp)
 MCPRemoteProxy splunk (proxy pod → https://192.168.4.11:8089/services/mcp)
@@ -490,6 +491,84 @@ Then restart the server (`kubectl -n toolhive-mcp rollout restart sts argocd`)
 once the Secret has updated. Old tokens stay valid until they expire; list and
 revoke them in the Argo CD UI under Settings > Accounts > mcp-gateway.
 
+## UniFi Network
+
+**UniFi Network** (`mcpServers.unifi-network`) is the UniFi Network MCP server
+from `sirkirby/unifi-mcp` (`ghcr.io/sirkirby/unifi-network-mcp`, pinned by
+digest). It runs over stdio behind the proxy runner, so it opens no listener of
+its own, and logs in to the UniFi OS gateway at `unifi.local` (a `hostAliases`
+entry) over HTTPS; its egress policy allows only that address on 443. It
+registers every tool by name (`UNIFI_TOOL_REGISTRATION_MODE=eager`) with the
+`unifi_execute`/`unifi_batch` meta-tools off, so Cedar sees each real tool.
+Callers get its 98 read tools (`unifi-network_unifi_list_clients`,
+`..._list_devices`, `..._list_events`, `..._get_network_stats`, ...):
+clients, devices and radios, networks and WLANs, firewall, NAT, routing, DNS,
+VPN and QoS config, stats, DPI, events and alarms. Passwords, keys and PSKs are
+redacted from responses (`UNIFI_NETWORK_REDACT_SENSITIVE_FIELDS`); hotspot
+voucher codes are not.
+
+It is read-only three times over:
+
+- **Cedar:** only tools the server annotates `readOnlyHint: true` are callable.
+  All 98 reads are; the 106 create/update/delete tools are not. An
+  `authz.extraPolicies` `forbid` denies every `unifi-network_*` tool without
+  that annotation for every caller, so a `writeTools`, `readOnlyTools`, agent
+  or per-client entry can't admit one by mistake.
+- **The server's own policy gates:** `UNIFI_POLICY_NETWORK_CREATE/UPDATE/DELETE=false`
+  refuse every mutation at call time, even with `confirm: true`. Upstream
+  requires every tool not annotated read-only to declare a permission action,
+  so none can skip the gate.
+- **The UniFi account:** a local UniFi OS account with the **View Only** role
+  and local access only. The controller refuses writes from it whatever the
+  layers above do.
+
+The clients in `auth.clients` can use it. The agents can't: their allowlists
+don't name any `unifi-network_*` tool.
+
+The tool annotations were checked against the pinned version's source
+(`network/v0.45.0`; the image's provenance names that commit). Before bumping
+the image, check again: the read-only rule trusts the server's own
+annotations. The tag's `apps/network/src/unifi_network_mcp/tools_manifest.json`
+lists every tool with its `readOnlyHint` and permission action (its
+`unifi_tool_index`, `unifi_batch_status` and `unifi_get_support_bundle` are
+meta-tools, which aren't registered here).
+
+The account lives in Vault at `kv/apiary/shared/unifi-network`, fields
+`username`/`password`. Set or rotate it in Apiary (UniFi Network → UniFi local
+account). To rotate, change the password in UniFi OS (Admins & Users), save it in
+Apiary, then force the sync and restart the server:
+
+```bash
+kubectl -n toolhive-mcp annotate externalsecret unifi-network-mcp force-sync=$(date +%s) --overwrite
+kubectl -n toolhive-mcp rollout restart sts unifi-network
+```
+
+The gateway's cert is self-signed (CN `unifi.local`); the server trusts exactly
+that cert, copied to `files/unifi-controller-ca.crt`. **It expires
+2027-06-02.** When UniFi OS renews it (or you replace it), copy the new one
+over that file and merge, then restart the server as above. To fetch it from a
+machine on the LAN:
+
+```bash
+openssl s_client -connect 192.168.1.1:443 -servername unifi.local </dev/null 2>/dev/null |
+  openssl x509 > infrastructure_tooling/toolhive_mcp/files/unifi-controller-ca.crt
+openssl x509 -in infrastructure_tooling/toolhive_mcp/files/unifi-controller-ca.crt -noout -subject -enddate
+```
+
+Check the subject is still `CN=unifi.local` (the server verifies that name).
+
+Troubleshooting:
+
+- **No `unifi-network_*` tools:** check the ExternalSecret synced
+  (`kubectl -n toolhive-mcp get externalsecret unifi-network-mcp`) and the
+  server is up (`kubectl -n toolhive-mcp get mcpserver unifi-network`; logs:
+  `kubectl -n toolhive-mcp logs sts/unifi-network`).
+- **Login or TLS errors in its logs:** a wrong password, or the account lost
+  local access; or the gateway's cert changed (replace the pinned file).
+- **`... is disabled by policy`:** a write tool reached the server. That is the
+  second layer working; Cedar should have refused it first, so check the
+  `authz` entries.
+
 ## Removing / updating / stopping a server
 
 - **Remove:** delete its `mcpServers` entry (and any `externalSecrets` entry)
@@ -572,6 +651,8 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 | cribl login shim | 10m / 200m | 32Mi / 128Mi | ~6m, ~18Mi |
 | argocd proxy runner | operator default | operator default | not measured yet |
 | argocd server | 10m / 300m | 64Mi / 256Mi | not measured yet |
+| unifi-network proxy runner | operator default | operator default | not measured yet |
+| unifi-network server | 20m / 500m | 96Mi / 384Mi | not measured yet |
 
 ## Upgrading ToolHive
 
