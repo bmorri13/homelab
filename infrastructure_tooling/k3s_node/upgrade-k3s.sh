@@ -3,9 +3,10 @@
 # this directory, after taking a Proxmox snapshot of the VM (README.md): k3s can't
 # be downgraded, so the snapshot is the rollback.
 #
-# Replaces the k3s binary and restarts k3s. Running containers keep running; the API
-# is down for a minute or so, and the bundled components (Traefik, CoreDNS,
-# metrics-server, local-path) then roll to the versions this release ships.
+# Replaces the k3s binary (keeping only the one it replaces), restarts k3s, then
+# restarts the OTel collector. Running containers keep running; the API is down for
+# a minute or so, and the bundled components (Traefik, CoreDNS, metrics-server,
+# local-path) then roll to the versions this release ships.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 cd "$(dirname "$0")"
@@ -45,4 +46,11 @@ done
 k3s kubectl wait node/"$(hostname)" --for=jsonpath='{.status.nodeInfo.kubeletVersion}'="$K3S_VERSION" --timeout=10s
 k3s kubectl wait node/"$(hostname)" --for=condition=Ready --timeout=300s
 k3s kubectl get node -o wide
+# The OTel collector's k8s_events receiver stops for good when the API restarts
+# under it (../otel_collector_k3s/README.md), as ../k3s_audit/install.sh also handles.
+k3s kubectl -n otel-collector rollout restart ds/otel-collector-opentelemetry-collector-agent >/dev/null 2>&1 &&
+    echo "restarted the otel collector (k8s_events)" ||
+    echo "could not restart the otel collector; restart it so Kubernetes events resume" >&2
+# Keep only the binary this upgrade replaced.
+find /usr/local/bin -maxdepth 1 -name 'k3s.v*' ! -name "k3s.$current" -delete
 echo "k3s is up on $K3S_VERSION; the previous binary is /usr/local/bin/k3s.$current"
