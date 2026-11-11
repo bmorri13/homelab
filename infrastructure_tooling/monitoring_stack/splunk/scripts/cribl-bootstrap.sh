@@ -100,6 +100,19 @@ if [[ -f "$SEEDED" ]]; then
     cribl_commit_deploy "Seed Worker Group config (deploy.sh)"
     rm -f "$SEEDED"
 fi
+# Syslog on 514 was never used and was removed on 2026-11-10. Remove its route,
+# pipeline and input from the live group.
+routes_live=$(ccurl -s "${auth[@]}" "$API/m/$GROUP/routes/default" | jq -c '.items[0] // {}')
+if jq -e '(.routes // []) | any(.id == "syslog_infra")' <<<"$routes_live" >/dev/null ||
+    ccurl -sf "${auth[@]}" "$API/m/$GROUP/pipelines/syslog_infra" >/dev/null ||
+    ccurl -sf "${auth[@]}" "$API/m/$GROUP/system/inputs/syslog_infra" >/dev/null; then
+    jq -c '.routes |= map(select(.id != "syslog_infra"))' <<<"$routes_live" |
+        ccurl -sf "${auth[@]}" -H 'Content-Type: application/json' -X PATCH "$API/m/$GROUP/routes/default" --data @- >/dev/null
+    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/pipelines/syslog_infra" >/dev/null || true
+    ccurl -sf "${auth[@]}" -X DELETE "$API/m/$GROUP/system/inputs/syslog_infra" >/dev/null || true
+    echo "cribl: syslog 514 route, pipeline and input removed"
+    cribl_commit_deploy "Remove syslog 514 input (deploy.sh)"
+fi
 
 # 3. Admin password, only while the default login still works.
 if [[ "$default_login" == true ]]; then

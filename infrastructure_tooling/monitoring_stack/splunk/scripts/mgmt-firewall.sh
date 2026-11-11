@@ -18,7 +18,7 @@ set -euo pipefail
 # deploy.sh's environment, so read them from .env here too: only these variables,
 # sourced the way deploy.sh does it, in a subshell so a missing or broken .env leaves
 # the defaults below (never no rules). A variable already in the environment wins.
-allow_vars=(SPLUNK_MGMT_ALLOWED SYSLOG_NETWORK_ALLOWED SYSLOG_INFRA_ALLOWED HEC_ALLOWED CRIBL_UI_ALLOWED SPLUNK_WEB_ALLOWED)
+allow_vars=(SPLUNK_MGMT_ALLOWED SYSLOG_NETWORK_ALLOWED HEC_ALLOWED CRIBL_UI_ALLOWED SPLUNK_WEB_ALLOWED)
 env_file="$(dirname "$0")/../.env"
 if [[ -r "$env_file" ]]; then
     # shellcheck disable=SC1090,SC2016  # .env is the host's; the printf builds code for eval
@@ -29,7 +29,6 @@ fi
 # Comma-separated CIDRs.
 MGMT_ALLOWED="${SPLUNK_MGMT_ALLOWED:-192.168.4.98/32}"                 # k3s-01
 SYSLOG_NETWORK_ALLOWED="${SYSLOG_NETWORK_ALLOWED:-192.168.4.1/32,192.168.1.85/32}"  # UCG-Max, UX
-SYSLOG_INFRA_ALLOWED="${SYSLOG_INFRA_ALLOWED:-}"                       # 514: nothing sends today
 HEC_ALLOWED="${HEC_ALLOWED:-192.168.4.0/24}"                           # VMs, Proxmox nodes, k3s-01
 CRIBL_UI_ALLOWED="${CRIBL_UI_ALLOWED:-192.168.4.98/32}"                # k3s-01
 SPLUNK_WEB_ALLOWED="${SPLUNK_WEB_ALLOWED:-192.168.4.98/32}"            # k3s-01
@@ -58,10 +57,16 @@ allow_only() {
 
 allow_only SPLUNK-MGMT "$MGMT_ALLOWED" 8089 tcp
 allow_only SYSLOG-NETWORK "$SYSLOG_NETWORK_ALLOWED" 5514 udp tcp
-allow_only SYSLOG-INFRA "$SYSLOG_INFRA_ALLOWED" 514 udp tcp
 allow_only CRIBL-HEC "$HEC_ALLOWED" 8443 tcp
 allow_only CRIBL-UI "$CRIBL_UI_ALLOWED" 9000 tcp
 allow_only SPLUNK-WEB "$SPLUNK_WEB_ALLOWED" 8000 tcp
+# Syslog on 514 was never used and was removed on 2026-11-10; drop its old rules.
+for proto in udp tcp; do
+    iptables -w -D DOCKER-USER -p "$proto" -m conntrack --ctorigdstport 514 --ctdir ORIGINAL -j SYSLOG-INFRA 2>/dev/null || true
+    iptables -w -t raw -D PREROUTING -i tailscale0 -p "$proto" --dport 514 -j DROP 2>/dev/null || true
+    ip6tables -w -D INPUT -p "$proto" --dport 514 -j DROP 2>/dev/null || true
+done
+iptables -w -F SYSLOG-INFRA 2>/dev/null && iptables -w -X SYSLOG-INFRA 2>/dev/null || true
 
 # Two paths skip DOCKER-USER, so these ports are dropped there as well:
 # - Tailscale's ts-forward chain sits ahead of DOCKER-USER in FORWARD and accepts
@@ -71,7 +76,7 @@ allow_only SPLUNK-WEB "$SPLUNK_WEB_ALLOWED" 8000 tcp
 # - Docker also publishes them on [::]. IPv6 connections go through Docker's userland
 #   proxy (a host process), so INPUT applies. The only IPv6 address here is
 #   Tailscale's, and nothing sends over IPv6.
-for port in 514 5514 8000 8443 9000; do
+for port in 5514 8000 8443 9000; do
     for proto in udp tcp; do
         rule=(-i tailscale0 -p "$proto" --dport "$port" -j DROP)
         iptables -w -t raw -C PREROUTING "${rule[@]}" 2>/dev/null || iptables -w -t raw -I PREROUTING 1 "${rule[@]}"

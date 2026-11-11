@@ -2,32 +2,6 @@ inputs:
   CriblLogs:
     type: cribl
     disabled: false
-  syslog_infra:
-    type: syslog
-    host: 0.0.0.0
-    udpPort: 9514
-    tcpPort: 9514
-    description: Proxmox, Unraid, other hosts (host port 514)
-    disabled: false
-    sendToRoutes: true
-    pqEnabled: false
-    streamtags: []
-    maxBufferSize: 1000
-    ipWhitelistRegex: /.*/
-    timestampTimezone: local
-    singleMsgUdpPackets: false
-    enableProxyHeader: false
-    keepFieldsList: []
-    octetCounting: false
-    inferFraming: true
-    strictlyInferOctetCounting: true
-    allowNonStandardAppName: false
-    maxActiveCxn: 1000
-    socketIdleTimeout: 0
-    socketEndingMaxWait: 30
-    socketMaxLifespan: 0
-    enableLoadBalancing: false
-    autoParse: false
   syslog_network:
     type: syslog
     host: 0.0.0.0
