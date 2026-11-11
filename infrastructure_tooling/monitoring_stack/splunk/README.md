@@ -4,7 +4,7 @@ Splunk Enterprise on a developer license (10 GB/day) behind Cribl Stream, both i
 
 ```
 UniFi gateway ──syslog 5514──┐
-Proxmox, Unraid ─syslog 514──┼──► Cribl Worker ──S2S (compose network only)──► Splunk
+                             ├──► Cribl Worker ──S2S (compose network only)──► Splunk
 OTel collectors ──HEC 8443───┘    drop noise, mask secrets,                    ▲ 8089 (k3s-01 only)
                                   set index + sourcetype                       │
                                        ▲ config (4200)            MCP gateway on k3s-01
@@ -36,7 +36,7 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | Index | Contents | Retention |
 |---|---|---|
 | `network` | UniFi gateway (OCSF): firewall, IDS/IPS findings, client connects, health events. AdGuard Home's DNS query log, and Cloudflare Tunnel connector logs | 90 days |
-| `infra` | Proxmox, Unraid, VM system logs, the Actions runner | 90 days |
+| `infra` | Proxmox and VM system logs, the Actions runner | 90 days |
 | `k8s` | Cluster platform pod logs and events | 30 days |
 | `apps` | Your own apps, on Docker hosts or k8s | 30 days |
 | `audit` | Kubernetes API audit log (k3s-01), Vault audit log and server log, ToolHive, UniFi admin logins and config changes, remote-access logins | 90 days |
@@ -53,11 +53,10 @@ Cribl picks the index for every event. Data older than the retention below, or p
 | `8000` | Splunk Web (HTTPS, homelab CA) | k3s-01 only (`SPLUNK_WEB_ALLOWED`): Traefik serves it as `https://splunk.bmosan.com`, which logs in through Authentik. See [Splunk Web login](#splunk-web-login). |
 | `8089` | Splunk REST API + MCP Server app (HTTPS, homelab CA) | Published on 192.168.4.11 only. `scripts/mgmt-firewall.sh` drops everything but k3s-01 and local containers. |
 | `9000` | Cribl Leader UI, API and MCP (HTTPS, homelab CA) | k3s-01 only (`CRIBL_UI_ALLOWED`): the MCP gateway, and Traefik serving the UI at `https://cribl.bmosan.com` behind Authentik. Cribl's Free license has no external login, so Authentik's forward auth sits in front of Cribl's own login. |
-| `514` tcp/udp | Cribl syslog → `infra` | Closed: nothing sends to it. To use it, add the sender to `SYSLOG_INFRA_ALLOWED` in `.env` (see below). |
 | `5514` tcp/udp | Cribl syslog → `network` | UniFi gateways only (`SYSLOG_NETWORK_ALLOWED`). |
 | `8443` | Cribl HEC (HTTPS, homelab CA), input `hec_tls` | OTel collectors and the homelab agents. Requires `CRIBL_HEC_TOKEN`. Server LAN only (`HEC_ALLOWED`, default 192.168.4.0/24). |
 
-Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, 514 nothing, and both still accept this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 514, 5514, 8000, 8443 and 9000 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). Tailscale's own `ts-forward` chain runs ahead of `DOCKER-USER` and accepts everything arriving on `tailscale0`, so the script also drops those ports on that interface in the `raw` table, before Docker's DNAT. 8089 is published on the LAN address only, so the tailnet can't reach it. The allowlists are comma-separated CIDRs with defaults in the script. To add a sender, set the variable in `/opt/splunk-stack/.env` to the full list (it replaces the default; the commented lines in `.env-example` show each default) and run `./scripts/mgmt-firewall.sh`. The script reads the allowlists from `.env` itself, so the boot-time unit applies the same rules; if `.env` is missing or unreadable it applies the defaults. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
+Syslog has no authentication, so `scripts/mgmt-firewall.sh` limits it by source address, in the same `DOCKER-USER` chain as 8089: 5514 accepts only the UniFi gateways, and still accepts this host's containers. HEC needs its token as well, but the script also limits 8443 to the server LAN. Docker also publishes these ports on IPv6, where its userland proxy takes the connection, so the script drops 5514, 8000, 8443 and 9000 in `ip6tables` `INPUT` as well (the only IPv6 address is Tailscale's). Tailscale's own `ts-forward` chain runs ahead of `DOCKER-USER` and accepts everything arriving on `tailscale0`, so the script also drops those ports on that interface in the `raw` table, before Docker's DNAT. 8089 is published on the LAN address only, so the tailnet can't reach it. The allowlists are comma-separated CIDRs with defaults in the script. To add a sender, set the variable in `/opt/splunk-stack/.env` to the full list (it replaces the default; the commented lines in `.env-example` show each default) and run `./scripts/mgmt-firewall.sh`. The script reads the allowlists from `.env` itself, so the boot-time unit applies the same rules; if `.env` is missing or unreadable it applies the defaults. If a gateway's address changes its syslog is dropped silently, until *HL - Log source stopped sending* reports the UniFi feed quiet.
 
 ### Cribl routing
 
@@ -329,12 +328,12 @@ chmod 600 .env
 
 `deploy.sh` is safe to re-run. It:
 
-1. Installs and runs the host firewall for ports 8089, 8000, 9000, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
+1. Installs and runs the host firewall for ports 8089, 8000, 9000, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
 2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, Splunk Web (8000), the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
 5. Seeds the Cribl Worker Group config once, from `cribl/local/cribl/`, while the Leader is stopped.
-6. Runs `cribl-bootstrap.sh`: switches the Leader API to HTTPS, sets the HEC token from `.env` on a freshly seeded group and deploys the group config to the Worker, stops with an error if the group has no HTTPS HEC input `hec_tls`, and, on a brand-new Leader still on admin/admin, sets the admin password.
+6. Runs `cribl-bootstrap.sh`: switches the Leader API to HTTPS, sets the HEC token from `.env` on a freshly seeded group and deploys the group config to the Worker, stops with an error if the group has no HTTPS HEC input `hec_tls`, removes the retired syslog 514 input `syslog_infra` with its route and pipeline if the group still has them, and, on a brand-new Leader still on admin/admin, sets the admin password.
 7. Runs `cribl-packs.sh`, which installs each pack under `cribl/packs/` in the Worker Group through the Leader API when it is missing or its `package.json` version changed, then deploys it to the Worker. Packs must go through the API: a pack copied into Cribl's config directory shows up in the list, but `pack:<id>` references to it don't resolve. The repo owns packs, so an upgrade replaces UI edits made to an installed pack.
 
 ### Changing Cribl config

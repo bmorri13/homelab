@@ -102,8 +102,6 @@ services:
       - CRIBL_DIST_MODE=worker
       - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@cribl:4200?group=default
     ports:
-      - "514:9514/udp"    # syslog: Proxmox, Unraid, other hosts -> index=infra
-      - "514:9514/tcp"
       - "5514:9515/udp"   # syslog: UniFi gateway -> index=network
       - "5514:9515/tcp"
       - "8443:8443"       # HEC over HTTPS (homelab CA), token required

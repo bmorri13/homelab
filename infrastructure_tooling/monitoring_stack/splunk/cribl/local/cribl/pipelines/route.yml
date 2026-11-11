@@ -20,16 +20,6 @@ routes:
     filter: __inputId.startsWith('syslog:syslog_network:')
     clones: []
     output: splunk
-  - id: syslog_infra
-    name: syslog_infra
-    final: true
-    disabled: false
-    pipeline: syslog_infra
-    description: Proxmox, Unraid, other syslog
-    enableOutputExpression: false
-    filter: __inputId.startsWith('syslog:syslog_infra:')
-    clones: []
-    output: splunk
   - id: hec
     name: hec
     final: true
