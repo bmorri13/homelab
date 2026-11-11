@@ -1,4 +1,13 @@
 functions:
+  - id: eval
+    filter: index == 'metrics'
+    conf: {}
+    final: true
+    description: >-
+      Metric data points skip the masks below. index=metrics is set only by hec_in's
+      first rule (every other route's pipeline sets its own index), and the metric
+      index stores metric names, values and dimensions, not _raw, the only field the
+      masks change.
   - id: mask
     filter: "true"
     conf:
