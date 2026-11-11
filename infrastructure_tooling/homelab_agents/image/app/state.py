@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS runs (
 class State:
     def __init__(self, agent):
         self.agent = agent
-        self.db = sqlite3.connect(os.path.join(config.STATE_DIR, "state.db"))
+        self.db = sqlite3.connect(os.path.join(config.STATE_DIR, "state.db"), timeout=30)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         if "failures" not in [r["name"] for r in self.db.execute("PRAGMA table_info(items)")]:

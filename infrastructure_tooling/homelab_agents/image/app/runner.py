@@ -343,14 +343,22 @@ def error_at(e):
     return " > ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}" for f in frames)[:300] or None
 
 
+def close_vault(vault):
+    """Revoke the run's Vault token. A failed revoke mustn't fail the run: the token
+    expires on its own."""
+    try:
+        vault.close()
+    except Exception as e:
+        print(f"Vault revoke: {e}", file=sys.stderr)
+
+
 async def run(agent, dry_run, local_login, limit, collect_only=False, test=False):
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
-    state = State(agent)
     summary = {"collected": 0, "new": 0, "reposted": 0, "quiet": 0, "triaged": 0, "triage_errors": 0,
-               "retrying": 0, "cost_usd": 0.0, "posted": False}
+               "retrying": 0, "deferred": 0, "cost_usd": 0.0, "posted": False}
     events, notes, hec_token, status = [], [], None, "ok"
-    vault, webhook = None, None
+    state, vault, webhook = None, None, None
     try:
         vault = clients.Vault()
         webhook = vault.kv(config.VAULT_SLACK).get("webhook_url")
@@ -361,9 +369,10 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
             if not oauth:
                 raise RuntimeError("no claude_oauth_token in Vault kv/homelab-agents")
             claude_env = {"CLAUDE_CODE_OAUTH_TOKEN": oauth}
-        vault.close()
+        close_vault(vault)
         vault = None
 
+        state = State(agent)   # after Vault, so a state error can still be posted and logged
         gtoken = clients.read_token(config.GATEWAY_TOKEN_FILE)
         if test:
             print(json.dumps(await self_test(agent, gtoken, claude_env), indent=2))
@@ -378,14 +387,20 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
 
         cap = min(limit, config.MAX_ITEMS_PER_RUN)
         triage_now, untriaged = to_triage[:cap], to_triage[cap:]
-        for item in triage_now:
+        for n, item in enumerate(triage_now):
+            if time.time() - started > config.RUN_BUDGET_S:
+                # Out of time: the rest aren't posted or marked, so the next run triages them.
+                triage_now, summary["deferred"] = triage_now[:n], len(triage_now) - n
+                break
             try:
-                item["triage"], stats = await triage(agent, item, gtoken, claude_env)
+                item["triage"], stats = await asyncio.wait_for(triage(agent, item, gtoken, claude_env),
+                                                               config.ITEM_TIMEOUT_S)
                 summary["triaged"] += 1
                 summary["cost_usd"] += stats.get("cost_usd") or 0
             except Exception as e:  # one bad item mustn't stop the others
                 item["triage"], stats = None, {}
-                item["triage_error"] = str(e)[:300]
+                item["triage_error"] = (f"timed out after {config.ITEM_TIMEOUT_S} s" if isinstance(e, TimeoutError)
+                                        else str(e))[:300]
                 summary["triage_errors"] += 1
             if item["triage"] is None and state.triage_failed(item["key"]) < config.TRIAGE_ATTEMPTS:
                 item["retry"] = True  # not posted or marked; the next run tries again
@@ -424,10 +439,14 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 pass
     finally:
         if vault:
-            vault.close()
+            close_vault(vault)
     summary["duration_s"] = round(time.time() - started, 1)
     summary["notes"] = notes
-    state.record_run(started, status, summary)
+    try:  # a state DB error mustn't lose the run's HEC events
+        if state:
+            state.record_run(started, status, summary)
+    except Exception as e:
+        print(f"state: {e}", file=sys.stderr)
     events.append(hec_event(agent, "run", run_id=run_id, status=status, dry_run=dry_run, **summary))
     print(json.dumps({"status": status, **summary}))
     try:
