@@ -206,8 +206,11 @@ det("HL - UniFi admin login from a new source",
     "T1078.001", "Initial Access", "medium", "DET0465",
     "index=audit sourcetype=ubiquiti:unifi:ocsf class_uid=3002 earliest=-30d@d latest=-5m@m "
     "| eval src=coalesce('src_endpoint.ip', src), user=coalesce('user.name', 'actor.user.name', user) "
-    "| stats count min(_time) as first_seen max(_time) as last_seen values(status) as status by user src "
-    "| where first_seen>=relative_time(now(), \"-20m@m\") OR match(mvjoin(status, \",\"), \"(?i)fail\") "
+    # Only a failure inside the current window counts; over the whole baseline, one
+    # failed login re-alerted every day for 30 days.
+    "| eval recent_fail=if(_time>=relative_time(now(), \"-20m@m\") AND match(status, \"(?i)fail\"), 1, 0) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(status) as status max(recent_fail) as recent_fail by user src "
+    "| where first_seen>=relative_time(now(), \"-20m@m\") OR recent_fail=1 "
     "| eval host=\"unifi\", object=\"UniFi Network\", detail=\"status=\".mvjoin(status, \",\").\" (first login from this source in 30 days, or a failure)\" "
     "| convert ctime(first_seen) ctime(last_seen) ",
     "log in to the UniFi console from a device that hasn't been used in 30 days, or with a wrong password",
