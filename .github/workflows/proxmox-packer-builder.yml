@@ -38,7 +38,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     container:
       image: ubuntu:26.04
-    environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
     steps:
@@ -54,7 +53,7 @@ jobs:
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
-        # owner at any time, and these jobs hold PROXMOX_TOKEN, SSH_PASSWORD and
+        # owner at any time, and the build jobs hold PROXMOX_TOKEN, SSH_PASSWORD and
         # TAILSCALE_AUTH_KEY. The trailing comment is the Renovate convention for
         # keeping a SHA pin updated.
         uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3.4.0
@@ -65,61 +64,16 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: packer init ubuntu-2404.pkr.hcl
 
-      - name: Generate Password Hash
-        id: gen_hash
-        run: |
-          PASSWORD="${{ secrets.SSH_PASSWORD }}"
-          HASH=$(openssl passwd -6 "$PASSWORD")
-          # GitHub masks registered secrets, but NOT values derived from them.
-          # Without this, the crypt hash appears verbatim in the (public) run log.
-          echo "::add-mask::$HASH"
-          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
-
-      - name: Create Dynamic User-Data
-        working-directory: ${{ env.WORKING_DIR }}/http
-        run: |
-          cp user-data user-data.backup
-          HASH='${{ steps.gen_hash.outputs.password_hash }}'
-          # Escape special characters for sed
-          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
-          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          # Assert the substitution worked WITHOUT printing the matched line. The
-          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
-          # echoing it would publish a crackable credential to the run log.
-          if grep -q 'password: "[$]6[$]' user-data; then
-            echo "user-data password hash substituted OK"
-          else
-            echo "::error::password hash substitution failed in user-data"
-            exit 1
-          fi
-
-      - name: Create Variables File
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          cat > variables.pkrvars.hcl << EOF
-          # Proxmox connection details
-          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
-          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
-
-          # VM template configuration (validation only, actual values set per-node in build)
-          vm_id        = "9000"
-          proxmox_node = "proxmox"
-
-          # ISO and installation settings
-          iso_file     = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
-          ssh_username = "ubuntu"
-          EOF
-
+      # No secrets and no prod environment, so this also runs on pull requests
+      # (prod rejects a PR merge ref before any step runs). The two variables
+      # without a default get placeholders; validate never contacts Proxmox.
       - name: Validate Packer Template
         id: validate
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           packer validate \
-            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
-            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
-            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
-            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
-            -var-file="variables.pkrvars.hcl" \
+            -var "proxmox_token=placeholder" \
+            -var "tailscale_auth_key=placeholder" \
             ubuntu-2404.pkr.hcl
           echo "valid=true" >> $GITHUB_OUTPUT
 
@@ -129,7 +83,9 @@ jobs:
     container:
       image: ubuntu:26.04
     needs: validate
-    if: needs.validate.outputs.template_valid == 'true'
+    # Never build from a pull request: that would replace the live templates
+    # with unmerged code.
+    if: github.event_name != 'pull_request' && needs.validate.outputs.template_valid == 'true'
     environment: prod
     strategy:
       fail-fast: false
@@ -340,7 +296,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     container:
       image: ubuntu:26.04
-    environment: prod
     outputs:
       template_valid: ${{ steps.validate.outputs.valid }}
     steps:
@@ -356,7 +311,7 @@ jobs:
 
       - name: Setup Packer
         # Pinned to a commit SHA, not @main. A branch ref can be repointed by the
-        # owner at any time, and these jobs hold PROXMOX_TOKEN, SSH_PASSWORD and
+        # owner at any time, and the build jobs hold PROXMOX_TOKEN, SSH_PASSWORD and
         # TAILSCALE_AUTH_KEY. The trailing comment is the Renovate convention for
         # keeping a SHA pin updated.
         uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3.4.0
@@ -367,61 +322,16 @@ jobs:
         working-directory: ${{ env.DESKTOP_WORKING_DIR }}
         run: packer init ubuntu-2404-desktop.pkr.hcl
 
-      - name: Generate Password Hash
-        id: gen_hash
-        run: |
-          PASSWORD="${{ secrets.SSH_PASSWORD }}"
-          HASH=$(openssl passwd -6 "$PASSWORD")
-          # GitHub masks registered secrets, but NOT values derived from them.
-          # Without this, the crypt hash appears verbatim in the (public) run log.
-          echo "::add-mask::$HASH"
-          echo "password_hash=$HASH" >> $GITHUB_OUTPUT
-
-      - name: Create Dynamic User-Data
-        working-directory: ${{ env.DESKTOP_WORKING_DIR }}/http
-        run: |
-          cp user-data user-data.backup
-          HASH='${{ steps.gen_hash.outputs.password_hash }}'
-          # Escape special characters for sed
-          ESCAPED_HASH=$(printf '%s\n' "$HASH" | sed 's/[[\.*^$/]/\\&/g')
-          sed -i "s|password: \".*\"|password: \"$ESCAPED_HASH\"|" user-data
-          # Assert the substitution worked WITHOUT printing the matched line. The
-          # hash is derived from secrets.SSH_PASSWORD, and this repo is public, so
-          # echoing it would publish a crackable credential to the run log.
-          if grep -q 'password: "[$]6[$]' user-data; then
-            echo "user-data password hash substituted OK"
-          else
-            echo "::error::password hash substitution failed in user-data"
-            exit 1
-          fi
-
-      - name: Create Variables File
-        working-directory: ${{ env.DESKTOP_WORKING_DIR }}
-        run: |
-          cat > variables.pkrvars.hcl << EOF
-          # Proxmox connection details
-          proxmox_url      = "${{ secrets.PROXMOX_URL }}"
-          proxmox_username = "${{ secrets.PROXMOX_USERNAME || 'root@pam!packer' }}"
-
-          # VM template configuration (validation only, actual values set per-node in build)
-          vm_id        = "9004"
-          proxmox_node = "proxmox2"
-
-          # ISO and installation settings
-          iso_file     = "local:iso/ubuntu-24.04.3-desktop-amd64.iso"
-          ssh_username = "ubuntu"
-          EOF
-
+      # No secrets and no prod environment, so this also runs on pull requests
+      # (prod rejects a PR merge ref before any step runs). The two variables
+      # without a default get placeholders; validate never contacts Proxmox.
       - name: Validate Packer Template
         id: validate
         working-directory: ${{ env.DESKTOP_WORKING_DIR }}
         run: |
           packer validate \
-            -var "proxmox_token=${{ secrets.PROXMOX_TOKEN }}" \
-            -var "ssh_password=${{ secrets.SSH_PASSWORD }}" \
-            -var "tailscale_auth_key=${{ secrets.TAILSCALE_AUTH_KEY }}" \
-            -var "tailscale_tags=${{ secrets.TAILSCALE_TAGS || 'tag:proxmox-bmo' }}" \
-            -var-file="variables.pkrvars.hcl" \
+            -var "proxmox_token=placeholder" \
+            -var "tailscale_auth_key=placeholder" \
             ubuntu-2404-desktop.pkr.hcl
           echo "valid=true" >> $GITHUB_OUTPUT
 
@@ -431,7 +341,9 @@ jobs:
     container:
       image: ubuntu:26.04
     needs: validate-desktop
-    if: needs.validate-desktop.outputs.template_valid == 'true'
+    # Never build from a pull request: that would replace the live templates
+    # with unmerged code.
+    if: github.event_name != 'pull_request' && needs.validate-desktop.outputs.template_valid == 'true'
     environment: prod
     strategy:
       fail-fast: false

@@ -21,12 +21,50 @@ env:
   WORKING_DIR: "infrastructure_tooling/proxmox/terraform"
 
 jobs:
-  terraform-plan:
-    name: Terraform Validate and Plan
+  # No environment and no secrets, so it runs on pull requests too: the prod
+  # environment only allows deployments from its allowed branches and rejects a
+  # PR merge ref before any step runs.
+  terraform-validate:
+    name: Terraform Validate
     runs-on: [self-hosted, Linux, X64]
     # Public repo: never run a pull request from a fork on the self-hosted runners
     # (fork PRs get no secrets, but would still run their code inside the homelab).
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+  # Needs the prod secrets and the real state, so pushes to main and manual
+  # runs only.
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: [self-hosted, Linux, X64]
+    needs: terraform-validate
+    if: github.event_name != 'pull_request'
     environment: prod
     steps:
       - name: Checkout Repository
