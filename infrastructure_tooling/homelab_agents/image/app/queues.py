@@ -6,6 +6,7 @@ An item: key, source, title, severity (low|medium|high|critical), host, facts (d
 the row as Splunk returned it), runbook (file name in runbooks/).
 """
 import json
+import re
 
 SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 WINDOW = "-2h"   # every run looks back this far; dedupe makes the overlap harmless
@@ -65,11 +66,65 @@ ALERTS = {
 }
 
 
+# Findings from the weekly detection validation (infrastructure_tooling/art_validation)
+# are checked by "Splunk - detection validation failed" instead of being triaged. A row
+# matches only if every field that identifies it equals what one of the tests produces;
+# a test added there needs its row added here.
+ART_RUNNER = "system:serviceaccount:art-validation:art-runner"
+# k3s-01 tests (k8s/art-validation.sh): detection -> the object it reports.
+VALIDATION_K8S = {
+    "HL - Kubernetes workload created by hand": "art-validation/pods/art-validation-target",
+    "HL - Kubernetes exec, attach or port-forward into a pod": "art-validation/pods/art-validation-target/exec",
+    "HL - Kubernetes secrets read by a person or application": "art-validation/secrets/art-validation-secret",
+    "HL - Kubernetes service account token minted": "art-validation/serviceaccounts/art-runner/token",
+    "HL - Kubernetes RBAC role or binding changed": "art-validation/rolebindings/art-validation-rb",
+    "HL - Kubernetes anonymous or denied API requests": "nodes",
+}
+# ubuntu-desktop-01 tests (host/art-validation): the commands its local sudo runs,
+# with or without the path sudo logs.
+VALIDATION_SUDO = [re.compile(c) for c in (
+    r"(/usr/sbin/)?useradd -M -r -s /usr/sbin/nologin -c art-validation art-validation",
+    r"(/usr/bin/)?crontab /usr/local/lib/art-validation/work/art-validation\.cron",
+    r"(/usr/bin/)?crontab -r",
+    r"(/usr/sbin/)?userdel art-validation",
+    r"(/usr/bin/|/bin/)?bash -c '?history -c # art-validation'?",
+)]
+VALIDATION_FALCO = ("ubuntu-desktop-01", "Read sensitive file untrusted", "art-validation-cat /etc/shadow")
+
+
+def _count(r):
+    try:
+        return int(_first(r.get("count")))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _is_validation(r):
-    """Findings from the weekly detection validation (infrastructure_tooling/art_validation):
-    marked art-validation, on the two hosts it runs on. Checked by "Splunk - detection
-    validation failed" instead of being triaged."""
-    return "art-validation" in json.dumps(r) and _first(r.get("host")) in ("ubuntu-desktop-01", "k3s-01")
+    """A homelab:detection row produced by the validation tests."""
+    name, host = r.get("detection", ""), _first(r.get("host"))
+    if host == "k3s-01" and name in VALIDATION_K8S:
+        return _first(r.get("user")) == ART_RUNNER and _first(r.get("object")) == VALIDATION_K8S[name]
+    if host == "ubuntu-desktop-01" and name == "HL - Sensitive command run over SSH or sudo":
+        if _first(r.get("src")) != "local" or _first(r.get("object")) != "command":
+            return False
+        # detail lists at most five distinct commands; with five, count shows none were cut.
+        cmds = _first(r.get("detail")).split(" || ")
+        if len(cmds) >= 5 and _count(r) != len(cmds):
+            return False
+        # A bare crontab -r on its own names nothing of the test's.
+        return (all(any(p.fullmatch(c) for p in VALIDATION_SUDO) for c in cmds)
+                and not all(VALIDATION_SUDO[2].fullmatch(c) for c in cmds))
+    return False
+
+
+def _is_validation_alert(name, host, r):
+    """A Falco alert row produced by the validation tests."""
+    if name != "Falco - runtime finding":
+        return False
+    details = r.get("details")
+    details = details if isinstance(details, list) else [details]
+    want_host, want_rule, want_cmd = VALIDATION_FALCO
+    return host == want_host and _first(r.get("rule")) == want_rule and all(d == want_cmd for d in details)
 
 
 def security(gw):
@@ -97,7 +152,7 @@ def security(gw):
         for r in gw.splunk(f'| loadjob "{sid}"', WINDOW):
             parts = [_first(r.get(k)) for k in fields]
             host = host_of(r)
-            if "art-validation" in json.dumps(r) and host == "ubuntu-desktop-01":
+            if _is_validation_alert(name, host, r):
                 continue
             title = display(r)
             severity = fixed_severity or _top_severity(r.get("severity"))

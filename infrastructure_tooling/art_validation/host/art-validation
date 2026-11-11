@@ -5,8 +5,9 @@
 #   ART-VALIDATION run=<id> expect="<detection>" test=<id>
 # to the journal (index=infra); "Splunk - detection validation failed"
 # (85_homelab_ops) checks about an hour later that every expected finding appeared.
-# Everything it creates is named art-validation, which is also how the security agent
-# recognises these findings and leaves them out of Slack.
+# Everything it creates is named art-validation. The security agent recognises these
+# findings by their exact commands (VALIDATION_SUDO in homelab_agents queues.py), so a
+# changed command here needs the same change there.
 # Run by art-validation.timer (weekly) or by hand: systemctl start art-validation
 set -uo pipefail
 
@@ -31,7 +32,8 @@ install -d -m 755 "$WORK"
 
 # T1003.008 OS Credential Dumping: /etc/passwd and /etc/shadow. Reads /etc/shadow with a
 # copy of cat under the run directory, so Falco reports an untrusted program (and the
-# path carries the marker). Nothing is kept.
+# path carries the marker). Nothing is kept. The command line is matched exactly by
+# VALIDATION_FALCO in homelab_agents queues.py.
 mark "Falco: Read sensitive file untrusted" T1003.008
 install -m 755 /usr/bin/cat "$WORK/art-validation-cat"
 "$WORK/art-validation-cat" /etc/shadow >/dev/null && step "T1003.008 read /etc/shadow" || fail T1003.008
