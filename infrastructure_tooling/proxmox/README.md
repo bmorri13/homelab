@@ -177,6 +177,18 @@ terraform plan -var-file="secrets.tfvars"
 terraform apply -var-file="secrets.tfvars"
 ```
 
+### Provider lock file
+
+`terraform/.terraform.lock.hcl` pins `bpg/proxmox` and its checksums, and CI runs `terraform init -lockfile=readonly`, so a provider change that skips the lock fails the job. Renovate rewrites the lock in its provider bump PRs. To bump the provider by hand, change the version in `main.tf`, then with the Terraform version in `TF_VERSION` (`.github/workflows/terraform-*.yml`):
+
+```bash
+cd terraform
+terraform init -backend=false -upgrade
+terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
+```
+
+`linux_amd64` is the self-hosted runner and `darwin_arm64` is for running locally from a Mac. After merging a provider bump, the plan on main should show no changes. A provider upgrade has produced plans that restart every VM before, so read it before any apply.
+
 ### 3. Destroy Resources (if needed)
 
 ```bash

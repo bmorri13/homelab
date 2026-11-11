@@ -50,9 +50,11 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
 
+      # -lockfile=readonly: fail if .terraform.lock.hcl is out of date instead of
+      # re-resolving the provider (see Provider lock file in infrastructure_tooling/proxmox/README.md).
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init -backend=false
+        run: terraform init -backend=false -lockfile=readonly
 
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}
@@ -133,7 +135,7 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
-        run: terraform init
+        run: terraform init -lockfile=readonly
         env:
           CONSUL_HTTP_TOKEN: ${{ secrets.CONSUL_HTTP_TOKEN }}
 
