@@ -195,7 +195,7 @@ Current base apps:
 - `00_homelab_indexes`: the indexes and retention above, the 350 GB volume cap, `lastChanceIndex`, and `bin/archive_bucket.sh`, which archives frozen buckets to the Unraid share.
 - `00_homelab_inputs`: the `splunktcp` receiver on 9997 that Cribl sends to.
 - `00_homelab_server`: stops indexing while less than 50 GB is free on the shared root disk, points splunkd (8089, `server.conf` `[sslConfig]`) and Splunk Web (8000, `web.conf`) at their homelab-CA certs from `scripts/tls-certs.sh`, and raises splunkd's IOWait health thresholds (`health.conf`) so short I/O bursts from the other containers on this VM don't turn health red.
-- `00_homelab_roles`: see the file for which roles can search `audit` and `ai_agents`. The two MCP roles can also read server status, the health report and the license (`list_introspection`, `list_health`, `license_read`).
+- `00_homelab_roles`: the `admin` role and the two MCP roles; all three can search every homelab index, `audit` and `ai_agents` included. The two MCP roles can also read server status, the health report and the license (`list_introspection`, `list_health`, `license_read`).
 - `00_homelab_auth`: Splunk Web login through Authentik with SAML (`authentication.conf`), mapping the Authentik entitlement `splunk-admin` to the `admin` role. See [Splunk Web login](#splunk-web-login).
 - `85_ocsf`: JSON field extraction for the OCSF sourcetypes the Cribl packs emit (`ubiquiti:unifi:ocsf`, `falco:ocsf`), and `src` for UniFi IDS/IPS findings, which the OCSF-CIM add-on leaves unmapped.
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
