@@ -23,15 +23,7 @@ NAME          READY   AGE
 bmosan-cert   True    46h
 ```
 
-4. Deploy out a test deployment chart, we can use the `nginx_deployment.yaml`
-```bash
-kubectl apply -f nginx_deployment.yaml
-```
-
-5. Test going to your site (e.g. https://nginx.bmosan.com)
-- You should be able to get to the site and then validat that the cert is valid and issued by Let's Encrypt
-
-6. You can also validate that the certificate has been created / view all certs in your cluster with the below command:
+4. You can also validate that the certificate has been created / view all certs in your cluster with the below command:
 ```bash
 kubectl get certificate --all-namespaces
 ```
