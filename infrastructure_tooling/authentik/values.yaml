@@ -65,6 +65,33 @@ postgres:
       memory: 128Mi
     limits:
       memory: 512Mi
+  # Nightly pg_dump (templates/postgres-backup.yaml), with the same image as the
+  # database above so client and server match and Renovate moves both. The dump holds
+  # the Splunk SAML signing key, password hashes and MFA secrets: read "Backup and
+  # restore" in README.md before choosing a destination.
+  backup:
+    enabled: false
+    schedule: "45 2 * * *"
+    keep: 7
+    # pvc: a second local-path volume on k3s-01. Survives database corruption and
+    # mistakes, not the loss of the node or its disk.
+    # nfs: a PersistentVolume on an NFS export (server and path below). Survives the
+    # node; anyone who can read the export can read the dumps.
+    destination: pvc
+    pvc:
+      storageClass: local-path
+      size: 2Gi
+    nfs:
+      server: ""
+      path: ""
+      size: 2Gi
+    activeDeadlineSeconds: 900
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
 
 authentik:
   global:

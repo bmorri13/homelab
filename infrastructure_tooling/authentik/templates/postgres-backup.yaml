@@ -1,0 +1,149 @@
+{{- with .Values.postgres.backup }}
+{{- if .enabled }}
+# Nightly pg_dump of the authentik database (README.md, "Backup and restore"). The dump
+# holds the Splunk SAML signing key, password hashes and MFA secrets.
+{{- if eq .destination "nfs" }}
+{{- if not (and .nfs.server .nfs.path) }}
+{{- fail "postgres.backup.nfs.server and postgres.backup.nfs.path are required with destination nfs" }}
+{{- end }}
+# A PersistentVolume rather than an inline nfs volume, which the namespace's restricted
+# Pod Security level forbids. The node mounts it, so the pod's NetworkPolicy doesn't
+# apply to the NFS traffic.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: authentik-postgres-backup
+spec:
+  capacity:
+    storage: {{ .nfs.size }}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: {{ $.Release.Namespace }}
+    name: authentik-postgres-backup
+  mountOptions: [soft, timeo=150, retrans=3]
+  nfs:
+    server: {{ .nfs.server }}
+    path: {{ .nfs.path }}
+---
+{{- else if ne .destination "pvc" }}
+{{- fail "postgres.backup.destination must be pvc or nfs" }}
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: authentik-postgres-backup
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  {{- if eq .destination "nfs" }}
+  storageClassName: ""
+  volumeName: authentik-postgres-backup
+  {{- else }}
+  storageClassName: {{ .pvc.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ if eq .destination "nfs" }}{{ .nfs.size }}{{ else }}{{ .pvc.size }}{{ end }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: authentik-postgres-backup
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ .activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: authentik-postgres-backup
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999     # postgres in the official image
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: pg-dump
+              # The database's own image (values.yaml postgres.image), so pg_dump matches
+              # the server's version.
+              image: {{ $.Values.postgres.image }}
+              command: [bash, -c]
+              # Dump to a temporary name and rename once pg_restore can read it, so a
+              # failed run never leaves a partial file under a dump's name. Then keep
+              # the newest KEEP.
+              args:
+                - |
+                  set -euo pipefail
+                  umask 077
+                  out="/backup/authentik-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  trap 'rm -f "$out.tmp"' EXIT
+                  pg_dump --host=authentik-postgres --username=authentik --dbname=authentik \
+                    --format=custom --file="$out.tmp"
+                  pg_restore --list "$out.tmp" > /dev/null
+                  mv "$out.tmp" "$out"
+                  echo "wrote $out ($(du -h "$out" | cut -f1))"
+                  ls -1t /backup/authentik-*.dump | tail -n +"$((KEEP + 1))" | xargs -r rm -f --
+              env:
+                - {name: KEEP, value: {{ .keep | quote }}}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: {name: authentik-credentials, key: postgres_password}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                {{- toYaml .resources | nindent 16 }}
+              volumeMounts:
+                - {name: backup, mountPath: /backup}
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: authentik-postgres-backup
+---
+# The backup pod accepts no connections and can reach only DNS and the database.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-postgres-backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: authentik-postgres-backup
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: authentik-postgres
+      ports:
+        - {protocol: TCP, port: 5432}
+{{- end }}
+{{- end }}

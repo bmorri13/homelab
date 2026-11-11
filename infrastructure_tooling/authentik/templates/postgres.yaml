@@ -97,5 +97,11 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: authentik
+        {{- if .Values.postgres.backup.enabled }}
+        # And the backup (templates/postgres-backup.yaml).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: authentik-postgres-backup
+        {{- end }}
       ports:
         - {protocol: TCP, port: 5432}
