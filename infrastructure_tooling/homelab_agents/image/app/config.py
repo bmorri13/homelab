@@ -38,6 +38,9 @@ WORKSPACE = os.environ.get("AGENT_WORKSPACE", os.path.join(APP_DIR, "workspace")
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
 MAX_TURNS = 40            # per item
+ITEM_TIMEOUT_S = 240      # per item; a timeout counts as a failed triage
+RUN_BUDGET_S = 1200       # no new triage starts after this; the Job is killed at 1500 s
+                          # (values.yaml activeDeadlineSeconds) and the rest wait for the next run
 MAX_ITEMS_PER_RUN = 10    # the rest are posted untriaged, as a list
 TRIAGE_ATTEMPTS = 3       # runs that try a failing item before it's posted with the error
 
