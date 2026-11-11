@@ -97,7 +97,7 @@ det("HL - Kubernetes anonymous or denied API requests",
 
 # ---- Vault --------------------------------------------------------------------------------
 VAULT_TAIL = (
-    "| eval user='auth.display_name', src='request.remote_address', object='request.path' "
+    "| eval user=coalesce('auth.display_name', \"(no token)\"), src='request.remote_address', object='request.path' "
     "| stats count min(_time) as first_seen max(_time) as last_seen values(request.operation) as ops values(error) as errors values(auth.policies{}) as policies by user src object "
     "| eval host=\"vault\", detail=\"operations=\".mvjoin(ops, \",\").\" policies=\".mvjoin(policies, \",\").if(isnotnull(errors), \" errors=\".mvjoin(errors, \";\"), \"\") "
     "| convert ctime(first_seen) ctime(last_seen) "
@@ -132,7 +132,7 @@ det("HL - Vault auth method or policy changed",
 det("HL - Vault permission denied burst",
     "T1555.006", "Credential Access", "medium", "DET0130",
     "`hl_vault_audit` error=\"*permission denied*\" "
-    "| eval user='auth.display_name', src='request.remote_address' "
+    "| eval user=coalesce('auth.display_name', \"(no token)\"), src='request.remote_address' "
     "| stats count min(_time) as first_seen max(_time) as last_seen values(request.path) as paths by user src "
     "| where count>=5 "
     "| eval host=\"vault\", object=mvjoin(mvindex(paths, 0, 9), \",\"), detail=\"denied requests: \".count "
@@ -205,7 +205,7 @@ det("HL - Sensitive command run over SSH or sudo",
 det("HL - UniFi admin login from a new source",
     "T1078.001", "Initial Access", "medium", "DET0465",
     "index=audit sourcetype=ubiquiti:unifi:ocsf class_uid=3002 earliest=-30d@d latest=-5m@m "
-    "| eval src=coalesce('src_endpoint.ip', src), user=coalesce('user.name', 'actor.user.name', user) "
+    "| eval src=coalesce('src_endpoint.ip', src, \"unknown\"), user=coalesce('user.name', 'actor.user.name', user, \"unknown\") "
     # Only a failure inside the current window counts; over the whole baseline, one
     # failed login re-alerted every day for 30 days.
     "| eval recent_fail=if(_time>=relative_time(now(), \"-20m@m\") AND match(status, \"(?i)fail\"), 1, 0) "
@@ -220,7 +220,8 @@ det("HL - UniFi admin login from a new source",
 det("HL - UniFi configuration changed",
     "T1686", "Defense Impairment", "medium", "DET0306",
     "index=audit sourcetype=ubiquiti:unifi:ocsf class_uid=5019 "
-    "| eval user=coalesce('actor.user.name', 'user.name', user), src=coalesce('src_endpoint.ip', src), object=coalesce('device.name', 'device.hostname', \"unifi\") "
+    # The cc-unifi-ocsf pack puts a config change's source address in unmapped.src_ip.
+    "| eval user=coalesce('actor.user.name', 'user.name', user, \"unknown\"), src=coalesce('unmapped.src_ip', 'src_endpoint.ip', src, \"unknown\"), object=coalesce('device.name', 'device.hostname', \"unifi\") "
     "| stats count min(_time) as first_seen max(_time) as last_seen values(message) as messages by user src object "
     "| eval host=\"unifi\", detail=mvjoin(mvindex(messages, 0, 4), \" || \") "
     "| convert ctime(first_seen) ctime(last_seen) ",
@@ -250,6 +251,7 @@ det("HL - Isolated network device tried to reach a trusted network",
 
 # ---- Authentik and Splunk Web logins ------------------------------------------------------
 AK_TAIL = (
+    '| fillnull value="unknown" user src '
     '| stats count min(_time) as first_seen max(_time) as last_seen values(stage) as stages values(action) as actions by user src '
     '| convert ctime(first_seen) ctime(last_seen) '
 )
@@ -304,7 +306,7 @@ det("HL - Splunk local login",
 det("HL - MCP gateway write tool, denial or new client",
     "T1078", "Initial Access", "medium", "DET0927",
     "index=audit sourcetype=toolhive:vmcp:audit earliest=-30d@d latest=-5m@m "
-    "| eval user='subjects.user_id', tool='target.name', src='source.value' "
+    "| eval user=coalesce('subjects.user_id', \"unknown\"), tool='target.name', src=coalesce('source.value', \"unknown\") "
     "| eventstats min(_time) as user_first by user "
     "| where _time>=relative_time(now(), \"-20m@m\") "
     "| eval reason=case(outcome!=\"success\", \"outcome=\".outcome, "
