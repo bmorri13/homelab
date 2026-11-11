@@ -12,4 +12,4 @@
 | [GitHub Actions Runner Controller](kubernetes/arc.md) | Ephemeral CI runners on Kubernetes |
 | [Secondary K3s cluster](secondary-cluster.md) | docker-compose-03-k3s and the Tailscale operator |
 | [Applications](applications.md) | Alex Printer tracker |
-| [Monitoring](monitoring.md) | Current stack links, and the original Elastic & Cribl write-up |
+| [Monitoring](monitoring.md) | Current stack links, and what ran before Splunk |
