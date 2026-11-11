@@ -14,7 +14,19 @@
 # deploy.sh.
 set -euo pipefail
 
-# The defaults apply at boot, when the unit runs without .env. Comma-separated CIDRs.
+# The allowlists can be overridden in .env. The unit runs this at boot without
+# deploy.sh's environment, so read them from .env here too: only these variables,
+# sourced the way deploy.sh does it, in a subshell so a missing or broken .env leaves
+# the defaults below (never no rules). A variable already in the environment wins.
+allow_vars=(SPLUNK_MGMT_ALLOWED SYSLOG_NETWORK_ALLOWED SYSLOG_INFRA_ALLOWED HEC_ALLOWED CRIBL_UI_ALLOWED SPLUNK_WEB_ALLOWED)
+env_file="$(dirname "$0")/../.env"
+if [[ -r "$env_file" ]]; then
+    # shellcheck disable=SC1090,SC2016  # .env is the host's; the printf builds code for eval
+    eval "$( (set +eu; . "$env_file" >/dev/null 2>&1
+        for v in "${allow_vars[@]}"; do [[ -n "${!v+x}" ]] && printf '[[ -n "${%s+x}" ]] || %s=%q\n' "$v" "$v" "${!v}"; done) )" || true
+fi
+
+# Comma-separated CIDRs.
 MGMT_ALLOWED="${SPLUNK_MGMT_ALLOWED:-192.168.4.98/32}"                 # k3s-01
 SYSLOG_NETWORK_ALLOWED="${SYSLOG_NETWORK_ALLOWED:-192.168.4.1/32,192.168.1.85/32}"  # UCG-Max, UX
 SYSLOG_INFRA_ALLOWED="${SYSLOG_INFRA_ALLOWED:-}"                       # 514: nothing sends today
