@@ -19,9 +19,11 @@ k3s-01:  falco (DaemonSet) --stdout--> pod log --> OTel DaemonSet --+--> Cribl h
 ## Install or update a host
 
 ```bash
-scp -r infrastructure_tooling/monitoring_stack/falco root@<host>:/root/falco-install
+rsync -a --delete infrastructure_tooling/monitoring_stack/falco/ root@<host>:/root/falco-install/
 ssh root@<host> /root/falco-install/install.sh
 ```
+
+The host needs `rsync` (`apt-get install rsync`). Don't use `scp -r` here: once `/root/falco-install` exists, it copies into `/root/falco-install/falco` and the old `install.sh` and rules run.
 
 `install.sh` sets up the host as follows:
 

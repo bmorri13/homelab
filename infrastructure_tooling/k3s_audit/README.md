@@ -30,9 +30,11 @@ The log rotates at 100 MB, keeping 3 files for 7 days.
 ## Install or update
 
 ```bash
-scp -r infrastructure_tooling/k3s_audit root@k3s-01:/root/k3s-audit
+rsync -a --delete infrastructure_tooling/k3s_audit/ root@k3s-01:/root/k3s-audit/
 ssh root@k3s-01 /root/k3s-audit/install.sh
 ```
+
+k3s-01 needs `rsync` (`apt-get install rsync`). Don't use `scp -r` here: once `/root/k3s-audit` exists, it copies into `/root/k3s-audit/k3s_audit` and the old files are installed.
 
 `install.sh` copies the policy, the webhook kubeconfig, and a k3s config drop-in (`/etc/rancher/k3s/config.yaml.d/audit.yaml`), then restarts k3s, but only if a file changed.
 
