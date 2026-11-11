@@ -493,6 +493,8 @@ revoke them in the Argo CD UI under Settings > Accounts > mcp-gateway.
 
 ## UniFi Network
 
+> Currently switched off (`mcpServers.unifi-network.enabled` and `secrets.unifi-network-mcp.enabled` are `false`) until the View Only account is saved in Apiary. Do that first, then set both to `true`.
+
 **UniFi Network** (`mcpServers.unifi-network`) is the UniFi Network MCP server
 from `sirkirby/unifi-mcp` (`ghcr.io/sirkirby/unifi-network-mcp`, pinned by
 digest). It runs over stdio behind the proxy runner, so it opens no listener of
