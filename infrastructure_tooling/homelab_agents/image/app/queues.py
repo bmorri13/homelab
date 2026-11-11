@@ -44,15 +44,19 @@ DETECTION_RUNBOOKS = [
 
 # Alerts that don't write to the homelab:detection queue. Each firing's results are
 # read back with loadjob, and the alert's own suppression fields are the dedupe key.
-# (key fields, runbook, fixed severity or None, display title from the row)
+# (key fields, host of the finding from the row, runbook, fixed severity or None,
+# display title from the row)
 ALERTS = {
-    "Falco - AI agent finding": (("agent_host", "rule"), "falco.md", None,
+    "Falco - AI agent finding": (("agent_host", "rule"), lambda r: _first(r.get("agent_host")), "falco.md", None,
                                  lambda r: f"Falco (AI agent): {_first(r.get('rule'))}"),
-    "Falco - runtime finding": (("finding_host", "rule"), "falco.md", None,
+    "Falco - runtime finding": (("finding_host", "rule"), lambda r: _first(r.get("finding_host")), "falco.md", None,
                                 lambda r: f"Falco: {_first(r.get('rule'))}"),
-    "Honeypot - connection to OpenCanary": (("src_host",), "honeypot.md", "high",
+    # src_host is whoever touched the canary; the alert's rows don't carry the canary's
+    # own host, which is the VM that runs it (infrastructure_tooling/opencanary).
+    "Honeypot - connection to OpenCanary": (("src_host",), lambda r: "docker-compose-02", "honeypot.md", "high",
                                             lambda r: f"Honeypot touched by {_first(r.get('src_host'))}"),
-    "Secret leak - unmasked credential in indexed events": (("format", "index", "host"), "secret-leak.md", "high",
+    "Secret leak - unmasked credential in indexed events": (("format", "index", "host"), lambda r: _first(r.get("host")),
+                                                            "secret-leak.md", "high",
                                                             lambda r: f"Unmasked {_first(r.get('format'))} in index {_first(r.get('index'))}"),
 }
 
@@ -84,11 +88,11 @@ def security(gw):
         WINDOW)
     for f in fired:
         name = f["ss_name"]
-        fields, runbook, fixed_severity, display = ALERTS[name]
+        fields, host_of, runbook, fixed_severity, display = ALERTS[name]
         sid = f["sid"].replace('"', "")
         for r in gw.splunk(f'| loadjob "{sid}"', WINDOW):
             parts = [_first(r.get(k)) for k in fields]
-            host = parts[0] if "host" in fields[0] else _first(r.get("host"))
+            host = host_of(r)
             if "art-validation" in json.dumps(r) and host == "ubuntu-desktop-01":
                 continue
             title = display(r)
