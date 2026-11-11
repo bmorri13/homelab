@@ -19,12 +19,12 @@
       "enabled": false
     },
     {
-      "description": "The ToolHive CRDs chart must move in lockstep with the operator chart, and new CRD fields need checking against toolhive_mcp before the operator moves. Upgrade both by hand: see infrastructure_tooling/toolhive_mcp/README.md.",
+      "description": "The ToolHive CRDs chart (toolhive_crds) must move in lockstep with the operator chart (toolhive_operator): one PR for both. Read the release notes for CRD changes before merging: see Upgrading ToolHive in infrastructure_tooling/toolhive_mcp/README.md. OCI charts are named by their full registry path, so short chart names don't match.",
       "matchPackageNames": [
         "ghcr.io/stacklok/toolhive/toolhive-operator",
         "ghcr.io/stacklok/toolhive/toolhive-operator-crds"
       ],
-      "enabled": false
+      "groupName": "ToolHive charts"
     },
     {
       "description": "The tailscale-operator chart is vendored under charts/ (a bare Chart.yaml bump is a no-op that desyncs Chart.lock), and it is applied to docker-compose-03 by hand, not by Argo CD. Upgrade by hand: see the Tailscale Operator section of README.md.",

@@ -44,9 +44,10 @@ Three ArgoCD Applications, one chart directory each (the repo's usual
 - `ingress/` — Traefik Ingress + tailnet-only Middleware
 - `security/` — client ServiceAccounts (namespace `toolhive-clients`) and NetworkPolicies
 
-Versions: ToolHive **v0.57.0** (operator, proxy runner and vMCP images; both
-charts 0.57.0). The chart tarballs are vendored under `charts/` and their
-`Chart.lock` digests match. Renovate is disabled for them (see Upgrading).
+Versions: ToolHive **v0.63.0** (both charts 0.63.0; the operator, proxy runner
+and vMCP images are the chart defaults for that release). The chart tarballs are
+vendored under `charts/` and their `Chart.lock` digests match. Renovate bumps
+both charts in one PR (see Upgrading).
 
 ## Installation (from scratch)
 
@@ -569,17 +570,35 @@ Measured on k3s-01 (4 vCPU / 16 GiB):
 
 ## Upgrading ToolHive
 
-Releases are frequent. Upgrade the CRDs and operator **together**:
+Releases are frequent. The CRDs and operator must move **together**, so
+Renovate bumps both charts in one PR ("ToolHive charts" group in
+`renovate.json`). Its `helmUpdateSubChartArchives` option swaps the vendored
+tarballs and regenerates both `Chart.lock`s, so the PR is a complete bump.
+Before merging:
 
-1. Fetch both chart tarballs at the same version into `toolhive_crds/charts/`
-   and `toolhive_operator/charts/` (remove the old ones). `helm pull
-   oci://ghcr.io/stacklok/toolhive/toolhive-operator{,-crds} --version X`.
-2. Bump `version:` in both `Chart.yaml`s, then run `helm dependency update` in
-   each to regenerate `Chart.lock`.
-3. Read the release notes for CRD field changes and run `helm template` on
-   `toolhive_mcp` against the new CRDs (`kubectl apply --dry-run=server`).
-4. Merge the CRDs first, then the operator. Watch
-   `kubectl -n toolhive-mcp get vmcp,mcpserver`.
+1. Check the PR changes `Chart.yaml`, `Chart.lock` and the tarball in **both**
+   `toolhive_crds/` and `toolhive_operator/`, at the same version.
+2. Read the release notes for every version skipped, for CRD field changes
+   (renamed, removed or newly required fields, served versions dropped) and
+   operator behaviour changes. Nothing in CI checks this.
+3. On the PR branch, render `toolhive_mcp` (`helm template toolhive-mcp
+   infrastructure_tooling/toolhive_mcp`) and check the fields it sets against
+   the new CRD schemas in the CRDs tarball. `kubectl apply --dry-run=server`
+   only validates against the CRDs already in the cluster, so it can't catch
+   this before merge. Fix `toolhive_mcp` in the same PR if anything changed.
+4. If a served CRD version is dropped, migrate stored objects by hand first:
+   `storageVersionMigrator` is off in namespace scope (see
+   `toolhive_operator/values.yaml`).
+5. Re-check the JWKS sidecar note under Security model.
+
+After merging, both Argo CD apps sync from `HEAD`. Check `toolhive-crds` is
+Synced before or with `toolhive-operator`, then watch
+`kubectl -n toolhive-mcp get vmcp,mcpserver`.
+
+By hand (if Renovate is down, or to skip ahead): `helm pull
+oci://ghcr.io/stacklok/toolhive/toolhive-operator{,-crds} --version X` into
+both `charts/` directories (remove the old tarballs), bump `version:` in both
+`Chart.yaml`s, and run `helm dependency update` in each.
 
 ## Security model
 
