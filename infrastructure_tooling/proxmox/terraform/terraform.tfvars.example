@@ -22,6 +22,3 @@ network_bridge = "vmbr0"          # Your network bridge name
 gateway        = "192.168.1.1"    # Your network gateway IP
 dns_servers    = ["8.8.8.8", "8.8.4.4"] # DNS server IPs
 dns_domain     = "home"           # Your local domain
-
-# SSH public keys for cloud-init (add your actual public key content)
-ssh_public_keys = "ssh-rsa AAAAB3NzaC1yc2EAAAA... your-public-key-here"

@@ -49,12 +49,6 @@ variable "dns_domain" {
   default     = "home"
 }
 
-variable "ssh_public_keys" {
-  description = "SSH public keys to add to the VM"
-  type        = string
-  default     = ""
-}
-
 variable "vm_password" {
   description = "Password for the Ubuntu user (overrides template password)"
   type        = string

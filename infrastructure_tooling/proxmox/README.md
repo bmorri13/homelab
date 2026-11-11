@@ -107,7 +107,6 @@ Validates and plans Terraform changes before applying.
 - `PROXMOX_URL`, `PROXMOX_USERNAME`, `PROXMOX_TOKEN`
 - `PROXMOX_NODE` - Target Proxmox node for Terraform deployments
 - `SSH_PASSWORD` - VM password
-- `SSH_PUBLIC_KEYS` - SSH public keys for VM access
 - `CONSUL_HTTP_TOKEN` - Token for Consul backend access
 
 #### 3. Terraform Apply
@@ -141,7 +140,6 @@ Navigate to your repository settings and add the following secrets to the `prod`
    - `PROXMOX_TOKEN` - Proxmox API token secret
    - `PROXMOX_NODE` - Target node for Terraform deployments (Packer uses matrix strategy)
    - `SSH_PASSWORD` - Password for VM users
-   - `SSH_PUBLIC_KEYS` - SSH public keys for VM access
    - `CONSUL_HTTP_TOKEN` - Token for Consul backend access
 
 ## Running Locally
@@ -267,9 +265,6 @@ network_bridge = "vmbr0"
 disk_storage   = "local-lvm"
 gateway        = "192.168.1.1"
 dns_servers    = ["8.8.8.8", "8.8.4.4"]
-
-# SSH public keys for VM access
-ssh_public_keys = "ssh-rsa AAAAB3NzaC1yc2EAAAA... your-public-key-here"
 
 # VM definitions with custom specifications
 vms = {
