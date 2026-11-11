@@ -36,7 +36,7 @@ Everything the tests create is named `art-validation`.
 
 Before each test the runner logs a marker, `ART-VALIDATION run=<id> expect="<detection>" test=<technique>`: to the journal on ubuntu-desktop-01 (`index=infra`) or the pod log (`index=k8s`). *Splunk - detection validation failed* (`monitoring_stack/splunk/apps/85_homelab_ops`) runs hourly, takes the markers 40 to 100 minutes old (so each run is checked exactly once, after two runs of each detection), and posts to Slack for every expected detection with no finding containing `art-validation` since.
 
-The findings themselves still land in `index=security`, but the security agent skips findings that contain `art-validation` and come from these two hosts (`homelab_agents/image/app/queues.py`), so test runs don't reach Slack as incidents.
+The findings themselves still land in `index=security`, but the security agent sets aside the ones whose host, user, object, command or Falco rule are exactly what a test produces (`VALIDATION_*` in `homelab_agents/image/app/queues.py`), so test runs don't reach Slack as incidents.
 
 Detections suppress repeats for 1 to 24 hours. A second run within that time finds its findings suppressed and is reported as failed; leave a day between manual runs.
 
@@ -56,4 +56,4 @@ kubectl -n art-validation create job --from=cronjob/art-validation art-validatio
 
 ## Adding a test
 
-Add it to `host/art-validation` or `k8s/art-validation.sh` with a `mark "<exact detection name>" <technique>` line before it. It must be harmless, clean up after itself (the `cleanup` trap runs even on failure), and put `art-validation` somewhere in what the detection reports. For a Kubernetes test, give `art-runner` the one permission it needs in `k8s/rbac.yaml`.
+Add it to `host/art-validation` or `k8s/art-validation.sh` with a `mark "<exact detection name>" <technique>` line before it. It must be harmless, clean up after itself (the `cleanup` trap runs even on failure), and put `art-validation` somewhere in what the detection reports. Add the finding it produces to the `VALIDATION_*` tables in `homelab_agents/image/app/queues.py`, or the security agent will triage it. For a Kubernetes test, give `art-runner` the one permission it needs in `k8s/rbac.yaml`.
