@@ -53,7 +53,8 @@ DOC_DOMAINS = ["help.splunk.com", "docs.splunk.com", "dev.splunk.com", "lantern.
 AGENTS = {
     "sec": {"title": "Security agent", "renotify_hours": 24,
             "skills": ["search-and-dashboard-troubleshooter", "field-extraction-and-cim-mapping",
-                       "alerting-and-notable-workflows"]},
+                       "alerting-and-notable-workflows", "forwarder-and-data-ingest-doctor",
+                       "hec-setup-and-troubleshooting"]},
     "ops": {"title": "Ops agent", "renotify_hours": 12,
             "skills": ["dashboard-report-alert-performance-advisor", "search-and-dashboard-troubleshooter",
                        "search-performance-optimizer", "forwarder-and-data-ingest-doctor",
