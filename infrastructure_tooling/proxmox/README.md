@@ -115,8 +115,9 @@ Validates and plans Terraform changes before applying.
 Applies Terraform configuration to provision VMs.
 
 **Features:**
-- Runs plan before apply
-- Optional auto-approve via workflow input
+- Runs plan before apply, then applies that saved plan (no interactive approval step)
+- Fails before apply when the plan updates, replaces or deletes more than `max_changes` resources
+- One run at a time (`terraform-proxmox` concurrency group)
 - Creates terraform.tfvars dynamically from secrets
 - Cleans up sensitive files after execution
 
@@ -124,7 +125,7 @@ Applies Terraform configuration to provision VMs.
 - Manual only (workflow_dispatch)
 
 **Workflow Inputs:**
-- `auto_approve` - Skip manual approval (default: false)
+- `max_changes` - Max resources the plan may update, replace or delete (default: 1). Creates and no-ops do not count. Raise it only after reading the plan; the apply runner is itself a managed VM
 
 **Required GitHub Secrets (prod environment):**
 - Same as Terraform Validate and Plan workflow
