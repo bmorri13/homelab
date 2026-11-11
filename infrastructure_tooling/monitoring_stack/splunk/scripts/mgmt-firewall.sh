@@ -62,16 +62,6 @@ allow_only SYSLOG-INFRA "$SYSLOG_INFRA_ALLOWED" 514 udp tcp
 allow_only CRIBL-HEC "$HEC_ALLOWED" 8443 tcp
 allow_only CRIBL-UI "$CRIBL_UI_ALLOWED" 9000 tcp
 allow_only SPLUNK-WEB "$SPLUNK_WEB_ALLOWED" 8000 tcp
-# Plain-HTTP HEC (8088) was retired on 2026-11-03; drop its old rules.
-iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdstport 8088 --ctdir ORIGINAL -j CRIBL-HEC 2>/dev/null || true
-for proto in udp tcp; do ip6tables -w -D INPUT -p "$proto" --dport 8088 -j DROP 2>/dev/null || true; done
-# NetFlow (2055/udp) was tried and dropped on 2026-11-04; remove its rules.
-iptables -w -D DOCKER-USER -p udp -m conntrack --ctorigdstport 2055 --ctdir ORIGINAL -j NETFLOW 2>/dev/null || true
-iptables -w -F NETFLOW 2>/dev/null && iptables -w -X NETFLOW 2>/dev/null || true
-for proto in udp tcp; do
-    ip6tables -w -D INPUT -p "$proto" --dport 2055 -j DROP 2>/dev/null || true
-    iptables -w -t raw -D PREROUTING -i tailscale0 -p "$proto" --dport 2055 -j DROP 2>/dev/null || true
-done
 
 # Two paths skip DOCKER-USER, so these ports are dropped there as well:
 # - Tailscale's ts-forward chain sits ahead of DOCKER-USER in FORWARD and accepts

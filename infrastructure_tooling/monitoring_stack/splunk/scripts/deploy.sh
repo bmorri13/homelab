@@ -123,20 +123,18 @@ fi
 
 # Seed the Worker Group config once. The Leader creates the empty default group on
 # its first start in master mode; the inputs, outputs, pipelines and routes are then
-# copied in while it is stopped. The source is the config of the old single-instance
-# Cribl if this volume has one (the one-time move to Leader + Worker), otherwise the
-# repo seed in cribl/local/cribl. cribl-bootstrap.sh then sets the HEC token and
-# deploys the config to the Worker. After that the Cribl UI owns the config; export
-# changes back to cribl/ in the repo to keep them.
+# copied in from the repo seed in cribl/local/cribl while it is stopped.
+# cribl-bootstrap.sh then sets the HEC token and deploys the config to the Worker.
+# After that the Cribl UI owns the config; export changes back to cribl/ in the repo
+# to keep them.
 seed_cribl_group() {
-    local group_dir="$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl" src
+    local group_dir="$CRIBL_DIR/groups/$CRIBL_GROUP/local/cribl" src=cribl/local/cribl
     [[ -f "$group_dir/inputs.yml" ]] && return 0
     for _ in $(seq 1 60); do
         [[ -f "$group_dir/auth/cribl.secret" ]] && break
         sleep 5
     done
     [[ -f "$group_dir/auth/cribl.secret" ]] || { echo "cribl: Leader did not create group $CRIBL_GROUP" >&2; return 1; }
-    if [[ -f "$CRIBL_DIR/local/cribl/inputs.yml" ]]; then src="$CRIBL_DIR/local/cribl"; else src=cribl/local/cribl; fi
     docker compose stop cribl
     cp "$src/inputs.yml" "$src/outputs.yml" "$src/cribl.yml" "$group_dir/"
     rsync -a --exclude 'CLAUDE.md' "$src/pipelines/" "$group_dir/pipelines/"
