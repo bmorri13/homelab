@@ -84,7 +84,7 @@ The image bakes in a selection of [Splunk's agent skills](https://github.com/spl
 
 Skills that need a shell or write files (`splunk-search` via `splunkctl`, the visualization and setup-page builders, Splunk Cloud admin) are left out. Each agent gets its own list (`config.AGENTS[...]["skills"]`).
 
-Each list is short on purpose: every skill's description is in the model's context on every turn, and similar descriptions compete. The security agent has 3 (is the finding itself right: search logic, fields, alert throttling); the ops agent has 7 (Splunk scheduler, ingestion, HEC, health, storage). The model decides when to invoke one, so the prompts say which skill fits which kind of item and the runbooks name the skill where one applies (`splunk-health.md`, `telemetry.md`, `capacity.md`, `general.md`, `secret-leak.md`).
+Each list is short on purpose: every skill's description is in the model's context on every turn, and similar descriptions compete. The security agent has 3 (is the finding itself right: search logic, fields, alert throttling); the ops agent has 7 (Splunk scheduler, ingestion, HEC, health, storage). The model decides when to invoke one, so the prompts say which skill fits which kind of item and the runbooks name the skill where one applies (`splunk-health.md`, `telemetry.md`, `capacity.md`, `general.md`, `secret-leak.md`, `detection-health.md`).
 
 Whether they are used shows in Splunk: each item's `tools_used` has a `Skill:<name>` count, and the *Skills used by the agents* panel on *Homelab Operations* charts it. To add a skill: add it to `SKILLS` in `select_skills.py` and to the agent's list, say in the prompt when it fits, and name it in the runbooks it belongs to.
 
@@ -193,4 +193,4 @@ ssh root@k3s-01 'kubectl -n default get secret vault-token -o jsonpath={.data.to
 
 **Dashboards.** *Homelab Security* has a **Security agent** section (runs, failures, items triaged, items not routine, cost, verdicts, the triaged items and the run log). *Homelab Operations* has an **Agents** section with the health of both agents and the ops agent's items.
 
-**Changing what they look at.** To add an ops check, add a row to `OPS_CHECKS` in `image/app/queues.py`; to change what the security agent reads, edit `security()` there. Runbooks are plain Markdown, matched by detection or alert name.
+**Changing what they look at.** To add an ops check, add a row to `OPS_CHECKS` in `image/app/queues.py`; to change what the security agent reads, edit `security()` there. Runbooks are plain Markdown, matched by detection or alert name (`DETECTION_RUNBOOKS` and `ALERTS` in `queues.py`; an unmatched detection gets `general.md`).

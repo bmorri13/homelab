@@ -40,6 +40,10 @@ DETECTION_RUNBOOKS = [
     ("HL - Sensitive command", "host-commands.md"),
     ("HL - MCP gateway", "mcp-gateway.md"),
     ("HL - Host stopped", "telemetry.md"),
+    ("HL - Log source stopped", "telemetry.md"),
+    ("HL - Falco not running", "telemetry.md"),
+    ("HL - Detection search failing", "detection-health.md"),
+    ("HL - Isolated network", "isolated-network.md"),
 ]
 
 # Alerts that don't write to the homelab:detection queue. Each firing's results are
