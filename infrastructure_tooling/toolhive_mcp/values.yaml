@@ -82,7 +82,8 @@ mcpServers:
     # server's own policy gates refuse every mutation, and the UniFi account
     # it uses has the "View Only" role. Credentials: Vault
     # kv/apiary/shared/unifi-network (set them in Apiary). See README "UniFi Network".
-    enabled: true
+    # Off until that credential exists: flip this and secrets.unifi-network-mcp below.
+    enabled: false
     # Only the UniFi controller, HTTPS (REST + the events websocket).
     egress:
       - cidr: 192.168.1.1/32
@@ -486,7 +487,7 @@ externalSecrets:
     # role). Set it in Apiary before enabling: an ExternalSecret with no
     # source turns the ArgoCD app Degraded until the entry exists.
     unifi-network-mcp:
-      enabled: true
+      enabled: false
       server: unifi-network
       title: UniFi local account
       description: >-
