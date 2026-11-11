@@ -68,8 +68,10 @@ postgres:
 
 authentik:
   global:
+    # Digest inside tag, not in digest:, so Renovate bumps both together.
     image:
-      digest: sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
+      repository: ghcr.io/goauthentik/server
+      tag: 2026.8.5@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5
     # Secrets from the ExternalSecret. env wins over the chart's own config Secret.
     env:
       - name: AUTHENTIK_SECRET_KEY

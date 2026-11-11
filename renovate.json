@@ -85,6 +85,14 @@
       "enabled": false
     },
     {
+      "description": "Authentik's chart and server image (infrastructure_tooling/authentik) move in one PR, so new chart templates never run with an old image. The image is pinned as tag@digest in global.image.tag; a bare digest: key is invisible to Renovate and would stay on the old image.",
+      "matchPackageNames": [
+        "authentik",
+        "ghcr.io/goauthentik/server"
+      ],
+      "groupName": "authentik"
+    },
+    {
       "description": "kubectl must stay within one minor version of the cluster (k3s-01 runs 1.36): the art-validation runner uses it against the API server. Patch updates up to 1.36 still come through; raise this with the k3s upgrade.",
       "matchPackageNames": [
         "registry.k8s.io/kubectl"
