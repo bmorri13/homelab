@@ -1,0 +1,33 @@
+---
+# The Let's Encrypt issuer for every *.bmosan.com ingress (Cloudflare DNS-01).
+# It reads the cf-api-token Secret that cf-api-token.yaml creates in the
+# cert-manager namespace. Applied by hand with kubectl until it moved here; the
+# spec matches the live object, so the first sync only adds Argo CD's tracking
+# annotation.
+#
+# Prune=false: Argo CD never deletes this issuer, even if it is removed from
+# Git. cert-manager owns its ACME account key Secret (bmosan-cert, in the
+# cert-manager namespace); Argo CD does not track that Secret.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: bmosan-cert
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: bryanmorrison017@gmail.com
+    privateKeySecretRef:
+      name: bmosan-cert
+    solvers:
+      - dns01:
+          cloudflare:
+            email: bryanmorrison017@gmail.com
+            apiTokenSecretRef:
+              name: cf-api-token
+              key: cf-api-token
+        selector:
+          dnsZones:
+            - "bmosan.com"
+            - "*.bmosan.com"

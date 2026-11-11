@@ -1,0 +1,32 @@
+---
+# ArgoCD Application for the bmorri13 runner scale set (arc-k3s-homelab).
+#
+# Created in the Argo CD UI originally; committed so the app can be recreated
+# from Git. It matches the live Application, so applying it changes nothing.
+# There is no app-of-apps; apply once, after checking the diff:
+#   kubectl diff -f infrastructure_tooling/arc_runner_scaleset/application.yaml
+#   kubectl apply -f infrastructure_tooling/arc_runner_scaleset/application.yaml
+#
+# prune stays off: the ARC controller creates objects in arc-runners that
+# ArgoCD must never delete (docs/kubernetes/argocd.md). The chart version must
+# match the arc-controller-k3s controller version (docs/kubernetes/arc.md).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runner-scaleset-k3s
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab.git
+    targetRevision: HEAD
+    path: infrastructure_tooling/arc_runner_scaleset
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
