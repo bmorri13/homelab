@@ -1,6 +1,6 @@
 # OTel host agent
 
-The OpenTelemetry Collector (contrib, 0.163.2) as a systemd service on VMs and Proxmox nodes. It sends to Cribl's HEC input on security-tooling-01 over HTTPS (`https://192.168.4.11:8443`), checking the cert against the homelab CA in `homelab-ca.crt` (a copy of `toolhive_mcp/files/homelab-ca.crt`), and Cribl picks the Splunk index.
+The OpenTelemetry Collector (contrib, the version in `VERSION` in `install.sh`) as a systemd service on VMs and Proxmox nodes. It sends to Cribl's HEC input on security-tooling-01 over HTTPS (`https://192.168.4.11:8443`), checking the cert against the homelab CA in `homelab-ca.crt` (a copy of `toolhive_mcp/files/homelab-ca.crt`), and Cribl picks the Splunk index.
 
 | Role | Config | Collects | Splunk index |
 |---|---|---|---|
@@ -47,6 +47,12 @@ ssh root@<host> '/root/otel-agent/install.sh base < /dev/null'
 - Checks the `.deb` against a pinned SHA-256.
 - Validates the config before restarting, so a bad config never replaces a running one.
 - Runs the service as root, which is needed to read the journal, the Docker socket, and `/var/lib/docker/containers`.
+
+### Upgrading
+
+Renovate watches `VERSION` (GitHub releases of `open-telemetry/opentelemetry-collector-releases`) and lists new releases on the Dependency Dashboard (issue #2), but it opens the PR only when you tick it there: it can't compute the new `SHA256`, and `install.sh` refuses a `.deb` whose hash doesn't match. After approving, set `SHA256` on the PR branch to the release's `otelcol-contrib_<version>_linux_amd64.deb.sha256`, merge, and re-run `install.sh` on each host. The hash stays hard-coded on purpose: it pins the exact package, whereas fetching the checksum at install time would only catch a corrupt download, not a replaced release (unless the sigstore signature were verified too).
+
+The k3s collector (`../../../otel_collector_k3s`, image tag in its `values.yaml`) is a separate install that Renovate bumps on its own. The two don't need to match: each sends to Cribl independently and neither talks to the other. Keep them within a few releases of each other so the configs, which follow the same conventions, behave alike.
 
 Behaviour notes:
 

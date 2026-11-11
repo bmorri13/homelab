@@ -43,7 +43,7 @@ Kubernetes moves one minor version at a time, and k3s can't be downgraded, so ea
    - Vault: its chart.
    - The ToolHive, ARC, Falco, Trivy and OTel charts.
    - Clients still calling deprecated APIs: `k3s kubectl get --raw /metrics | grep apiserver_requested_deprecated_apis`.
-2. **Set `k3s-version`** to the latest patch of the next minor. Take the SHA-256 for `k3s` from that release's `sha256sum-amd64.txt`. Open a PR.
+2. **Set `k3s-version`** to the latest patch of the next minor (by hand: Renovate only offers patches within the running minor, on the Dependency Dashboard). Take the SHA-256 for `k3s` from that release's `sha256sum-amd64.txt`. Open a PR.
 3. **Snapshot the VM** (k3s-01 is VM 103 on proxmox3; `local-lvm` is thin LVM):
    ```bash
    ssh root@proxmox3 qm snapshot 103 pre-k3s-<version> --description "before k3s <version>"

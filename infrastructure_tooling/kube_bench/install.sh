@@ -7,6 +7,9 @@ set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 cd "$(dirname "$0")"
 
+# Renovate tracks VERSION but can't compute SHA256, so its PR waits for approval on
+# the Dependency Dashboard. To upgrade: approve it there, then on the PR branch set
+# SHA256 to the linux_amd64.tar.gz line of the release's checksums file, and merge.
 VERSION=0.16.0
 SHA256=82dbc7e598740dc9344d41f8ad0b8210d57c4c00bdb2c5f1d8a69a2b98baddcf   # kube-bench_${VERSION}_checksums.txt
 DEST=/usr/local/lib/kube-bench

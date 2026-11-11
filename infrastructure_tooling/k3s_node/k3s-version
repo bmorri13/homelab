@@ -1,4 +1,7 @@
 # The k3s release k3s-01 runs, and the SHA-256 of its amd64 binary (from the
 # release's sha256sum-amd64.txt). upgrade-k3s.sh installs exactly this.
+# Renovate offers only patch releases of the running minor, and only once approved on
+# the Dependency Dashboard; it can't set K3S_SHA256, so push that to its PR branch.
+# Minor upgrades are by hand: see "Upgrading k3s" in README.md.
 K3S_VERSION=v1.36.6+k3s1
 K3S_SHA256=66ceb8e67edfa547195135d74783bfadc2ecc04a91059e90ae5f70a3dbc98c15

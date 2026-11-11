@@ -9,6 +9,10 @@
 # Re-running with the same version only refreshes the configs.
 set -euo pipefail
 
+# Renovate tracks VERSION but can't compute SHA256, so its PR waits for approval on
+# the Dependency Dashboard. To upgrade: approve it there, then on the PR branch set
+# SHA256 to the contents of otelcol-contrib_<version>_linux_amd64.deb.sha256 from
+# the release (check it against the downloaded .deb), and merge.
 VERSION=0.163.2
 SHA256=5a175c93c5a560368c1bdbf0ec25fdc06e7b7d852f424bf7dbc36da6fd495db7
 ROLE="${1:?usage: install.sh base|docker|pve}"
