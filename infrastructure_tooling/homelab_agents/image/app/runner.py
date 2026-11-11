@@ -311,23 +311,32 @@ def routine(item):
             and t.get("severity") in ("low", "medium"))
 
 
-def slack_messages(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
+def slack_cards(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
     """Cards for one run: one per item that needs a look, most severe first, then a
     digest if anything wasn't triaged or there are notes. Routine items get no card.
-    Everything from logs or the model goes through slack_escape."""
+    Everything from logs or the model goes through slack_escape. Returns (message,
+    keys) pairs: keys are the items that message reports."""
     loud = [i for i in items if not routine(i)]
     loud.sort(key=lambda i: -queues.SEV_RANK.get((i.get("triage") or {}).get("severity") or i["severity"], 0))
-    messages = [alert_card(agent, i, run_id) for i in loud]
+    cards = [(alert_card(agent, i, run_id), [i["key"]]) for i in loud]
     if untriaged or notes:
-        messages.append(digest_card(agent, untriaged, cap, run_id, notes))
-    return messages
+        cards.append((digest_card(agent, untriaged, cap, run_id, notes), [i["key"] for i in untriaged]))
+    return cards
 
 
-def post_all(webhook, messages):
+def slack_messages(agent, items, untriaged, notes, cap=config.MAX_ITEMS_PER_RUN, run_id=None):
+    return [m for m, _ in slack_cards(agent, items, untriaged, notes, cap, run_id)]
+
+
+def post_all(webhook, messages, posted=None):
+    """Post in order and stop at the first failure (it raises). posted(n) runs after
+    message n is delivered."""
     for n, m in enumerate(messages):
         if n:
             time.sleep(1.1)   # incoming webhooks allow about one message a second
         clients.slack_post(webhook, m)
+        if posted:
+            posted(n)
 
 
 def hec_event(agent, kind, **fields):
@@ -415,15 +424,18 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                   if (i.get("triage") or i.get("triage_error")) and not i.get("retry")]
         summary["routine"] = sum(1 for i in report if routine(i))
         if report or untriaged:
-            messages = slack_messages(agent, report, untriaged, notes, cap, run_id)
+            cards = slack_cards(agent, report, untriaged, notes, cap, run_id)
+            messages = [m for m, _ in cards]
             if dry_run:
                 print(json.dumps(messages, indent=2))
             elif not webhook:
                 notes.append("Slack not configured (Vault kv/slack-alerts webhook_url); will post next run.")
                 status = "no_slack"
             else:
-                post_all(webhook, messages)
-                state.mark_notified([i["key"] for i in report + untriaged])  # routine too: reported, just quietly
+                state.mark_notified([i["key"] for i in report if routine(i)])  # reported, just quietly
+                # Each card's items are marked as it's delivered, so a failure part way
+                # through reposts only the cards that didn't go out.
+                post_all(webhook, messages, lambda n: state.mark_notified(cards[n][1]))
                 summary["posted"] = bool(messages)
         elif notes and webhook and not dry_run:
             post_all(webhook, slack_messages(agent, [], [], notes))
