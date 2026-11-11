@@ -135,21 +135,37 @@ functions:
       lines (sourcetype linux_secure) so the Splunk Add-on for Unix and Linux parses
       them into CIM Authentication and Change. Tailscale SSH logins and session
       commands, and Proxmox logins, are parsed by apps/85_linux_auth. The indexed journald fields are kept.
+  - id: eval
+    filter: >-
+      sourcetype == 'linux_secure' || ['audit', 'security'].includes(index) ||
+      ((__e['syslog.identifier'] == 'falco' || __e['k8s.namespace.name'] == 'falco') && /^\{"hostname"/.test(_raw))
+    conf:
+      add:
+        - name: __keep
+          value: "true"
+    description: >-
+      Mark auth lines, events the collector sent to audit or security, and Falco
+      alerts. The drops below that match on event text skip marked events.
   - id: drop
     filter: __e['k8s.namespace.name'] == 'arc-runners'
     conf: {}
     description: "GitHub Actions runner pods: job chatter, no value"
   - id: drop
-    filter: /kube-probe\//.test(_raw)
+    filter: "!__keep && /kube-probe\\//.test(_raw)"
     conf: {}
     description: Kubernetes liveness/readiness probe hits
   - id: drop
-    filter: /"level":"debug"|\blevel=debug\b|\bDEBUG\b/i.test(_raw)
+    filter: >-
+      !__keep && sourcetype != 'linux:journald' &&
+      (/"level":"debug"|\blevel=debug\b|\[debug\]/i.test(_raw) || /\bDEBUG\b/.test(_raw))
     conf: {}
-    description: Debug-level lines
+    description: >-
+      Debug-level container lines: a JSON or logfmt level field, a [debug] tag, or an
+      upper-case DEBUG level word. journald is skipped: the host agents keep debug
+      priority on the host.
   - id: drop
     filter: >-
-      /"GET \/(api\/)?(health|healthz|ready|readyz|livez)\b[^"]*" 200/.test(_raw)
+      !__keep && /"GET \/(api\/)?(health|healthz|ready|readyz|livez)\b[^"]*" 200/.test(_raw)
     conf: {}
     description: "Container health-check hits that succeeded"
   - id: drop
