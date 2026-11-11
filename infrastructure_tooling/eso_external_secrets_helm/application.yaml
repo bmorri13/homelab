@@ -1,0 +1,27 @@
+---
+# ArgoCD Application for the shared ExternalSecrets (cf-api-token for
+# cert-manager, alexprinter's tunnel token) and the bmosan-cert ClusterIssuer.
+#
+# Created in the Argo CD UI originally; committed so the app can be recreated
+# from Git. It matches the live Application, so applying it changes nothing.
+# There is no app-of-apps; apply once, after checking the diff:
+#   kubectl diff -f infrastructure_tooling/eso_external_secrets_helm/application.yaml
+#   kubectl apply -f infrastructure_tooling/eso_external_secrets_helm/application.yaml
+#
+# No automated sync, as live: changes here are synced by hand in Argo CD. Sync
+# it only after cert-manager-k3s, which creates the cert-manager namespace and
+# the ClusterIssuer CRD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso-external-secrets-helm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bmorri13/homelab
+    targetRevision: HEAD
+    path: infrastructure_tooling/eso_external_secrets_helm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets

@@ -4,6 +4,20 @@
 
 > ARC runs on the primary cluster, k3s-01 (runner sets `arc-k3s-homelab` and `arc-k3s-cointhieves`). Some steps below were written when it ran on docker-compose-03-k3s.
 
+## On k3s-01
+
+Both the controller and the runner scale sets are Argo CD apps:
+
+| App | Source | Version | In Git |
+|-----|--------|---------|--------|
+| `arc-controller-k3s` | Helm chart `gha-runner-scale-set-controller` from `ghcr.io/actions/actions-runner-controller-charts` | `0.15.1` | No: created in the Argo CD UI (accepted) |
+| `arc-runner-scaleset-k3s` | [`infrastructure_tooling/arc_runner_scaleset`](../../infrastructure_tooling/arc_runner_scaleset/application.yaml) | `gha-runner-scale-set` `0.15.1` | Yes |
+| `arc-runner-cointhieves-k3s` | [`infrastructure_tooling/arc_runner_scaleset_cointhieves`](../../infrastructure_tooling/arc_runner_scaleset_cointhieves/application.yaml) | `gha-runner-scale-set` `0.15.1` | Yes |
+
+The scale-set chart version in each `Chart.yaml` must match the controller version; upgrade all three together. Renovate is off for these charts for that reason.
+
+To recreate `arc-controller-k3s` (as of 2026-11-11): destination namespace `arc-systems` on `https://kubernetes.default.svc`, project `default`, chart `gha-runner-scale-set-controller` version `0.15.1`, Helm values `flags.excludeLabelPropagationPrefixes: [app.kubernetes.io/instance]` (see [argocd.md](argocd.md#argocd-server-configuration-argocd-cm)), automated sync with prune and self-heal, and sync options `CreateNamespace=true` and `ServerSideApply=true`. The Application name matters: the scale sets refer to the controller's ServiceAccount, `arc-controller-k3s-gha-rs-controller`.
+
 ## Architecture
 ```
 GitHub Actions Workflow

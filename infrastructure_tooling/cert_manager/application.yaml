@@ -1,6 +1,7 @@
 # cert-manager on k3s-01: the upstream chart. Issues the Let's Encrypt
 # certificates for every *.bmosan.com ingress through the bmosan-cert
-# ClusterIssuer (Cloudflare DNS-01, prod_cert_issuer.yaml).
+# ClusterIssuer (Cloudflare DNS-01), defined in
+# ../eso_external_secrets_helm/templates/cluster-issuer.yaml.
 #
 # Created in the Argo CD UI originally; committed so the version is on record.
 # There is no app-of-apps, so a change here does nothing until it is applied:

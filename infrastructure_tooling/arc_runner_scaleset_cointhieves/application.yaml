@@ -1,8 +1,7 @@
 ---
 # ArgoCD Application for the cointhieves org runner scale set.
 #
-# Committed (unlike the bmorri13 runner apps, which were created in the UI) so
-# the app can be recreated from Git. Apply once:
+# Committed so the app can be recreated from Git. Apply once:
 #   kubectl apply -f infrastructure_tooling/arc_runner_scaleset_cointhieves/application.yaml
 #
 # prune stays off, matching the other runner apps: the ARC controller creates

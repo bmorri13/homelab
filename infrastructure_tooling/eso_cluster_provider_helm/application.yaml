@@ -1,0 +1,30 @@
+---
+# ArgoCD Application for the vault-backend ClusterSecretStore.
+#
+# Created in the Argo CD UI originally; committed so the app can be recreated
+# from Git. It matches the live Application, so applying it changes nothing.
+# There is no app-of-apps; apply once, after checking the diff:
+#   kubectl diff -f infrastructure_tooling/eso_cluster_provider_helm/application.yaml
+#   kubectl apply -f infrastructure_tooling/eso_cluster_provider_helm/application.yaml
+#
+# No automated sync, as live: every ExternalSecret on k3s-01 depends on this
+# store, so a change here is synced by hand in Argo CD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso-cluster-provider-helm
+  namespace: argocd
+  labels:
+    tool: infra
+spec:
+  project: default
+  info:
+    - name: tool
+      value: infra
+  source:
+    repoURL: https://github.com/bmorri13/homelab
+    targetRevision: HEAD
+    path: infrastructure_tooling/eso_cluster_provider_helm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
