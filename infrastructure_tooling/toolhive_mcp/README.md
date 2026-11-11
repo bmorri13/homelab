@@ -47,7 +47,7 @@ Three ArgoCD Applications, one chart directory each (the repo's usual
 - `ingress/` — Traefik Ingress + tailnet-only Middleware
 - `security/` — client ServiceAccounts (namespace `toolhive-clients`) and NetworkPolicies
 
-Versions: ToolHive **v0.63.0** (both charts 0.63.0; the operator, proxy runner
+Versions: ToolHive **v0.64.0** (both charts 0.64.0; the operator, proxy runner
 and vMCP images are the chart defaults for that release). The chart tarballs are
 vendored under `charts/` and their `Chart.lock` digests match. Renovate bumps
 both charts in one PR (see Upgrading).
