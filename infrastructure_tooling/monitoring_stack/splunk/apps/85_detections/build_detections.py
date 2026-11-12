@@ -358,6 +358,10 @@ det("HL - Log source stopped sending",
     '| tstats max(_time) as last_seen where (index=audit sourcetype IN ("kube:apiserver:audit", "hashicorp_vault_audit_log")) '
     'OR (index=k8s sourcetype="kube:container") OR (index=infra sourcetype="linux:journald") '
     'OR (index=network sourcetype IN ("ubiquiti:unifi:ocsf", "adguard:querylog")) by index sourcetype host '
+    # The gateway is one feed under two hosts: its CEF events (continuous) and its
+    # kernel firewall lines, which only appear when a rule logs a packet.
+    '| eval host=if(sourcetype=="ubiquiti:unifi:ocsf", "unifi", host) '
+    '| stats max(last_seen) as last_seen by index sourcetype host '
     "| join type=left host [| mstats count(system.uptime) as host_metrics where index=metrics earliest=-15m by host] "
     '| eval limit=case(sourcetype=="ubiquiti:unifi:ocsf", 480, sourcetype=="linux:journald" AND match(host, "^proxmox"), 60, '
     'sourcetype=="linux:journald", 30, sourcetype=="adguard:querylog", 30, true(), 15) '
