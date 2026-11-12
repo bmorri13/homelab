@@ -25,6 +25,14 @@ spec:
       valuesObject:
         injector:
           enabled: false
+        server:
+          service:
+            annotations:
+              # Traefik skips endpoints whose pod isn't Ready, and a sealed Vault
+              # isn't, so vault.bmosan.com answered 503 exactly when the unseal
+              # page was needed. With this it sends to the Service's ClusterIP
+              # instead, which still reaches the pod (publishNotReadyAddresses).
+              traefik.ingress.kubernetes.io/service.nativelb: "true"
   destination:
     server: https://kubernetes.default.svc
     namespace: vault

@@ -14,5 +14,7 @@ curl -s https://vault.bmosan.com/v1/sys/health   # from a tailnet device
 ```
 
 Vault's Service is a ClusterIP, so this ingress is the only way in from outside
-the cluster. (It was a NodePort on plain HTTP until 2026-11-12, left over from before
+the cluster. It also works while Vault is sealed (after any restart of
+the pod), so the unseal page loads here: the Service carries Traefik's `nativelb`
+annotation, set in `../vault/application.yaml`. (It was a NodePort on plain HTTP until 2026-11-12, left over from before
 the cluster migration.)
