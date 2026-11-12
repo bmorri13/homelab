@@ -160,13 +160,13 @@ jobs:
           echo "Checking if VM/template with ID $VM_ID exists..."
 
           # Query cluster resources for all VMs and templates
-          CLUSTER_RESOURCES=$(curl -k -s \
+          CLUSTER_RESOURCES=$(curl -s \
             -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
             "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
 
           # Validate JSON response
-          if ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
-            echo "ERROR: Invalid JSON response from Proxmox API"
+          if [ -z "$CLUSTER_RESOURCES" ] || ! echo "$CLUSTER_RESOURCES" | jq empty 2>/dev/null; then
+            echo "ERROR: Empty or invalid JSON response from Proxmox API (unreachable, or its certificate did not verify)"
             echo "Full response: $CLUSTER_RESOURCES"
             exit 1
           fi
@@ -191,7 +191,7 @@ jobs:
             # Stop VM if running
             if [ "$VM_STATUS" = "running" ]; then
               echo "VM is running, stopping it first..."
-              curl -k -X POST \
+              curl -X POST \
                 -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
                 "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID/status/stop"
 
@@ -201,7 +201,7 @@ jobs:
 
             # Delete the VM/template (works for both)
             echo "Deleting VM/template $VM_ID from node $VM_NODE..."
-            DELETE_RESPONSE=$(curl -k -s -X DELETE \
+            DELETE_RESPONSE=$(curl -s -X DELETE \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
               "${{ secrets.PROXMOX_URL }}/nodes/$VM_NODE/qemu/$VM_ID?purge=1")
 
@@ -212,7 +212,7 @@ jobs:
             sleep 15
 
             # Verify deletion
-            VERIFY_RESOURCES=$(curl -k -s \
+            VERIFY_RESOURCES=$(curl -s \
               -H "Authorization: PVEAPIToken=${{ secrets.PROXMOX_USERNAME }}=${{ secrets.PROXMOX_TOKEN }}" \
               "${{ secrets.PROXMOX_URL }}/cluster/resources?type=vm")
 

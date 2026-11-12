@@ -100,7 +100,7 @@ source "proxmox-iso" "ubuntu-2404-desktop" {
   proxmox_url              = var.proxmox_url
   username                 = var.proxmox_username
   token                    = var.proxmox_token
-  insecure_skip_tls_verify = true
+  insecure_skip_tls_verify = false
   node                     = var.proxmox_node
 
   # VM General Settings
