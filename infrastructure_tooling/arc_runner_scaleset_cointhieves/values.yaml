@@ -21,10 +21,12 @@ gha-runner-scale-set:
   runnerScaleSetName: "arc-k3s-cointhieves"
 
   # One warm runner so a dead listener is visible (see arc_runner_scaleset/values.yaml).
-  # Bounded, unlike the bmorri13 scale set: k3s-01 is a single 4-core node that
-  # also runs Vault and ArgoCD, and org repos can queue many jobs at once.
+  # Bounded, unlike the bmorri13 scale set: k3s-01 is a single node (12 cores,
+  # 16 GB) that also runs Vault and ArgoCD, and org repos can queue many jobs at
+  # once. Memory sets the bound: a busy runner uses about 1.3 GB but may take 6 GB
+  # (runner 4Gi + dind 2Gi limits), and about 7 GB is free with two running.
   minRunners: 1
-  maxRunners: 3
+  maxRunners: 5
 
   # Docker-in-Docker, spelled out by hand instead of `containerMode.type: dind`.
   # Org CI (GuardRail's scans in particular) builds images and runs `docker run`,
