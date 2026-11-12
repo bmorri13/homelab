@@ -45,6 +45,7 @@ DETECTION_RUNBOOKS = [
     ("HL - Falco not running", "telemetry.md"),
     ("HL - Detection search failing", "detection-health.md"),
     ("HL - Isolated network", "isolated-network.md"),
+    ("HL - DNS", "dns.md"),
 ]
 
 # Alerts that don't write to the homelab:detection queue. Each firing's results are

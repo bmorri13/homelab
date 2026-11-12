@@ -263,6 +263,71 @@ det("HL - Isolated network device tried to reach a trusted network",
     suppress="src", period="1h",
     description="A device on an isolated network tried to open a connection to another Internal network and the firewall blocked it. Isolated devices have no reason to do this, so any attempt is worth a look; a scan or repeated tries suggests the device is compromised.")
 
+# ---- DNS (AdGuard Home query log) ---------------------------------------------------------
+# AdGuard only logs (filtering, Safe Browsing and parental control are off, no
+# blocklists), so there are no blocked queries to alert on. QH, QT, IP and Answer are
+# search-time JSON fields, not indexed: the searches stay on a 15-minute window, a few
+# hundred events. Clients append the tailnet search domain, so github.com is also asked
+# as github.com.tail<id>.ts.net; that suffix is stripped. domain is the registered
+# domain: the last two labels, or three under a two-letter country code's
+# co/com/net/org/gov/edu/ac. A single-label name has none and is skipped.
+DNS_PREP = (
+    "index=network sourcetype=adguard:querylog "
+    '| eval qname=replace(replace(lower(QH), "\\.$", ""), "\\.tail[0-9a-f]+\\.ts\\.net$", "") '
+    '| rex field=qname "(?<domain>[^.]+\\.(?:(?:co|com|net|org|gov|edu|ac)\\.[a-z]{2}|[^.]+))$" '
+    '| eval subdomain=if(len(qname)>len(domain), substr(qname, 1, len(qname)-len(domain)-1), ""), src=coalesce(IP, "unknown") '
+    "| where isnotnull(domain) AND NOT `hl_dns_chatty_domain` "
+)
+
+# 666 distinct names in a week from 43 clients (2026-11): a small, stable set, so 20
+# distinct 30+ character subdomains of one domain from one client in 15 minutes, or 10
+# distinct TXT/NULL names, is far outside normal. Tunnels (iodine, dnscat2, DNS exfil)
+# must make every name unique to get past caches, which is what this counts.
+det("HL - DNS possible tunnelling from a client",
+    "T1071.004", "Command and Control", "high", "DET0400",
+    DNS_PREP +
+    "| eval long_name=if(len(subdomain)>=30, qname, null()), txt_name=if(in(QT, \"TXT\", \"NULL\"), qname, null()) "
+    "| stats count dc(long_name) as long_names dc(txt_name) as txt_names values(QT) as types values(long_name) as samples "
+    "min(_time) as first_seen max(_time) as last_seen by src domain "
+    "| where long_names>=20 OR txt_names>=10 "
+    "| eval host=\"adguard\", user=\"\", object=domain, detail=long_names.\" distinct long names and \".txt_names.\" distinct TXT/NULL names under \".domain"
+    ".\" in \".count.\" queries; types=\".mvjoin(types, \",\").\"; e.g. \".mvjoin(mvindex(samples, 0, 2), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard, look up 25 different random 40-character names under a domain you own (they fail, which is fine)",
+    suppress="src,object", period="12h",
+    description="One client asked for many distinct long subdomains of one domain, or many distinct TXT/NULL names, in 15 minutes: the shape of DNS tunnelling or exfiltration. A legitimate chatty domain (reputation lookups, DNSBLs) goes in the hl_dns_chatty_domain macro; reverse lookups (.arpa) are already there.")
+
+# NXDOMAIN read from the answer itself: Answer is the base64 DNS reply, and RCODE is the
+# low 4 bits of byte 3, i.e. ((5th base64 char & 3) << 2) | (6th char >> 4). RCODE 3
+# means the 5th char is A E I M Q U Y c g k o s w 0 4 8 and the 6th is w-z 0-9 + /.
+# Names that only failed because a search domain was appended are left out.
+det("HL - DNS lookups failing for many domains from a client",
+    "T1568.002", "Command and Control", "medium", "DET0419",
+    DNS_PREP +
+    "| where match(Answer, \"^.{4}[AEIMQUYcgkosw048][w-z0-9+/]\") AND NOT match(lower(QH), \"\\.tail[0-9a-f]+\\.ts\\.net\\.?$\") "
+    "| stats count dc(domain) as domains values(domain) as domain_list min(_time) as first_seen max(_time) as last_seen by src "
+    "| where domains>=15 "
+    "| eval host=\"adguard\", user=\"\", object=mvjoin(mvindex(domain_list, 0, 4), \",\"), "
+    "detail=domains.\" registered domains returned NXDOMAIN in \".count.\" queries: \".mvjoin(mvindex(domain_list, 0, 9), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard, look up 20 random names under 20 different nonexistent .com domains",
+    suppress="src", period="12h",
+    description="One client got NXDOMAIN for 15 or more different registered domains in 15 minutes: malware trying domain-generation-algorithm (DGA) names until one resolves. Lookups that only failed because the tailnet search domain was appended, and single-label names, are not counted.")
+
+# AdGuard answers ANY (refuse_any: false) and has no rate limit. Nothing here does zone
+# transfers or ANY lookups routinely.
+det("HL - DNS zone transfer or ANY query",
+    "T1018", "Discovery", "medium", "DET0574",
+    "index=network sourcetype=adguard:querylog (QT=AXFR OR QT=IXFR OR QT=ANY) "
+    '| eval qname=replace(replace(lower(QH), "\\.$", ""), "\\.tail[0-9a-f]+\\.ts\\.net$", ""), src=coalesce(IP, "unknown") '
+    "| stats count values(QT) as types values(qname) as names min(_time) as first_seen max(_time) as last_seen by src "
+    "| eval host=\"adguard\", user=\"\", object=mvjoin(mvindex(names, 0, 4), \",\"), "
+    "detail=count.\" queries of type \".mvjoin(types, \",\").\" for \".mvjoin(mvindex(names, 0, 9), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard: dig AXFR example.com (it fails; the query is logged)",
+    suppress="src", period="24h",
+    description="A client asked AdGuard for a zone transfer (AXFR/IXFR) or an ANY record: listing a zone's names, or probing the resolver for amplification. Ordinary software asks for specific record types.")
+
 # ---- Authentik and Splunk Web logins ------------------------------------------------------
 AK_TAIL = (
     '| fillnull value="unknown" user src '
