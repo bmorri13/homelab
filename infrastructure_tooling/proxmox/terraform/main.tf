@@ -178,7 +178,7 @@ module "k3s_01" {
   tags           = ["terraform", "ubuntu", "k3s"]
   target_node    = "proxmox3"
   template_vm_id = 9005
-  cores          = 4
+  cores          = 12
   memory         = 16384
   disk_size      = "300"
 
