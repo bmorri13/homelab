@@ -13,5 +13,6 @@ kubectl apply -f infrastructure_tooling/vault_ingress/application.yaml
 curl -s https://vault.bmosan.com/v1/sys/health   # from a tailnet device
 ```
 
-Vault's Service is still also a NodePort (31080, plain HTTP) from before the
-cluster migration; nothing in this repo needs it now.
+Vault's Service is a ClusterIP, so this ingress is the only way in from outside
+the cluster. (It was a NodePort on plain HTTP until 2026-11-12, left over from before
+the cluster migration.)

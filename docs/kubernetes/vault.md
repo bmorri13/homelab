@@ -28,30 +28,19 @@ kubectl exec vault-0 -n vault -- vault operator init -key-shares=1 -key-threshol
 
 > NOTE: If you simply wish to port forward, you can run `kubectl port-forward svc/vault -n vault 8020:8200` and skip steps 2, 3 & 4 and simply go to `localhost:8020`
 
-4. Update `vault` service to NodePort
-- This will allow us to access the UI from our network. 
-> NOTE: This will be replaces in the future once I setup a reverse proxy
+4. Reach the UI without exposing the Service. It stays a `ClusterIP`: a NodePort would serve Vault over plain HTTP to the whole LAN, around the tailnet-only ingress.
+    - Before the ingress exists, port-forward: `kubectl port-forward svc/vault -n vault 8020:8200`, then open `http://localhost:8020`.
+    - Afterwards, use `https://vault.bmosan.com` from a tailnet device ([`vault_ingress`](../../infrastructure_tooling/vault_ingress/README.md)).
+
+5. Check the Service type:
 ```bash
-kubectl patch svc vault -n vault -p '{"spec": {"type": "NodePort"}}'
+kubectl get svc vault -n vault   # TYPE must be ClusterIP
 ```
 
-5. Get the port for your Vault UI frontend
-    - It will be the first port that is connected to port 8200
+6. If an older install left it as a NodePort, put it back:
 ```bash
-kubectl get svc vault -n vault
+kubectl patch svc vault -n vault --type merge -p '{"spec": {"type": "ClusterIP"}}'
 ```
-- Should look someting like:
-```bash
-NAME    TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)                         AGE
-vault   NodePort   10.43.123.36   <none>        8200:31080/TCP,8201:31973/TCP   16m
-```
-
-6. On your local computer, you can enter in the IP address or local DNS name and then the port
-```bash
-http://192.168.3.170:31080/
-http://bmo-nuc.com:31080/
-```
-> NOTE: If you are running this in the cloud, this will be the IP of your instance. You may need to update securiy groups to include allowing access to the port
 
 7. Unseal your Vault by going to your `vault-keys.json` and copying the valye for `unseal_keys_b64`
 
