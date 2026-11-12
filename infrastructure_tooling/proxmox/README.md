@@ -206,8 +206,17 @@ The Terraform configuration uses Consul as a remote backend to store state files
 
 To set up Consul on Unraid:
 1. Install the Docker Compose Manager app from Community Applications
-2. Use the provided `unraid-docker-compose.yml` file to deploy Consul
-3. Access the Consul UI at `http://consul.bmosan.com:8500`
+2. Copy `consul/config/acl.hcl` to `/mnt/user/appdata/consul/config/` (ACLs on, default deny)
+3. Use the provided `unraid-docker-compose.yml` file to deploy Consul
+4. Access the Consul UI at `http://consul.bmosan.com:8500` (it asks for a token)
+
+**Access control.** The state holds the VMs' cloud-init password, so Consul must not answer without a token. With `acl.hcl` in place:
+
+- Bootstrap once: `curl -s -X PUT http://consul.bmosan.com:8500/v1/acl/bootstrap` returns the management token. Keep it in Vault (`kv/consul`, field `management_token`), not in a shell history.
+- Terraform uses its own token with a policy limited to the state: `key_prefix "terraform/" { policy = "write" }` and `session_prefix "" { policy = "write" }` (the backend takes a lock). That token is the `CONSUL_HTTP_TOKEN` secret in the `prod` environment and `kv/consul` field `terraform_token`.
+- Check: `curl -s -o /dev/null -w '%{http_code}' http://consul.bmosan.com:8500/v1/kv/terraform/proxmox/infra` must print `403` without a token.
+
+The connection is still plain HTTP, so the token crosses the LAN in the clear; Consul has no TLS listener configured yet.
 
 ## Configuration Files
 
