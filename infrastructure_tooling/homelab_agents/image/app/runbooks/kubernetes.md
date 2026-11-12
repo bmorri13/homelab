@@ -8,6 +8,7 @@ Who is who:
 - `system:serviceaccount:toolhive-clients:agent-sec` / `agent-ops`: these agents. Their tokens come from the kubelet (not audited) and they have no Kubernetes API permissions, so any audited API request by them is unexpected.
 - `system:serviceaccount:toolhive-mcp:homelab-vmcp`: the MCP gateway; about ten 403s a week listing configmaps is a known harmless RBAC gap.
 - 401s carry no username (anonymous auth is off); group them by sourceIPs{}.
+- Secret reads that are never reported (`hl_k8s_expected_secret_read`): Trivy Operator in `trivy-system` and getting `*-ghcr-pull` secrets by name, and the ARC kube-mode runner listing its own job secrets by label. Trivy or the ARC runner showing up in a secrets finding is outside that pattern (a list, another secret, another namespace) and worth a look.
 
 Check:
 - `index=audit user.username="<user>" earliest=-1h@h latest=+1h | stats count values(verb) values(objectRef.resource) by objectRef.namespace` to see the whole session.

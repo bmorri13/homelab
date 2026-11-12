@@ -72,10 +72,10 @@ det("HL - Kubernetes RBAC role or binding changed",
 det("HL - Kubernetes secrets read by a person or application",
     "T1552.007", "Credential Access", "medium", "DET0198",
     "`hl_k8s_audit` objectRef.resource=secrets verb IN (get, list, watch) responseStatus.code<400 "
-    "| where NOT `hl_k8s_platform_user` "
+    "| where NOT `hl_k8s_platform_user` AND NOT `hl_k8s_expected_secret_read` "
     + K8S_TAIL,
     "kubectl -n <scratch> get secrets",
-    description="Secrets were read by a person (system:admin is the root kubeconfig on k3s-01) or an application service account. Platform controllers' reads are not audited.")
+    description="Secrets were read by a person (system:admin is the root kubeconfig on k3s-01) or an application service account. Platform controllers' reads are not audited. Exempt (hl_k8s_expected_secret_read): Trivy Operator in its own namespace and getting *-ghcr-pull image-pull secrets by name, and the ARC kube-mode runner listing its own job secrets by label.")
 
 det("HL - Kubernetes service account token minted",
     "T1528", "Credential Access", "medium", "DET0515",
