@@ -291,7 +291,7 @@ det("HL - DNS possible tunnelling from a client",
     "min(_time) as first_seen max(_time) as last_seen by src domain "
     "| where long_names>=20 OR txt_names>=10 "
     "| eval host=\"adguard\", user=\"\", object=domain, detail=long_names.\" distinct long names and \".txt_names.\" distinct TXT/NULL names under \".domain"
-    ".\" in \".count.\" queries; types=\".mvjoin(types, \",\").\"; e.g. \".mvjoin(mvindex(samples, 0, 2), \" \") "
+    ".\" in \".count.\" queries; types=\".mvjoin(types, \",\").\".if(isnotnull(samples), \"; e.g. \".mvjoin(mvindex(samples, 0, 2), \" \"), \"\") "
     "| convert ctime(first_seen) ctime(last_seen) ",
     "from a client that uses AdGuard, look up 25 different random 40-character names under a domain you own (they fail, which is fine)",
     suppress="src,object", period="12h",
