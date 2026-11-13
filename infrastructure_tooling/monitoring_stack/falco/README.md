@@ -27,10 +27,32 @@ The host needs `rsync` (`apt-get install rsync`). Don't use `scp -r` here: once 
 
 `install.sh` sets up the host as follows:
 
-- **Package:** adds Falco's signed apt repository, then installs `falco=$VERSION` (pinned in `install.sh`) and holds it at that version. The repository is GPG-signed, so there is no hash to update: Renovate opens a PR for each new Falco release, and merging changes nothing until `install.sh` is re-run on each host.
+- **Package:** adds Falco's signed apt repository, then installs `falco=$VERSION` (pinned in `install.sh`) and holds it at that version. The repository is GPG-signed, but the Arch path below pins a tarball hash, so Renovate's PR for a new Falco release waits for approval on the Dependency Dashboard (issue #2): approve it, set `SHA256_ARCH` on the PR branch (steps beside it in `install.sh`), and merge. Merging changes nothing until `install.sh` is re-run on each host.
 - **Driver:** `modern_ebpf`, so there is no kernel module. It needs kernel 5.8+ with BTF, which every homelab host has.
 - **Updates:** `falcoctl` artifact auto-updates are off, so the rules in effect are the ones in this repo.
 - **Validation:** runs `falco --dry-run` before restarting the service.
+
+### Arch Linux
+
+On an Arch-based host (`ID` or `ID_LIKE` in `/etc/os-release` is `arch`), `install.sh` takes Falco from the release tarball instead (`falco-$VERSION-x86_64.tar.gz` from `download.falco.org/packages/bin/x86_64/`), checked against `SHA256_ARCH`. Falco publishes no checksum file for it, only a GPG signature (`.asc`) made with the same key as the apt repository; the pinned hash was taken from a tarball whose signature verified. It installs what the package would, minus falcoctl and the kernel module sources:
+
+- `/usr/bin/falco`, `/usr/share/falco/plugins/libcontainer.so` (Falco looks for plugins in that directory), and `/etc/falco/{falco.yaml,falco_rules.yaml,config.d/falco.container_plugin.yaml}`, replaced on each upgrade.
+- `/etc/systemd/system/falco-modern-bpf.service`: the package's unit (`scripts/systemd/falco-modern-bpf.service` at the same tag) without the `falcoctl-artifact-follow` ordering. Same name, same `ExecStart`, same hardening, `StandardOutput=null`, so alerts reach journald through syslog exactly as on the Debian hosts.
+
+The rest (config, rules, dry run, enable and restart) is shared. From a checkout, on the host:
+
+```bash
+sudo infrastructure_tooling/monitoring_stack/falco/install.sh
+```
+
+To uninstall:
+
+```bash
+sudo systemctl disable --now falco-modern-bpf
+sudo rm -f /etc/systemd/system/falco-modern-bpf.service /usr/bin/falco
+sudo rm -rf /usr/share/falco /etc/falco
+sudo systemctl daemon-reload
+```
 
 ## Configuration choices (`config.d/homelab.yaml`)
 

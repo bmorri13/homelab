@@ -56,7 +56,7 @@
     },
     {
       "customType": "regex",
-      "description": "Host Falco (monitoring_stack/falco/install.sh). Installed from Falco's GPG-signed apt repository as falco=<VERSION>, so a version-only PR is complete. Merging changes nothing until install.sh is re-run on each host.",
+      "description": "Host Falco (monitoring_stack/falco/install.sh). Debian hosts install falco=<VERSION> from Falco's GPG-signed apt repository, but the Arch path pins SHA256_ARCH of the release tarball beside VERSION, so this waits for Dependency Dashboard approval like the other host pins with a checksum. Merging changes nothing until install.sh is re-run on each host.",
       "managerFilePatterns": [
         "/^infrastructure_tooling/monitoring_stack/falco/install\\.sh$/"
       ],
@@ -214,9 +214,10 @@
       "separateMultipleMinor": true
     },
     {
-      "description": "Host pins with a hard-coded SHA-256 beside the version (OTel host agent, kube-bench, k3s). Renovate can only change the version, and the installers fail closed on a hash mismatch, so a PR on its own can't be merged. Approve it on the Dependency Dashboard when you are ready to upgrade, then push the new hash to the PR branch before merging: the steps are next to each pin.",
+      "description": "Host pins with a hard-coded SHA-256 beside the version (OTel host agent, Falco's Arch tarball, kube-bench, k3s). Renovate can only change the version, and the installers fail closed on a hash mismatch, so a PR on its own can't be merged. Approve it on the Dependency Dashboard when you are ready to upgrade, then push the new hash to the PR branch before merging: the steps are next to each pin.",
       "matchFileNames": [
         "infrastructure_tooling/monitoring_stack/splunk/otel-agent/install.sh",
+        "infrastructure_tooling/monitoring_stack/falco/install.sh",
         "infrastructure_tooling/kube_bench/install.sh",
         "infrastructure_tooling/k3s_node/k3s-version"
       ],
