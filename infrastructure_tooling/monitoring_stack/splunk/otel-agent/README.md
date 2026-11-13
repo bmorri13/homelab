@@ -48,9 +48,32 @@ ssh root@<host> '/root/otel-agent/install.sh base < /dev/null'
 - Validates the config before restarting, so a bad config never replaces a running one.
 - Runs the service as root, which is needed to read the journal, the Docker socket, and `/var/lib/docker/containers`.
 
+### Arch Linux
+
+On an Arch-based host (`ID` or `ID_LIKE` in `/etc/os-release` is `arch`), `install.sh` uses the release tarball `otelcol-contrib_<VERSION>_linux_amd64.tar.gz` for the same `VERSION`, checked against `SHA256_ARCH`. It installs the binary as `/usr/local/bin/otelcol-contrib` (pacman doesn't own `/usr/local`) and writes `/etc/systemd/system/otelcol-contrib.service`, the unit from the `.deb` with that path. It creates no `otelcol-contrib` user: the drop-in runs the service as root on every host. Configs, drop-in, validation and restart are shared with Debian. journald and host metrics need nothing Debian-specific: the receiver runs `journalctl`, which reads `/var/log/journal` on Arch too.
+
+Use the `base` role. From a checkout, on the host:
+
+```bash
+# First install: the token on stdin, as above
+ssh root@security-tooling-01 'grep ^CRIBL_HEC_TOKEN= /opt/splunk-stack/.env' | sudo infrastructure_tooling/monitoring_stack/splunk/otel-agent/install.sh base
+
+# Later runs
+sudo infrastructure_tooling/monitoring_stack/splunk/otel-agent/install.sh base < /dev/null
+```
+
+To uninstall (the last line drops the token, the disk queue and the journald cursor):
+
+```bash
+sudo systemctl disable --now otelcol-contrib
+sudo rm -rf /etc/systemd/system/otelcol-contrib.service /etc/systemd/system/otelcol-contrib.service.d /usr/local/bin/otelcol-contrib
+sudo systemctl daemon-reload
+sudo rm -rf /etc/otelcol-contrib /var/lib/otelcol-contrib
+```
+
 ### Upgrading
 
-Renovate watches `VERSION` (GitHub releases of `open-telemetry/opentelemetry-collector-releases`) and lists new releases on the Dependency Dashboard (issue #2), but it opens the PR only when you tick it there: it can't compute the new `SHA256`, and `install.sh` refuses a `.deb` whose hash doesn't match. After approving, set `SHA256` on the PR branch to the release's `otelcol-contrib_<version>_linux_amd64.deb.sha256`, merge, and re-run `install.sh` on each host. The hash stays hard-coded on purpose: it pins the exact package, whereas fetching the checksum at install time would only catch a corrupt download, not a replaced release (unless the sigstore signature were verified too).
+Renovate watches `VERSION` (GitHub releases of `open-telemetry/opentelemetry-collector-releases`) and lists new releases on the Dependency Dashboard (issue #2), but it opens the PR only when you tick it there: it can't compute the new `SHA256`, and `install.sh` refuses a `.deb` or tarball whose hash doesn't match. After approving, set `SHA256` on the PR branch to the release's `otelcol-contrib_<version>_linux_amd64.deb.sha256` and `SHA256_ARCH` to its `otelcol-contrib_<version>_linux_amd64.tar.gz.sha256`, merge, and re-run `install.sh` on each host. The hash stays hard-coded on purpose: it pins the exact package, whereas fetching the checksum at install time would only catch a corrupt download, not a replaced release (unless the sigstore signature were verified too).
 
 The k3s collector (`../../../otel_collector_k3s`, image tag in its `values.yaml`) is a separate install that Renovate bumps on its own. The two don't need to match: each sends to Cribl independently and neither talks to the other. Keep them within a few releases of each other so the configs, which follow the same conventions, behave alike.
 
