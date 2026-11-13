@@ -76,7 +76,8 @@ def message(payload):
     if isinstance(detail, list):
         detail = "; ".join(detail)
     if r.get("technique"):
-        detail = f"ATT&CK v20 {r['technique']} ({r.get('tactic', '')}). {detail}"
+        framework = "ATLAS" if r["technique"].startswith("AML.") else "ATT&CK v20"
+        detail = f"{framework} {r['technique']} ({r.get('tactic', '')}). {detail}"
 
     fields = [{"type": "mrkdwn", "text": f"*Severity*\n{emoji} {label}"}]
     seen = set()

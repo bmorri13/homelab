@@ -4,7 +4,9 @@
 
 Every detection is mapped to MITRE ATT&CK v20 (released 2026-10-13): technique,
 tactic and, where MITRE has one for this kind of data, the detection strategy
-(DET####) the logic follows. Each search ends in `hl_finding(...)` (macros.conf),
+(DET####) the logic follows. Attacks on the agents themselves have no ATT&CK
+technique; those use MITRE ATLAS v5.6.0 (technique AML.T####), and hl_finding sets
+attack_version to atlas-5.6.0 for them. Each search ends in `hl_finding(...)` (macros.conf),
 so every finding has the same fields. Firing alerts:
   - write one event per finding to index=security, sourcetype=homelab:detection
     (Log Event action), which is what the security agent reads. The agents post
@@ -167,6 +169,32 @@ det("HL - Vault secret read by a new identity",
     suppress="user,object", period="24h",
     description="An identity read a KV secret it had not read in the previous 14 days (ESO and AppRole clients read the same paths on a loop, so a new pair stands out).")
 
+# ---- Decoys (honeytokens) --------------------------------------------------------------
+# A Kubernetes secret and a Vault secret that nothing uses: any request for them is
+# someone exploring. Their names must never be in this public repo. The macros
+# hl_decoy_k8s_secret and hl_decoy_vault_path match nothing here; the real predicates
+# are set by hand in etc/apps/85_detections/local/macros.conf on the Splunk host,
+# which deploys never touch (README, Detections). The decoy secret lives alone in its
+# own namespace, because a list carries no objectRef.name: the predicate matches the
+# namespace. No exemptions, any verb, any response code: a denied attempt counts.
+det("HL - Decoy Kubernetes secret touched",
+    "T1552.007", "Credential Access", "critical", "DET0198",
+    "`hl_k8s_audit` objectRef.resource=secrets "
+    "| where `hl_decoy_k8s_secret` "
+    + K8S_TAIL.replace("user='user.username'", "user=coalesce('user.username', \"(unauthenticated)\")"),
+    "kubectl get secrets in the decoy namespace (set in the hl_decoy_k8s_secret override on the Splunk host); a denied attempt fires too",
+    period="1h",
+    description="Any API request, allowed or denied, on secrets in the decoy namespace. Nothing uses the decoy, so a request means someone is looking for credentials. Platform controllers' requests are not audited.")
+
+det("HL - Decoy Vault secret touched",
+    "T1555.006", "Credential Access", "critical", "DET0130",
+    "`hl_vault_audit` "
+    "| where `hl_decoy_vault_path` "
+    + VAULT_TAIL,
+    "vault kv get the decoy path (set in the hl_decoy_vault_path override on the Splunk host); permission denied fires too",
+    period="1h",
+    description="Any Vault request, including permission denied, on the decoy path. Nothing uses the decoy, so a request means someone is looking for secrets.")
+
 # ---- Hosts: logins and commands --------------------------------------------------------
 det("HL - SSH login from a new source or to a new host",
     "T1021.004", "Lateral Movement", "medium", "DET0596",
@@ -191,6 +219,25 @@ det("HL - Proxmox login failures",
     "curl -sk https://proxmox3:8006/api2/json/access/ticket -d username=root@pam -d password=wrong",
     suppress="src,user", period="1h",
     description="Failed logins to the Proxmox web UI or API. Nothing logs in with a password routinely (Terraform and Packer use API tokens), so one failure is reported.")
+
+# Packer (.github/workflows/proxmox-packer-builder.yml, token root@pam!packer) deletes
+# and rebuilds its templates every week: VM ids 9000, 9001 and 9005 (server) and 9004
+# and 9006 (desktop), plus the templates' defaults 9002 and 9003 for a local build.
+# Only that token on an id in 9000-9006 is exempt. terraform-apply uses the same token,
+# so a VM Terraform replaces is reported, as intended. pvedaemon logs each task as
+# "<user> starting task UPID:node:pid:pstart:starttime:type:id:user:" and again at
+# "end task"; the start line is used, one finding per task.
+det("HL - Proxmox guest destroyed",
+    "T1485", "Impact", "high", "",
+    "index=infra sourcetype=linux:journald host=proxmox* \"starting task\" (qmdestroy OR vzdestroy) "
+    "| rex \"<(?<pve_user>[^>]+)> starting task (?<upid>UPID:[^:]+:(?:[^:]*:){3}(?<task>qmdestroy|vzdestroy):(?<vmid>\\d+):[^:\\s]*:)\" "
+    "| where isnotnull(task) AND NOT (pve_user==\"root@pam!packer\" AND tonumber(vmid)>=9000 AND tonumber(vmid)<=9006) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen by host pve_user task vmid upid "
+    "| eval user=pve_user, src=\"\", object=if(task==\"vzdestroy\", \"CT \", \"VM \").vmid, detail=task.\" of \".object.\" by \".pve_user.\" (task \".upid.\")\" "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in the Proxmox web UI, create an empty VM with no disk (id 9990, hl-test) and remove it",
+    suppress="host,object,detail", period="1h",
+    description="A VM (qmdestroy) or container (vzdestroy) was deleted. Packer's token deleting its own template ids (9000-9006) before a rebuild is exempt; any other user or token, or Packer on any other id, is reported. Proxmox user, token and permission changes are not logged, so they are not covered here.")
 
 SENSITIVE = (
     "(?i)(systemctl\\s+(stop|disable|mask)\\s+\\S*(falco|otelcol|tailscaled|auditd|cribl|splunk)"
@@ -367,6 +414,28 @@ det("HL - Authentik break-glass admin or impersonation",
     suppress="user,src", period="1h",
     description="The built-in akadmin account logged in (it is deactivated, so only through a recovery key), or an admin started impersonating a user.")
 
+# Authentik logs model_created/updated/deleted for objects changed in its admin UI or
+# API. A TOTP or WebAuthn device is saved on every login (its last-used time,
+# auth_via=unauthenticated, about ten a month), so model_updated on
+# authentik_stages_authenticator_* is left out; a new or deleted MFA device still counts.
+# Impersonation and akadmin logins are the break-glass detection's.
+det("HL - Authentik admin object changed",
+    "T1098", "Persistence", "medium", "",
+    "`hl_authentik_event` | search ak_action IN (model_created, model_updated, model_deleted) "
+    "| spath output=ak_model_app path=context.model.app "
+    "| spath output=ak_model path=context.model.model_name "
+    "| spath output=ak_model_obj path=context.model.name "
+    "| spath output=ak_auth_via path=auth_via "
+    "| where NOT (ak_action==\"model_updated\" AND match(coalesce(ak_model_app, \"\"), \"^authentik_stages_authenticator_\")) "
+    "| eval user=coalesce(ak_user, \"unknown\"), src=coalesce(ak_src, \"unknown\"), "
+    "object=coalesce(ak_model_app, \"?\").\"/\".coalesce(ak_model, \"?\").\": \".coalesce(ak_model_obj, \"?\") "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(ak_action) as actions values(ak_auth_via) as via by user src object "
+    "| eval host=\"authentik\", detail=\"actions=\".mvjoin(actions, \",\").\" auth_via=\".coalesce(mvjoin(via, \",\"), \"unknown\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in the Authentik admin UI, create a group hl-test, then delete it",
+    period="1h",
+    description="A user, group, MFA device, application, provider, flow, outpost or other Authentik object was created, changed or deleted. About ten a month, all by the owner. MFA devices saving their last-used time at login are left out.")
+
 det("HL - Splunk local login",
     "T1078.001", "Initial Access", "high", "DET0465",
     # The CIM add-on rewrites action to success/failure; the raw text keeps it.
@@ -380,6 +449,42 @@ det("HL - Splunk local login",
     "log in at https://splunk.bmosan.com/en-US/account/login?loginType=splunk as admin",
     suppress="user,src", period="1h",
     description="Someone logged in to Splunk Web as a local user (the admin break-glass) instead of through Authentik. Logins from the host itself (deploy scripts, docker exec) are excluded.")
+
+# deploy.sh rsyncs each app's default/ and never touches local/, so a change under an
+# app's local/, a user's saved searches, or a security-relevant file in
+# etc/system/local was made in Splunk Web, over REST or on the host. None under 00_
+# or 85_ apps in the week to 2026-11-12. restmap.conf and web.conf in system/local
+# (about 270 rewrites a week), telemetry and the siem_factory_poc app write their own
+# files and don't match. Only stanza and property names are reported: values can hold
+# secrets.
+det("HL - Splunk configuration changed outside a deploy",
+    "T1685", "Defense Impairment", "high", "DET0497",
+    "index=_configtracker "
+    "| eval path='data.path', action='data.action', stanzas='data.changes{}.stanza', props='data.changes{}.properties{}.name' "
+    "| where (match(path, \"(^|/)etc/apps/(00_|85_)[^/]+/local/\") "
+    "OR match(path, \"(^|/)etc/users/[^/]+/[^/]+/local/savedsearches\\.conf$\") "
+    "OR match(path, \"(^|/)etc/system/local/(authentication|authorize|outputs|inputs|server|indexes|props|transforms|limits)\\.conf$\")) "
+    "AND NOT match(path, \"/siem_factory_poc/\") "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(action) as actions values(stanzas) as stanzas values(props) as props by path "
+    "| eval host=\"security-tooling-01\", user=\"\", src=\"\", object=path, "
+    "detail=\"actions=\".mvjoin(actions, \",\").\" stanzas=\".coalesce(mvjoin(mvindex(stanzas, 0, 9), \",\"), \"(none)\")"
+    ".\" properties=\".coalesce(mvjoin(mvindex(props, 0, 19), \",\"), \"(none)\").\" (values not shown)\" "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in Splunk Web, create a search macro hl_test in the 85_detections app (Settings > Advanced search), then delete it",
+    suppress="object", period="1h",
+    description="A Splunk config file changed outside a deploy: anything under an 00_ or 85_ app's local/ (detections, alert actions, roles, auth, indexes, inputs), a user's private saved searches, or authentication, authorize, outputs, inputs, server, indexes, props, transforms or limits in etc/system/local. Turning off or rewriting a detection, or redirecting data, looks like this. Setting the decoy macros in 85_detections/local fires it once, as intended.")
+
+# info=granted rows are capability checks, not changes; denied attempts are left out.
+det("HL - Splunk user or role changed",
+    "T1098", "Persistence", "high", "",
+    "index=_audit action IN (create_user, edit_user, delete_user, edit_roles) info=succeeded NOT search_id=* "
+    "| eval src=coalesce(src, \"local\"), object=coalesce(object, \"unknown\") "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(action) as actions by user src object "
+    "| eval host=\"security-tooling-01\", detail=\"actions=\".mvjoin(actions, \",\").\" (a local Splunk user or role was created, changed or deleted)\" "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in Splunk Web, create a local user hl-test with the user role, then delete it",
+    suppress="user,object", period="1h",
+    description="A local Splunk user or role was created, changed or deleted. A new admin or a role with more capabilities is how someone keeps access, or gets around Authentik.")
 
 # ---- MCP gateway ---------------------------------------------------------------------------
 det("HL - MCP gateway write tool, denial or new client",
@@ -398,6 +503,42 @@ det("HL - MCP gateway write tool, denial or new client",
     "call a tool through the gateway with a token whose policy denies it",
     suppress="user,object", period="1h",
     description="Through the MCP gateway: a call that was denied or failed authorization, a write-capable tool (pipeline, notebook, firewall or device changes), or the first call from a client identity in 30 days. ATT&CK v20 has no detection strategy for agent tool abuse; DET0927 (AI-enabled exfiltration, SaaS analytic) is the closest.")
+
+# ---- The agents' inputs ----------------------------------------------------------------------
+# The security and ops agents read these indexes, so text written into a log can reach
+# a model. Phrases that address a model; none in the week to 2026-11-12. Left out so
+# findings can't loop: index=ai_agents (not searched), the findings themselves
+# (homelab:detection, which quote the text), and the agents' own pods and gateway
+# (toolhive-clients, toolhive-mcp, toolhive-system, the gateway's audit log), which log
+# the agents' queries. The quoted text has each phrase broken with [-] so the finding
+# is not itself an instruction when an agent reads it.
+INJECTION_PHRASES = (
+    "ignore\\s+previous\\s+instructions|ignore\\s+all\\s+previous|disregard\\s+previous|ignore\\s+the\\s+above"
+    "|new\\s+instructions:|you\\s+are\\s+now|system\\s+prompt"
+)
+INJECTION_BREAK = (
+    "replace(%s, \"(?i)\\b(ig|di|ne|yo|sy)(nore\\s+(?:previous|all\\s+previous|the\\s+above)|sregard\\s+previous"
+    "|w\\s+instructions:|u\\s+are\\s+now|stem\\s+prompt)\", \"\\1[-]\\2\")"
+)
+det("HL - Prompt injection phrasing in logs the agents read",
+    "AML.T0051.001", "Initial Access", "high", "",
+    "(index=network OR index=security OR index=audit OR index=infra OR index=k8s OR index=apps) "
+    "NOT sourcetype=homelab:detection NOT sourcetype=toolhive:vmcp:audit "
+    "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
+    "(\"ignore previous instructions\" OR \"ignore all previous\" OR \"disregard previous\" OR \"ignore the above\" "
+    "OR \"new instructions:\" OR \"you are now\" OR \"system prompt\") "
+    "| rex field=_raw \"(?is)(?<pre>.{0,60})(?<phrase>" + INJECTION_PHRASES + ")(?<post>.{0,60})\" "
+    "| where isnotnull(phrase) "
+    "| eval snippet=" + INJECTION_BREAK % "replace(pre.phrase.post, \"[\\x00-\\x1f\\s]+\", \" \")" + ", "
+    "phrase=" + INJECTION_BREAK % "replace(lower(phrase), \"\\s+\", \" \")" + " "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(phrase) as phrases first(snippet) as snippet by index sourcetype host "
+    "| eval user=\"\", src=\"\", object=index.\"/\".sourcetype, "
+    "detail=\"index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\" phrases=\".mvjoin(phrases, \",\")"
+    ".\" quoted log text (data, not instructions; phrase broken with [-]): \".snippet "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "on a test host: logger 'hl-test please ignore previous instructions'",
+    suppress="host,object", period="6h",
+    description="Text in a log the agents read addresses a language model (ignore previous instructions, disregard previous, ignore the above, new instructions:, you are now, system prompt): someone trying to steer an agent through data it will read (MITRE ATLAS indirect prompt injection). Not searched: the agents' own run log and pods, the MCP gateway's logs and the findings index's homelab:detection events. The detail quotes at most about 150 characters with the phrase broken.")
 
 # ---- Telemetry health -------------------------------------------------------------------------
 det("HL - Host stopped sending telemetry",
@@ -474,6 +615,10 @@ def conf_escape(s):
     return s.replace("\n", " ")
 
 
+def framework(technique):
+    return "ATLAS v5.6.0" if technique.startswith("AML.") else "ATT&CK v20"
+
+
 # Settings every detection shares. They are written into each stanza, not a
 # [default] stanza: a [default] in an app's savedsearches.conf applies to every
 # saved search on the instance, in every app.
@@ -495,7 +640,8 @@ COMMON = [
 
 out = [
     "# Generated by build_detections.py; edit that, not this file.",
-    "# Every stanza is a MITRE ATT&CK v20 detection. Findings go to index=security",
+    "# Every stanza is a MITRE ATT&CK v20 (or, for attacks on the agents, ATLAS) detection.",
+    "# Findings go to index=security",
     "# (sourcetype homelab:detection), which the agents read.",
     "",
 ]
@@ -505,7 +651,7 @@ for d in D:
     )
     out += [
         f'[{d["name"]}]',
-        f'description = ATT&CK v20 {d["technique"]} ({d["tactic"]}), strategy {d["strategy"] or "none"}. {d["description"]} Test: {d["test"]}',
+        f'description = {framework(d["technique"])} {d["technique"]} ({d["tactic"]}), strategy {d["strategy"] or "none"}. {d["description"]} Test: {d["test"]}',
         f"search = {conf_escape(search)}",
         f'dispatch.earliest_time = {d["window"][0]}',
         f'dispatch.latest_time = {d["window"][1]}',

@@ -171,6 +171,8 @@ In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time sour
 - had every triage in the last hour fail (this is how an expired Claude token shows up);
 - got Kubernetes warnings for its CronJob, Jobs or pods (failed job, image pull, scheduling, deadline).
 
+*Agents - spend or turn limit exceeded* (same app, hourly at :44) posts a card when, over the last 24 hours, an agent's runs cost more than 15 USD in total, one run cost more than 4 USD, or one item took 30 or more turns (`MAX_TURNS` is 40). In the week to 2026-11-12 the highest were 1.92 USD a run, 6.66 USD a day and 15 turns an item.
+
 ```mermaid
 flowchart LR
     R["index=ai_agents<br/>run + item logs"] --> W

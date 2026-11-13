@@ -29,14 +29,21 @@ def _top_severity(value):
 
 # ---- Security --------------------------------------------------------------------------
 
+# First matching prefix wins: a specific name goes before the shorter prefix it shares.
 DETECTION_RUNBOOKS = [
     ("HL - Kubernetes", "kubernetes.md"),
     ("HL - Vault", "vault.md"),
+    ("HL - Decoy", "decoy.md"),
     ("HL - SSH", "logins.md"),
+    ("HL - Proxmox guest destroyed", "proxmox.md"),
     ("HL - Proxmox", "logins.md"),
     ("HL - UniFi admin", "logins.md"),
+    ("HL - Authentik admin object changed", "authentik-changes.md"),
     ("HL - Authentik", "logins.md"),
     ("HL - Splunk local login", "logins.md"),
+    ("HL - Splunk configuration changed", "splunk-config.md"),
+    ("HL - Splunk user or role changed", "splunk-config.md"),
+    ("HL - Prompt injection", "prompt-injection.md"),
     ("HL - UniFi configuration", "unifi-config.md"),
     ("HL - Sensitive command", "host-commands.md"),
     ("HL - MCP gateway", "mcp-gateway.md"),
