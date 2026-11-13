@@ -166,6 +166,10 @@ falco-k8saudit:
   # execs each job step into the job's own "<runner>-workflow" pod (about 100 of
   # 117 "Attach/Exec Pod" alerts 2026-10-25 to 10-28). Only that service account,
   # in arc-runners, into a -workflow pod is exempt; any other exec still alerts.
+  # Trivy Operator reads its own config secret in trivy-system on every reconcile
+  # (3,622 "K8s Secret Get Successfully" alerts in 24 hours, 2026-11-12). Only its
+  # service account reading secrets in trivy-system is exempt; its reads in other
+  # namespaces, and anyone else's, still alert.
   customRules:
     homelab_k8saudit.yaml: |-
       - list: allowed_k8s_users
@@ -180,6 +184,12 @@ falco-k8saudit:
         condition: >-
           and not (ka.user.name = "system:serviceaccount:arc-runners:arc-k3s-homelab-gha-rs-kube-mode" and
           ka.target.namespace = arc-runners and ka.target.name endswith -workflow)
+        override:
+          condition: append
+      - rule: K8s Secret Get Successfully
+        condition: >-
+          and not (ka.user.name = "system:serviceaccount:trivy-system:trivy-operator" and
+          ka.target.namespace = trivy-system)
         override:
           condition: append
   driver:
