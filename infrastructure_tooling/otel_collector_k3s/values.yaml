@@ -104,6 +104,16 @@ opentelemetry-collector:
         endpoint: ${env:MY_POD_IP}:13133
     receivers:
       k8s_events: {}             # single node, so a DaemonSet does not duplicate events
+      # Merged over the logsCollection preset's file_log receiver; a list replaces the
+      # preset's, so its own exclude (the collector's logs) is repeated here.
+      # Trivy's scan-vulnerabilityreport-* job pods print each report as base64 on
+      # stdout (about 2 million lines a day). The operator reads them from the
+      # kubelet, so they stay on disk; they are just not shipped. The operator and
+      # trivy-server pods in trivy-system are still collected.
+      file_log:
+        exclude:
+          - /var/log/pods/otel-collector_otel-collector-opentelemetry-collector*_*/opentelemetry-collector/*.log
+          - /var/log/pods/trivy-system_scan-*_*/*/*.log
       # One JSON audit event per line. The body is sent unchanged; only the event time
       # is lifted out so Splunk's _time is when the API request arrived.
       filelog/k8s_audit:
