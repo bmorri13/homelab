@@ -639,7 +639,7 @@ det("HL - Cloudflare account member, role or login settings changed",
 
 det("HL - Cloudflare DNS record changed",
     "T1584.001", "Resource Development", "medium", "",
-    "`hl_cf_audit` earliest=-30d@d latest=-25m@m "
+    "`hl_cf_audit_window(-30d@d, -25m@m)` "
     "| where cf_result==\"success\" AND cf_type!=\"view\" AND (cf_product==\"dns_records\" OR (cf_product==\"dns\" AND cf_rtype==\"record\")) "
     "| eval hl_rec_id=coalesce('resource.response.id', 'resource.id', 'resource.value.id'), "
     "hl_names=mvdedup(mvappend('resource.response.name', 'resource.value.name', 'resource.response.posts{}.name', 'resource.response.patches{}.name', 'resource.response.puts{}.name', 'resource.response.deletes{}.name')), "
@@ -704,7 +704,7 @@ det("HL - Cloudflare zone security setting weakened",
 
 det("HL - Cloudflare dashboard login from a new IP or country",
     "T1078.004", "Initial Access", "medium", "",
-    "`hl_cf_audit` earliest=-30d@d latest=-25m@m "
+    "`hl_cf_audit_window(-30d@d, -25m@m)` "
     "| where match(cf_desc, \"(?i)^(sso_)?login\") AND src!=\"\" "
     "| iplocation src | eval hl_country=coalesce(nullif(Country, \"\"), \"unknown\") "
     "| eventstats min(_time) as hl_ip_first by cf_actor src "
