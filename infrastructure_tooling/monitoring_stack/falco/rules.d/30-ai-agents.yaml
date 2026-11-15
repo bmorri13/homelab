@@ -67,10 +67,12 @@
 # Shells read their own history; kubectl and helm use a pod's service-account token
 # for in-cluster access; each agent reads its own auth file. sudo, su and PAM helpers
 # read /etc/shadow to check a password ("AI agent used sudo or changed user" covers
-# the sudo itself).
+# the sudo itself). pgrep, pkill and pidof open every process's environ while
+# matching and never print it (ps can print it, so ps stays in).
 - macro: ai_agent_own_credential
   condition: >-
     ((proc.name in (sudo, su, doas, pkexec, unix_chkpwd, login, sshd) and fd.name = /etc/shadow) or
+     (proc.name in (pgrep, pkill, pidof) and fd.name glob "/proc/*/environ") or
      (proc.name in (ssh, scp, sftp, git, git-remote-http, git-remote-https) and fd.name contains "/.ssh/") or
      (proc.name in (kubectl, helm, k9s, k3s) and
       (fd.name endswith "/.kube/config" or fd.name = /etc/rancher/k3s/k3s.yaml)) or
