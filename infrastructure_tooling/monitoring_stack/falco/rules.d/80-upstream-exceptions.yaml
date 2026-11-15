@@ -134,3 +134,13 @@
     container.image.repository endswith /mirrored-library-busybox))
   override:
     condition: append
+
+# On hosts with a desktop session the container plugin reports systemd user slices
+# as containers (container.id "user-0.slice"), and every login runs
+# `systemctl --user set-environment ...`, which reads /proc/1/environ to detect
+# virtualisation (ubuntu-desktop-01, each SSH session, 2026-11-15). Only systemd's own
+# tools reading PID 1's environment are exempt.
+- rule: Read environment variable from /proc files
+  condition: and not (proc.name in (systemctl, systemd) and fd.name = /proc/1/environ)
+  override:
+    condition: append
