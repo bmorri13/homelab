@@ -54,6 +54,8 @@ DETECTION_RUNBOOKS = [
     ("HL - Isolated network", "isolated-network.md"),
     ("HL - Threat indicator", "threat-indicators.md"),
     ("HL - DNS lookup of a threat indicator", "threat-indicators.md"),
+    ("HL - Threat feed", "threat-indicators.md"),
+    ("HL - DNS lookup of a threat feed", "threat-indicators.md"),
     ("HL - DNS", "dns.md"),
 ]
 
@@ -100,9 +102,13 @@ VALIDATION_SUDO = [re.compile(c) for c in (
     r"(/usr/bin/|/bin/)?bash -c '?history -c # art-validation'?",
 )]
 VALIDATION_FALCO = ("ubuntu-desktop-01", "Read sensitive file untrusted", "art-validation-cat /etc/shadow")
-# ubuntu-desktop-01 test: the canary row of hl_threat_indicators.csv (an RFC 5737
-# documentation address) written to the journal.
-VALIDATION_INDICATOR = ("ubuntu-desktop-01", "HL - Threat indicator IP seen in logs", "198.51.100.73")
+# ubuntu-desktop-01 tests: the canary rows of hl_threat_indicators.csv and of the feed
+# lookup hl_ti_feed_indicators.csv (RFC 5737 documentation addresses) written to the
+# journal. detection -> (host, src).
+VALIDATION_INDICATORS = {
+    "HL - Threat indicator IP seen in logs": ("ubuntu-desktop-01", "198.51.100.73"),
+    "HL - Threat feed IP seen in logs": ("ubuntu-desktop-01", "198.51.100.74"),
+}
 
 
 def _count(r):
@@ -117,8 +123,8 @@ def _is_validation(r):
     name, host = r.get("detection", ""), _first(r.get("host"))
     if host == "k3s-01" and name in VALIDATION_K8S:
         return _first(r.get("user")) == ART_RUNNER and _first(r.get("object")) == VALIDATION_K8S[name]
-    if (host, name) == VALIDATION_INDICATOR[:2]:
-        return _first(r.get("src")) == VALIDATION_INDICATOR[2]
+    if name in VALIDATION_INDICATORS and host == VALIDATION_INDICATORS[name][0]:
+        return _first(r.get("src")) == VALIDATION_INDICATORS[name][1]
     if host == "ubuntu-desktop-01" and name == "HL - Sensitive command run over SSH or sudo":
         if _first(r.get("src")) != "local" or _first(r.get("object")) != "command":
             return False

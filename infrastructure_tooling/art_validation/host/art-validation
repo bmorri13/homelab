@@ -57,9 +57,16 @@ sudo -n bash -c 'history -c # art-validation' && step "T1070.003 history -c" || 
 # T1071 Application Layer Protocol: a known C2 address showing up in a log. Writes the
 # canary row of hl_threat_indicators.csv (85_detections), 198.51.100.73, an RFC 5737
 # documentation address that is never a real host, to the journal; nothing is
-# contacted. Matched by VALIDATION_INDICATOR in homelab_agents queues.py.
+# contacted. Matched by VALIDATION_INDICATORS in homelab_agents queues.py.
 mark "HL - Threat indicator IP seen in logs" T1071
 logger -t art-validation -p user.notice "art-validation threat indicator test 198.51.100.73" && step "T1071 logged the canary indicator" || fail T1071
+
+# T1071 again, through the threat-intel feeds: the canary row that threat-feeds.py
+# (monitoring_stack/splunk) always adds to hl_ti_feed_indicators.csv, 198.51.100.74,
+# also an RFC 5737 documentation address. Proves the feed lookup is on the Splunk host
+# and readable, as well as the search. Matched by VALIDATION_INDICATORS in queues.py.
+mark "HL - Threat feed IP seen in logs" T1071
+logger -t art-validation -p user.notice "art-validation threat feed test 198.51.100.74" && step "T1071 logged the feed canary indicator" || fail T1071
 
 step "done (failed=$failed)"
 exit "$failed"

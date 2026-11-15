@@ -45,6 +45,20 @@ systemctl daemon-reload
 systemctl enable splunk-io-top.service >/dev/null 2>&1
 systemctl restart splunk-io-top.service
 
+# Threat-intel feed lookups for 85_detections (scripts/threat-feeds.py), every 6 hours.
+# They live in the app's lookups/ on the host only; sync_apps leaves them alone (the
+# hl_ti_feed_* exclude). Fetched once here, before the searches that read them are
+# synced, and again below on a first deploy. A failed feed keeps its last good rows
+# and only warns.
+install -m 644 systemd/hl-threat-feeds.service systemd/hl-threat-feeds.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now hl-threat-feeds.timer >/dev/null 2>&1
+fetch_feeds() {
+    systemctl start hl-threat-feeds.service \
+        || echo "WARNING: a threat feed failed; see journalctl -u hl-threat-feeds" >&2
+}
+if [[ -d "$DATA_DIR/etc/apps/85_detections/lookups" ]]; then fetch_feeds; fi
+
 # TLS certs for Splunk's management port, the Cribl Leader API and the Worker's HEC
 # input. Sets $certs_changed to the services whose cert was (re)issued; check it
 # with cert_changed <service>.
@@ -66,9 +80,10 @@ sync_apps() {
         # unchanged app reports nothing and does not trigger a splunkd restart.
         # ._* are macOS AppleDouble files from copying off a Mac; splunkd tries to
         # parse ._*.conf as config. build_*.py generate files under default/ and only
-        # run in the repo, never in Splunk.
+        # run in the repo, never in Splunk. lookups/hl_ti_feed_* are written on the host
+        # by hl-threat-feeds.service, and are not in the repo.
         changes+=$(rsync -rlp --chown="$owner" --delete --checksum --itemize-changes \
-            --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' \
+            --exclude 'local/' --exclude 'metadata/local.meta' --exclude 'CLAUDE.md' --exclude '/lookups/hl_ti_feed_*' \
             --exclude '._*' --exclude '/build_*.py' --exclude '/.gitignore' --exclude '__pycache__/' \
             "$app" "$DATA_DIR/etc/apps/$name/")
         # Until 2026-11-10 the generators and .gitignore were copied in too, and rsync
@@ -119,6 +134,8 @@ else
         wait_healthy
     fi
 fi
+
+if [[ ! -f "$DATA_DIR/etc/apps/85_detections/lookups/hl_ti_feed_indicators.csv" ]]; then fetch_feeds; fi
 
 # The Leader reads its cert at startup. A brand-new Leader is still on HTTP and gets
 # switched to HTTPS by cribl-bootstrap.sh.
