@@ -1,0 +1,1 @@
+../monitoring_stack/falco/rules.d

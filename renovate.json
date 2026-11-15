@@ -68,6 +68,20 @@
     },
     {
       "customType": "regex",
+      "description": "Falco's upstream incubating and sandbox rules, vendored into monitoring_stack/falco/rules.d by upstream-rules.sh. Each file's SHA-256 sits beside its version, so this waits for Dependency Dashboard approval: on the PR branch run upstream-rules.sh, review git diff rules.d, set the printed hashes, run validate-rules.sh, and commit the refreshed files. The selected rules are in config.d/homelab-rules.yaml.",
+      "managerFilePatterns": [
+        "/^infrastructure_tooling/monitoring_stack/falco/upstream-rules\\.sh$/"
+      ],
+      "matchStrings": [
+        "\\n(?<depName>INCUBATING|SANDBOX)_VERSION=(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "falco-{{{lowercase depName}}}-rules",
+      "packageNameTemplate": "falcosecurity/rules",
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^falco-{{{lowercase depName}}}-rules-(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
       "description": "kube-bench on k3s-01 (kube_bench/install.sh). SHA256 sits beside VERSION, so this waits for Dependency Dashboard approval.",
       "managerFilePatterns": [
         "/^infrastructure_tooling/kube_bench/install\\.sh$/"
@@ -214,10 +228,11 @@
       "separateMultipleMinor": true
     },
     {
-      "description": "Host pins with a hard-coded SHA-256 beside the version (OTel host agent, Falco's Arch tarball, kube-bench, k3s). Renovate can only change the version, and the installers fail closed on a hash mismatch, so a PR on its own can't be merged. Approve it on the Dependency Dashboard when you are ready to upgrade, then push the new hash to the PR branch before merging: the steps are next to each pin.",
+      "description": "Host pins with a hard-coded SHA-256 beside the version (OTel host agent, Falco's Arch tarball, Falco's vendored upstream rules, kube-bench, k3s). Renovate can only change the version, and the installers fail closed on a hash mismatch, so a PR on its own can't be merged. Approve it on the Dependency Dashboard when you are ready to upgrade, then push the new hash to the PR branch before merging: the steps are next to each pin.",
       "matchFileNames": [
         "infrastructure_tooling/monitoring_stack/splunk/otel-agent/install.sh",
         "infrastructure_tooling/monitoring_stack/falco/install.sh",
+        "infrastructure_tooling/monitoring_stack/falco/upstream-rules.sh",
         "infrastructure_tooling/kube_bench/install.sh",
         "infrastructure_tooling/k3s_node/k3s-version"
       ],

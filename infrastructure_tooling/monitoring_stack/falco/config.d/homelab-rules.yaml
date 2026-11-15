@@ -1,0 +1,55 @@
+# Which rules run, shared by the hosts (install.sh copies it to /etc/falco/config.d)
+# and k3s-01's syscall DaemonSet (mounted by falco_k3s/templates/homelab-rules.yaml).
+# Host-only output settings are in homelab.yaml.
+
+# Evaluate every rule against every event. With the default (first), the first
+# matching rule in load order hides every later one for that event: an AI agent rule
+# would be silenced by a stable rule on the same file open, and a trial rule (no
+# page) could silence one that pages.
+rule_matching: all
+
+# rules.d/10- and 11- vendor the whole upstream incubating and sandbox files, pinned
+# by upstream-rules.sh. Turn them off by maturity tag, then turn on only the rules
+# picked for this lab. Stable rules (maturity_stable) and the homelab rules (no
+# maturity tag) are untouched. Applied in order, after all rules files are loaded.
+# Newly enabled upstream rules are on trial: indexed, but kept out of the Slack
+# alert by the falco_trial_rules macro in splunk/apps/85_falco until tuned.
+rules:
+  - disable:
+      tag: maturity_incubating
+  - disable:
+      tag: maturity_sandbox
+  # Incubating (falco-incubating-rules)
+  - enable:
+      rule: Modify Shell Configuration File
+  - enable:
+      rule: Schedule Cron Jobs
+  - enable:
+      rule: Adding ssh keys to authorized_keys
+  - enable:
+      rule: Launch Privileged Container
+  - enable:
+      rule: Set Setuid or Setgid bit
+  - enable:
+      rule: Delete or rename shell history
+  - enable:
+      rule: Read environment variable from /proc files
+  - enable:
+      rule: Backdoored library loaded into SSHD (CVE-2024-3094)
+  - enable:
+      rule: Launch Suspicious Network Tool on Host
+  # Sandbox (falco-sandbox-rules)
+  - enable:
+      rule: Netcat/Socat Remote Code Execution on Host
+  - enable:
+      rule: Launch Sensitive Mount Container
+  - enable:
+      rule: Known Cryptominer Process Executed
+  - enable:
+      rule: Detect crypto miners using the Stratum protocol
+  - enable:
+      rule: Network Tool Executed During NPM Package Install
+  - enable:
+      rule: Web Server Spawned Shell
+  - enable:
+      rule: Reverse Shell from Web Server

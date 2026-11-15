@@ -1,0 +1,60 @@
+# Validate the Falco rules (infrastructure_tooling/monitoring_stack/falco) before they
+# reach the hosts or k3s-01:
+#   - validate-rules.sh: the pinned Falco release loads stable + rules.d in load order
+#     with no errors or warnings, the rule selection enables exactly the intended
+#     rules, and the k8saudit overrides in falco_k3s/values.yaml load
+#   - upstream-rules.sh: the vendored incubating/sandbox files match their pinned tag
+#     and SHA-256
+# No secrets. Downloads Falco and two plugins from download.falco.org (checksummed).
+name: Falco rules
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/monitoring_stack/falco/**'
+      - 'infrastructure_tooling/falco_k3s/**'
+      - '.github/workflows/falco-rules.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/monitoring_stack/falco/**'
+      - 'infrastructure_tooling/falco_k3s/**'
+      - '.github/workflows/falco-rules.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Falco rules
+    runs-on: [self-hosted, Linux, X64]
+    # Public repo: never run a pull request from a fork on the self-hosted runners.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Validate rules
+        run: infrastructure_tooling/monitoring_stack/falco/validate-rules.sh
+
+      - name: Vendored upstream rules match their pins
+        run: |
+          infrastructure_tooling/monitoring_stack/falco/upstream-rules.sh
+          git diff --exit-code -- infrastructure_tooling/monitoring_stack/falco/rules.d
+
+      # The chart reads the rules through these symlinks (templates/homelab-rules.yaml).
+      - name: Chart symlinks resolve
+        run: |
+          test -f infrastructure_tooling/falco_k3s/rules.d/30-ai-agents.yaml
+          test -f infrastructure_tooling/falco_k3s/config.d/homelab-rules.yaml

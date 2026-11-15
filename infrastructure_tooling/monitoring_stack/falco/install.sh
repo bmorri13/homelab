@@ -4,7 +4,8 @@
 # Run as root from a copy of this directory. Re-running refreshes config and rules.
 #   - modern_ebpf driver (no kernel module), falcoctl artifact auto-updates off so
 #     the rules in effect are always the ones in this repo
-#   - config.d/homelab.yaml and rules.d/*.yaml copied to /etc/falco
+#   - config.d/*.yaml and rules.d/*.yaml copied to /etc/falco; rules.d is synced, so a
+#     rules file removed or renamed here is removed from the host too
 #   - validated with --dry-run before the service is restarted
 set -euo pipefail
 
@@ -95,8 +96,12 @@ else
     fi
 fi
 
-install -m 644 config.d/homelab.yaml /etc/falco/config.d/homelab.yaml
-mkdir -p /etc/falco/rules.d
+install -d /etc/falco/config.d /etc/falco/rules.d
+for f in config.d/*.yaml; do install -m 644 "$f" "/etc/falco/config.d/$(basename "$f")"; done
+# /etc/falco/rules.d holds only this repo's rules (the package ships it empty).
+for f in /etc/falco/rules.d/*.yaml; do
+    if [[ -e "$f" && ! -e "rules.d/$(basename "$f")" ]]; then rm -f "$f"; fi
+done
 for f in rules.d/*.yaml; do install -m 644 "$f" "/etc/falco/rules.d/$(basename "$f")"; done
 
 # Validate config and rules before touching the running service.

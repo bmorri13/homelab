@@ -1,0 +1,38 @@
+# Homelab rules for any process, not only AI agents. Tagged host and container.
+
+- required_engine_version: 0.57.0
+
+# Tunnelling and proxy tools that expose a host or relay traffic out of the network.
+# Checked against Debian stable's package contents and Arch's package names
+# (2026-11-15): no other package ships a binary by any of these names. nps and npc
+# (the NPS proxy) are left out: nps is also the npm package-scripts CLI, and both are
+# too generic to trust. ligolo-ng's release binaries are named agent and proxy,
+# so only the renamed ligolo-agent and ligolo-proxy can be matched.
+- list: homelab_tunnel_binaries
+  items: [chisel, vpnclient, vpnbridge, vpnserver, vpncmd, tor, frpc, frps, ngrok, gost,
+          ligolo-agent, ligolo-proxy, iox, rathole, bore]
+
+# cloudflared quick tunnels (`cloudflared tunnel --url http://...`) publish a local port
+# on a random trycloudflare.com name with no account. The homelab's named tunnels
+# (the cloudflared-tunnel containers) run `tunnel run` with a token and are not matched.
+- macro: homelab_cloudflared_quick_tunnel
+  condition: >-
+    (proc.name = cloudflared and proc.args contains "--url" and
+     not proc.args contains "--token" and
+     not proc.args regex "(.*[[:space:]])?run([[:space:]].*)?")
+
+- rule: Tunnelling or proxy tool executed
+  desc: >-
+    A tunnelling or proxy tool started (chisel, SoftEther, tor, frp, ngrok, gost, ligolo,
+    iox, rathole, bore, or a cloudflared quick tunnel). These relay traffic in or out
+    around the firewall. Check who started it, the remote end and the local port it
+    exposes.
+  condition: >-
+    spawned_process and
+    (proc.name in (homelab_tunnel_binaries) or homelab_cloudflared_quick_tunnel)
+  output: >-
+    Tunnelling or proxy tool executed | process=%proc.name command=%proc.cmdline
+    exepath=%proc.exepath parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4]
+    user=%user.name container_id=%container.id container_image=%container.image.repository
+  priority: WARNING
+  tags: [host, container, process, network, mitre_command_and_control, T1572, T1090]

@@ -71,6 +71,19 @@ functions:
             }));
             if (!techniques.length && tactics.length) tactics.forEach((ta) => attacks.push({ tactic: ta, version: '20' }));
 
+            // MITRE ATLAS v5.6.0 from AML.T#### tags (the AI agent rules), with the tactic
+            // each technique is listed under first in ATLAS. An id missing here keeps no tactic.
+            const ATLAS = {
+              'AML.T0053': ['AML.TA0005', 'Execution'], 'AML.T0055': ['AML.TA0013', 'Credential Access'],
+              'AML.T0072': ['AML.TA0014', 'Command and Control'], 'AML.T0081': ['AML.TA0006', 'Persistence'],
+              'AML.T0086': ['AML.TA0010', 'Exfiltration'], 'AML.T0101': ['AML.TA0011', 'Impact'],
+            };
+            tags.filter((x) => /^AML\.T\d{4}(\.\d{3})?$/.test(x)).forEach((tid) => attacks.push({
+              technique: { uid: tid },
+              tactic: ATLAS[tid.slice(0, 9)] ? { uid: ATLAS[tid.slice(0, 9)][0], name: ATLAS[tid.slice(0, 9)][1] } : undefined,
+              version: 'atlas-5.6.0',
+            }));
+
             const container = has(f['container.id']) && f['container.id'] !== 'host' ? {
               uid: f['container.id'],
               name: f['container.name'],
@@ -102,7 +115,7 @@ functions:
                 uid: [d.hostname, f['evt.time'] || d.time, d.rule].join('|'),
                 title: d.rule,
                 desc: d.output,
-                types: tags.filter((x) => !/^T\d{4}|^mitre_|^maturity_/.test(x)),
+                types: tags.filter((x) => !/^T\d{4}|^AML\.T\d{4}|^mitre_|^maturity_/.test(x)),
                 analytic: { type_id: 1, type: 'Rule', name: d.rule, category: d.source },
                 attacks: attacks,
               },

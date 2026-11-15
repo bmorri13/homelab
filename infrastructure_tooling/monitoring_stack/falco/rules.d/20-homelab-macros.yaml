@@ -1,0 +1,36 @@
+# Lists and macros shared by the homelab rules (30-ai-agents.yaml, 40-host.yaml).
+# They build on macros from the stable rules (/etc/falco/falco_rules.yaml, loaded
+# first): spawned_process, open_read, open_write, outbound, dup.
+#
+# Falco's regex operator is RE2 in POSIX mode, anchored at both ends: no \s or \b,
+# so patterns use [[:space:]] and start with .* where they match mid-string.
+# Characters with a regex meaning are bracketed ([|], [(], [$], [.]) instead of
+# escaped, so the patterns need no backslashes inside Falco's quoted strings.
+
+- required_engine_version: 0.57.0
+
+# An "agent process" is anything with an agent among its ancestors, so the
+# commands an agent runs (bash -c ..., git, curl) are covered as well as the
+# agent itself. Falco matches process names (comm, at most 15 characters).
+# Agents seen in the homelab: Hermes and OpenClaw (gateway comm "openclaw-gatewa")
+# on openclaw-claude-01; Claude Code, Codex and OpenCode on coding-box; on k3s-01 the
+# homelab agent CronJobs (toolhive-clients) run the Claude Agent SDK, which starts
+# its bundled claude binary.
+- list: ai_agent_procs
+  items: [claude, codex, opencode, openclaw, openclaw-gatewa, hermes]
+
+- macro: ai_agent_proc
+  condition: (proc.name in (ai_agent_procs) or proc.aname in (ai_agent_procs))
+
+# The agent binary itself (its built-in file tools), not a command it started.
+- macro: ai_agent_binary
+  condition: (proc.name in (ai_agent_procs))
+
+- list: homelab_shell_binaries
+  items: [bash, sh, dash, zsh, ksh, fish, ash, busybox]
+
+# A file written in place, or moved into place: editors, sed -i, useradd and most
+# atomic writers write a temporary file and rename it over the target.
+# fs.path.target is the rename's resolved destination.
+- macro: homelab_rename
+  condition: (evt.type in (rename, renameat, renameat2))
