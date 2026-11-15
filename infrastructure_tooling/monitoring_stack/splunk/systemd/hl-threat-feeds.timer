@@ -1,0 +1,12 @@
+# Installed by scripts/deploy.sh. Every 6 hours, and 5 minutes after boot.
+[Unit]
+Description=Refresh threat-intel feed lookups every 6 hours
+
+[Timer]
+OnBootSec=5min
+OnCalendar=00/6:17
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

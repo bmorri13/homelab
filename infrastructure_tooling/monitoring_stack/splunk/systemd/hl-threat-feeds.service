@@ -1,0 +1,30 @@
+# Installed by scripts/deploy.sh. Downloads the abuse.ch and CISA KEV feeds into the
+# 85_detections lookups (scripts/threat-feeds.py); started by hl-threat-feeds.timer.
+# Runs as root only to read the root-only .env (one line of it, ABUSECH_AUTH_KEY) and
+# to give the lookups splunkd's owner; everything else is locked down. The lookups
+# path is the default SPLUNK_DATA_DIR (/srv/splunk); change both lines if that moves.
+[Unit]
+Description=Refresh threat-intel feed lookups for Splunk (threat-feeds.py)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /opt/splunk-stack/scripts/threat-feeds.py --lookups-dir /srv/splunk/etc/apps/85_detections/lookups
+SyslogIdentifier=hl-threat-feeds
+StateDirectory=hl-threat-feeds
+StateDirectoryMode=0700
+TimeoutStartSec=10min
+Nice=10
+ProtectSystem=strict
+ReadWritePaths=/srv/splunk/etc/apps/85_detections/lookups
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallArchitectures=native

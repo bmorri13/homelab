@@ -456,6 +456,65 @@ det("HL - DNS lookup of a threat indicator domain",
     suppress="src,object", period="12h",
     description="A client looked up a domain from hl_threat_indicators.csv, or a subdomain of it, also with a search domain appended. Rows past their expires date are ignored. The detail names the advisory and what the domain was used for.")
 
+# hl_ti_feed_indicators.csv: the same columns, written every 6 hours on the Splunk host
+# by hl-threat-feeds.service (scripts/threat-feeds.py) from abuse.ch ThreatFox, URLhaus
+# and Feodo Tracker; each row expires 30 days after its feed last listed it. Feeds are
+# broad and machine-curated, so a match is medium, not high, and an indicator that is
+# also an active hand-picked row is left to the two detections above
+# (hl_ti_handpicked). An indicator seen by FEED_MAX_SEEN or more hosts (IPs) or
+# clients (DNS) in one window is more likely a shared service than an implant, and is
+# skipped; so is anything in the host-only hl_ti_feed_allowed macro. Feed IPs number
+# in the thousands, too many for the raw-term prefilter above; a window is about 2,500
+# events (2026-11), so every event's IPv4 addresses are looked up directly.
+FEED_MAX_SEEN = 5
+FEED_IP_MATCH = (
+    "| lookup hl_ti_feed_indicators indicator AS hl_ipv4 OUTPUT indicator AS ti_indicator "
+    "| where isnotnull(ti_indicator) "
+    "| mvexpand ti_indicator "
+    "| lookup hl_ti_feed_indicators indicator AS ti_indicator OUTPUT type AS ti_type expires AS ti_expires context AS ti_context source AS ti_source "
+    "| where ti_type==\"ip\" AND `hl_ti_active(ti_expires)` "
+    "| `hl_ti_handpicked(ti_indicator)` "
+    "| where hl_handpicked==0 AND NOT `hl_ti_feed_allowed` "
+)
+det("HL - Threat feed IP seen in logs",
+    "T1071", "Command and Control", "medium", "",
+    "index=* NOT index=ai_agents NOT sourcetype=homelab:detection NOT sourcetype=toolhive:vmcp:audit "
+    "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
+    "| rex max_match=0 field=_raw \"(?<hl_ipv4>(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?!\\.?[0-9]))\" "
+    "| where isnotnull(hl_ipv4) "
+    + FEED_IP_MATCH +
+    "| eval sample=substr(replace(replace(_raw, \"(?s)^.*?(.{0,80}(?<![0-9.])\".replace(ti_indicator, \"\\.\", \"[.]\").\"(?![0-9]).{0,80}).*$\", \"\\1\"), \"[\\x00-\\x1f\\s]+\", \" \"), 1, 200) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen first(sample) as sample values(ti_context) as context values(ti_source) as sources by ti_indicator index sourcetype host "
+    "| eventstats dc(host) as hl_seen by ti_indicator "
+    f"| where hl_seen<{FEED_MAX_SEEN} "
+    "| eval user=\"\", src=ti_indicator, object=index.\"/\".sourcetype, "
+    "detail=\"threat feed IP \".ti_indicator.\" (\".mvjoin(sources, \"; \").\": \".mvjoin(context, \" | \").\") in \".count.\" events, index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\"; sample: \".sample "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "on a monitored host: logger 'hl-test threat feed 198.51.100.74' (the feed canary row threat-feeds.py always adds, an RFC 5737 documentation address)",
+    suppress="src,host,object", period="24h",
+    description="An IP address from the abuse.ch feeds (hl_ti_feed_indicators.csv: ThreatFox C2 and payload hosts, URLhaus malware download hosts, Feodo Tracker botnet C2s, refreshed every 6 hours) appeared in any event. Lower severity than the hand-picked list, which wins when both list the address; addresses seen on 5 or more hosts in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and the malware family. Feed addresses are often shared hosting and get reassigned, so corroborate before acting. Not searched: the agents' run log and gateway, and homelab:detection.")
+
+det("HL - DNS lookup of a threat feed domain",
+    "T1071", "Command and Control", "medium", "",
+    DNS_PREP +
+    "| `hl_dns_name_candidates` "
+    "| lookup hl_ti_feed_indicators indicator AS hl_cand OUTPUT indicator AS ti_indicator "
+    "| where isnotnull(ti_indicator) "
+    "| mvexpand ti_indicator "
+    "| lookup hl_ti_feed_indicators indicator AS ti_indicator OUTPUT type AS ti_type expires AS ti_expires context AS ti_context source AS ti_source "
+    "| where ti_type==\"domain\" AND `hl_ti_active(ti_expires)` "
+    "| `hl_ti_handpicked(ti_indicator)` "
+    "| where hl_handpicked==0 AND NOT `hl_ti_feed_allowed` "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(qname) as names values(QT) as types values(ti_context) as context values(ti_source) as sources by src ti_indicator "
+    "| eventstats dc(src) as hl_seen by ti_indicator "
+    f"| where hl_seen<{FEED_MAX_SEEN} "
+    "| eval host=\"adguard\", user=\"\", object=ti_indicator, "
+    "detail=\"threat feed domain \".ti_indicator.\" (\".mvjoin(sources, \"; \").\": \".mvjoin(context, \" | \").\") looked up \".count.\" times; types=\".mvjoin(types, \",\").\"; names: \".mvjoin(mvindex(names, 0, 4), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard: dig hl-feed-canary.invalid (the feed canary row threat-feeds.py always adds; the reserved .invalid name never resolves)",
+    suppress="src,object", period="24h",
+    description="A client looked up a domain from the abuse.ch feeds (hl_ti_feed_indicators.csv: ThreatFox C2 and payload domains, URLhaus malware download hosts), or a subdomain of it, also with a search domain appended. Lower severity than the hand-picked list, which wins when both list the domain; domains looked up by 5 or more clients in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and the malware family.")
+
 # Category -> ATT&CK v20 technique, tactic, severity, and how the detail names it.
 # Webhook collectors and OOB callbacks are high: nothing here uses them, and a callback
 # lookup is how a blind injection (SSRF, template, deserialisation) proves it worked.

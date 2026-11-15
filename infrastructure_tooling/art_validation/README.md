@@ -24,6 +24,7 @@ Both run weekly, Sunday 06:00 UTC.
 | host | T1053.003 | Installs a crontab for that account containing only a comment, removed at the end | same |
 | host | T1070.003 | `history -c` in a throwaway shell through sudo | same |
 | host | T1071 | Logs a line containing the canary row of `hl_threat_indicators.csv` (`198.51.100.73`, an RFC 5737 documentation address; nothing is contacted) | *HL - Threat indicator IP seen in logs* |
+| host | T1071 | Logs a line containing the canary row the threat-feed job adds to `hl_ti_feed_indicators.csv` (`198.51.100.74`, also RFC 5737), which also proves the feed lookup is in place | *HL - Threat feed IP seen in logs* |
 | k8s | T1610 | Creates a pod by hand (busybox, `sleep 600`, non-root) | *HL - Kubernetes workload created by hand* |
 | k8s | T1609 | `kubectl exec` into it | *HL - Kubernetes exec, attach or port-forward into a pod* |
 | k8s | T1552.007 | Creates and reads a dummy secret | *HL - Kubernetes secrets read by a person or application* |
