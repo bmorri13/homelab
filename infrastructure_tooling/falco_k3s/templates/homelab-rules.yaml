@@ -1,0 +1,40 @@
+{{- /*
+The homelab Falco rules and rule selection for the syscall DaemonSet, from the same
+files the hosts install: rules.d and config.d are symlinks to
+../monitoring_stack/falco/. values.yaml mounts falco-homelab-rules at
+/etc/falco/rules.d (loaded in file-name order after the stable rules) and
+falco-homelab-config at /etc/falco/homelab.d (in falco.config_files). Only
+homelab-rules.yaml is taken from config.d: homelab.yaml is the hosts' output config.
+The falco-k8saudit Deployment mounts neither.
+Rendering fails if the symlinks don't resolve, rather than deploying Falco without
+its rules.
+*/}}
+{{- $rules := .Files.Glob "rules.d/*.yaml" }}
+{{- $selection := .Files.Get "config.d/homelab-rules.yaml" }}
+{{- if or (not $rules) (not $selection) }}
+{{- fail "falco_k3s: rules.d/*.yaml or config.d/homelab-rules.yaml not found; the symlinks to ../monitoring_stack/falco must resolve" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-homelab-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: homelab-rules
+data:
+{{ $rules.AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-homelab-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: homelab-rules
+data:
+  homelab-rules.yaml: |-
+{{ $selection | indent 4 }}

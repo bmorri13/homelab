@@ -1,6 +1,19 @@
-# Homelab tuning for the default Falco ruleset. Each exception is scoped to a
-# known-good image and process so the rule still fires for anything else.
-# Add new ones here, with the evidence that justified them.
+# Homelab tuning for upstream Falco rules: the stable set (/etc/falco/falco_rules.yaml)
+# and the incubating and sandbox rules selected in config.d/homelab-rules.yaml. Upstream
+# rules carry no exceptions blocks, so each one is tuned with a condition append.
+# Each exception is scoped to a known-good image and process so the rule still fires
+# for anything else. Add new ones here, with the evidence that justified them.
+# Loaded last, after every rule it changes.
+
+- required_engine_version: 0.57.0
+
+# The vendored incubating and sandbox files redefine python_package_managers without
+# uv, and the last definition wins for every rule, stable ones included. Put uv back
+# so the stable rules behave as they do with falco_rules.yaml alone.
+- list: python_package_managers
+  items: [uv]
+  override:
+    items: append
 
 # guardrail-postgres: the compose healthcheck runs pg_isready every 5 s, and
 # pg_isready (perl) reads /etc/shadow. systemd-sysusers (comm is truncated to
@@ -8,11 +21,15 @@
 # ubuntu-desktop-01: the GNOME update notifier runs
 # `pkexec /usr/lib/update-notifier/package-system-locked` about every 2 minutes, and
 # pkexec reads /etc/shadow for PAM. Other pkexec use still alerts.
+# Proxmox nodes: pvedaemon's workers (comm "pvedaemon worke", truncated at 15) read
+# /etc/pam.d/* to authenticate API and web logins (about 40 alerts a week on one
+# node). Only those workers, and only /etc/pam.d/, are exempt.
 - rule: Read sensitive file untrusted
   condition: >-
     and not ((container.image.repository = postgres and proc.name = pg_isready) or
     proc.name startswith systemd-sysuser or
-    (proc.name = pkexec and proc.cmdline contains /usr/lib/update-notifier/))
+    (proc.name = pkexec and proc.cmdline contains /usr/lib/update-notifier/) or
+    (proc.name = "pvedaemon worke" and fd.name startswith /etc/pam.d/))
   override:
     condition: append
 
@@ -96,5 +113,34 @@
 # set up networking for each CI job's containers.
 - rule: Packet socket created in container
   condition: and not (proc.name = dockerd and container.image.repository = docker.io/library/docker)
+  override:
+    condition: append
+
+# Privileged containers that exist by design on k3s-01:
+# - The Docker-in-Docker sidecar of the cointhieves runner set in arc-runners
+#   (arc_runner_scaleset_cointhieves/values.yaml: image docker:dind, privileged: true).
+#   It starts with every CI job.
+# - k3s's local-path provisioner runs a short-lived privileged helper pod in
+#   kube-system for every volume it creates or deletes (helper-pod-*, the
+#   mirrored-library-busybox image).
+# Falco's own DaemonSet is already allowed by the rule (falco_privileged_images). The
+# OTel collector DaemonSet and the Trivy Operator are not privileged (Trivy's node
+# collector is off: infraAssessmentScannerEnabled: false). Anything else privileged
+# still alerts.
+- rule: Launch Privileged Container
+  condition: >-
+    and not ((k8s.ns.name = arc-runners and container.image.repository = docker.io/library/docker) or
+    (k8s.ns.name = kube-system and k8s.pod.name startswith helper-pod- and
+    container.image.repository endswith /mirrored-library-busybox))
+  override:
+    condition: append
+
+# On hosts with a desktop session the container plugin reports systemd user slices
+# as containers (container.id "user-0.slice"), and every login runs
+# `systemctl --user set-environment ...`, which reads /proc/1/environ to detect
+# virtualisation (ubuntu-desktop-01, each SSH session, 2026-11-15). Only systemd's own
+# tools reading PID 1's environment are exempt.
+- rule: Read environment variable from /proc files
+  condition: and not (proc.name in (systemctl, systemd) and fd.name = /proc/1/environ)
   override:
     condition: append

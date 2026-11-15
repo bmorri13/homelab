@@ -1,0 +1,518 @@
+# Detections for processes run by AI agents (issue #176). An agent can leave
+# something out of its own logs, but not out of the kernel's view. Every rule
+# is tagged ai_agent and reaches index=security as an OCSF Detection Finding
+# like any other Falco alert; the Splunk alert "Falco - AI agent finding" pages
+# on all of them. Who counts as an agent: ai_agent_procs in 20-homelab-macros.yaml.
+#
+# Tags: ATT&CK v20 technique ids (T####) and mitre_<tactic>, plus MITRE ATLAS
+# v5.6.0 technique ids (AML.T####) where one applies. The cc-falco-ocsf pack turns
+# both into finding_info.attacks[].
+
+- required_engine_version: 0.57.0
+
+# Credentials an agent has no reason to open: SSH private keys, cloud, cluster and
+# infrastructure credentials, package registry tokens, shell history, other
+# processes' environments, other agents' auth files, private key files.
+- macro: ai_agent_secret_file
+  condition: >-
+    ((fd.name contains "/.ssh/" and not fd.name endswith ".pub" and
+      not fd.name endswith "/known_hosts" and not fd.name endswith "/known_hosts.old" and
+      not fd.name endswith "/config" and not fd.name endswith "/authorized_keys" and
+      not fd.name endswith "/authorized_keys2") or
+     fd.name endswith "/.aws/credentials" or fd.name contains "/.aws/sso/cache/" or
+     fd.name endswith "/.config/gh/hosts.yml" or
+     fd.name endswith "/.kube/config" or fd.name = /etc/rancher/k3s/k3s.yaml or
+     fd.name endswith "/.docker/config.json" or
+     fd.name endswith "/.netrc" or fd.name endswith "/.git-credentials" or
+     fd.name endswith "/.vault-token" or
+     fd.filename startswith terraform.tfstate or
+     fd.name endswith ".tfvars" or fd.name endswith ".tfvars.json" or
+     (fd.name contains "/.config/gcloud/" and
+      (fd.filename in (credentials.db, access_tokens.db, application_default_credentials.json) or
+       fd.name contains "/legacy_credentials/")) or
+     fd.name contains "/.azure/" or
+     fd.name endswith "/.npmrc" or fd.name endswith "/.pypirc" or
+     fd.name = /var/lib/tailscale/tailscaled.state or
+     fd.filename in (.bash_history, .zsh_history, .history, fish_history, .python_history,
+                     .psql_history, .mysql_history) or
+     (fd.name glob "/proc/*/environ" and not fd.name in (/proc/self/environ, /proc/thread-self/environ)) or
+     ((fd.name startswith /var/run/secrets/kubernetes.io/serviceaccount/ or
+       fd.name startswith /run/secrets/kubernetes.io/serviceaccount/) and fd.name contains token) or
+     fd.name endswith "/.claude/.credentials.json" or
+     fd.name endswith "/.codex/auth.json" or
+     fd.name endswith "/.local/share/opencode/auth.json" or
+     fd.name endswith "/.hermes/.env" or fd.name endswith "/.hermes/auth.json" or
+     fd.name endswith "/.openclaw/state/openclaw.sqlite" or
+     (fd.name contains "/.openclaw/agents/" and
+      (fd.filename = openclaw-agent.sqlite or fd.filename = auth-profiles.json or fd.filename = auth.json)) or
+     fd.name endswith ".pem" or fd.name endswith ".key" or
+     fd.name in (/etc/shadow, /etc/gshadow))
+
+# CA bundles are public certificates, wherever a tool keeps a copy: the system
+# store, language packages (certifi, node_modules, uv's cache), and the temp copies
+# some tools extract (/tmp/tmp<random>cacert.pem).
+- macro: ai_agent_ca_bundle
+  condition: >-
+    (fd.filename in (ca-certificates.crt, ca-bundle.crt, ca-bundle.pem, tls-ca-bundle.pem, ca.pem) or
+     fd.name endswith "cacert.pem" or
+     fd.name startswith /etc/ssl/ or fd.name startswith /etc/pki/ or
+     fd.name startswith /etc/ca-certificates/ or fd.name startswith /usr/ or
+     fd.name contains "/certifi/" or fd.name contains "/site-packages/" or
+     fd.name contains "/node_modules/" or fd.name contains "/.local/share/uv/" or
+     fd.name contains "/.cache/uv/" or fd.name contains "/.cargo/registry/" or
+     fd.name contains "/go/pkg/mod/")
+
+# Each tool reading the credentials it exists to use. npm, gcloud and az are
+# scripts, so the process can be node or python with the tool in its command line.
+# Shells read their own history; kubectl and helm use a pod's service-account token
+# for in-cluster access; each agent reads its own auth file. sudo, su and PAM helpers
+# read /etc/shadow to check a password ("AI agent used sudo or changed user" covers
+# the sudo itself).
+- macro: ai_agent_own_credential
+  condition: >-
+    ((proc.name in (sudo, su, doas, pkexec, unix_chkpwd, login, sshd) and fd.name = /etc/shadow) or
+     (proc.name in (ssh, scp, sftp, git, git-remote-http, git-remote-https) and fd.name contains "/.ssh/") or
+     (proc.name in (kubectl, helm, k9s, k3s) and
+      (fd.name endswith "/.kube/config" or fd.name = /etc/rancher/k3s/k3s.yaml)) or
+     (proc.name in (kubectl, helm) and fd.name contains "/secrets/kubernetes.io/serviceaccount/") or
+     (proc.name = gh and fd.name endswith "/.config/gh/hosts.yml") or
+     (proc.name in (docker, docker-credent) and fd.name endswith "/.docker/config.json") or
+     (proc.name = aws and (fd.name endswith "/.aws/credentials" or fd.name contains "/.aws/sso/cache/")) or
+     (proc.name startswith git-credential and fd.name endswith "/.git-credentials") or
+     (proc.name = vault and fd.name endswith "/.vault-token") or
+     (proc.name in (terraform, tofu) and
+      (fd.filename startswith terraform.tfstate or fd.name endswith ".tfvars" or fd.name endswith ".tfvars.json")) or
+     (fd.name endswith "/.npmrc" and
+      (proc.name in (npm, npx, pnpm, yarn, bun, corepack) or
+       (proc.name = node and (proc.cmdline contains "/bin/npm" or proc.cmdline contains "npm-cli.js" or
+        proc.cmdline contains "/bin/npx" or proc.cmdline contains "pnpm" or proc.cmdline contains "yarn")))) or
+     (fd.name endswith "/.pypirc" and
+      (proc.name in (twine, uv, pip, pip3, poetry, hatch, flit) or
+       (proc.name startswith python and proc.cmdline contains twine))) or
+     (fd.name contains "/.config/gcloud/" and
+      (proc.name = gcloud or proc.cmdline contains "gcloud.py" or proc.cmdline contains "/google-cloud-sdk/")) or
+     (fd.name contains "/.azure/" and (proc.name = az or proc.cmdline contains "azure.cli")) or
+     (proc.name = tailscaled and fd.name = /var/lib/tailscale/tailscaled.state) or
+     (proc.name in (homelab_shell_binaries) and
+      fd.filename in (.bash_history, .zsh_history, .history, fish_history)) or
+     (proc.name = claude and fd.name endswith "/.claude/.credentials.json") or
+     (proc.name = codex and fd.name endswith "/.codex/auth.json") or
+     (proc.name = opencode and fd.name endswith "/.local/share/opencode/auth.json") or
+     (proc.name = hermes and (fd.name endswith "/.hermes/.env" or fd.name endswith "/.hermes/auth.json")) or
+     (proc.name in (openclaw, openclaw-gatewa) and fd.name contains "/.openclaw/"))
+
+- rule: AI agent read credential file
+  desc: >-
+    A process run by an AI agent opened a credential file (SSH key, cloud, cluster,
+    Vault or Terraform credentials, registry tokens, shell history, another process's
+    environment, a service-account token, another agent's auth file, a private key)
+    outside the tool that normally uses it. Check the command and whether the content
+    could have reached the agent's context.
+  condition: >-
+    open_read and ai_agent_proc and ai_agent_secret_file and
+    not ai_agent_own_credential and
+    not ((fd.name endswith ".pem" or fd.name endswith ".key") and ai_agent_ca_bundle)
+  output: >-
+    AI agent process read a credential file | file=%fd.name process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_credential_access, T1552, AML.T0055]
+
+# Dumping a .env file puts every secret in it into the agent's context and
+# transcript. Matched: the agent binary's own file tools, and tools that print,
+# search, copy or edit a file. Interpreters only when they run inline code
+# (python -c, node -e, perl -e, ruby -e): a dev server or script loading .env through
+# dotenv runs a file, not inline code, and is not matched. Shells (source .env) are
+# not matched for the same reason. Template files (.env.example and similar) hold no
+# secrets. Hermes and OpenClaw load their own .env from their state directory.
+- rule: AI agent printed a .env file
+  desc: >-
+    An AI agent read a .env file with its own file tools, or ran a tool that prints,
+    searches, copies or edits one. Check which file and whether it holds live secrets.
+  condition: >-
+    open_read and ai_agent_proc and
+    (fd.filename = .env or fd.filename startswith .env.) and
+    not fd.filename in (.env.example, .env.sample, .env.template, .env.dist) and
+    (ai_agent_binary or
+     proc.name in (cat, less, more, head, tail, grep, egrep, fgrep, rg, ag, ack, strings,
+                   base64, base32, xxd, od, hexdump, bat, batcat, sed, awk, gawk, mawk, cut, nl,
+                   tac, sort, diff, cp, dd, jq, yq, vi, vim, nvim, nano, emacs, view) or
+     (proc.name startswith python and proc.args startswith "-c") or
+     (proc.name in (node, bun, deno) and
+      (proc.args startswith "-e" or proc.args startswith "-p" or
+       proc.args startswith "--eval" or proc.args startswith "--print")) or
+     (proc.name in (perl, ruby) and proc.args regex "(-[[:alnum:]]*e|.*[[:space:]]-[[:alnum:]]*e)([[:space:]].*)?")) and
+    not (proc.name = hermes and fd.name endswith "/.hermes/.env") and
+    not (proc.name in (openclaw, openclaw-gatewa) and fd.name endswith "/.openclaw/.env")
+  output: >-
+    AI agent process printed a .env file | file=%fd.name process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_credential_access, T1552.001, AML.T0055]
+
+# Agents run commands as `bash -c "<pipeline>"`, so a download piped or passed into
+# an interpreter shows up whole in the shell's command line. Matched:
+#   curl|wget ... | [sudo] sh|bash ..., or | python|node|perl|ruby|php reading the
+#   script from stdin (not | python3 -m json.tool or -c '<code>', which parse the data)
+#   sh <(curl ...), source <(curl ...)
+#   sh -c "$(curl ...)", eval "$(wget -qO- ...)", and the backtick form
+#   curl -o f ... && chmod +x f / sh f / ./f, and the same with wget
+# A download piped into sudo tee, gpg or tar (adding an apt key) is not matched.
+- macro: ai_agent_fetch_and_run
+  condition: >-
+    (proc.cmdline regex ".*(curl|wget)[[:space:]].*[^|][|][[:space:]]*(sudo[^|;&]*[[:space:]]|env[^|;&]*[[:space:]])?(/usr/local/bin/|/usr/bin/|/bin/)?(sh|bash|dash|zsh|ksh|fish|ash)([^[:alnum:]_.-].*)?" or
+     proc.cmdline regex ".*(curl|wget)[[:space:]].*[^|][|][[:space:]]*(sudo[^|;&]*[[:space:]]|env[^|;&]*[[:space:]])?(/usr/local/bin/|/usr/bin/|/bin/)?(python[0-9.]*|node|nodejs|bun|deno|perl|ruby|php|lua)[[:space:]]*(-[[:space:]]*)?([;&|)].*)?" or
+     proc.cmdline regex ".*(sh|bash|dash|zsh|ksh|fish|python[0-9.]*|node|perl|ruby|php|source|[.])[[:space:]]+(-[^[:space:]]+[[:space:]]+)*<[(][[:space:]]*(curl|wget)[[:space:]].*" or
+     proc.cmdline regex ".*(sh|bash|dash|zsh|ksh|fish|python[0-9.]*|node|perl|ruby|php|eval|source|[.])[[:space:]]+(-[^[:space:]]+[[:space:]]+)*.?([$][(]|`)[[:space:]]*(curl|wget)[[:space:]].*" or
+     proc.cmdline regex ".*curl([[:space:]][^;&|]*)?[[:space:]](-[[:alnum:]]*[oO]|--(output|remote-name))[^;&|]*(&&|;)[[:space:]]*(sudo[[:space:]]+)?(chmod[[:space:]]+[^;&|[:space:]]*[x1357][[:space:]]|((ba|da|z|k)?sh|python[0-9.]*)[[:space:]]+[^-[:space:]]|[.]/[^[:space:]]).*" or
+     proc.cmdline regex ".*wget[[:space:]][^;&|]*(&&|;)[[:space:]]*(sudo[[:space:]]+)?(chmod[[:space:]]+[^;&|[:space:]]*[x1357][[:space:]]|((ba|da|z|k)?sh|python[0-9.]*)[[:space:]]+[^-[:space:]]|[.]/[^[:space:]]).*")
+
+- rule: AI agent piped a download into a shell
+  desc: >-
+    An AI agent downloaded something with curl or wget and ran it in the same command:
+    piped or passed into a shell or interpreter, or saved and then executed. Check the
+    URL and what the script did next.
+  condition: >-
+    spawned_process and ai_agent_proc and proc.name in (homelab_shell_binaries) and
+    (proc.cmdline contains "curl" or proc.cmdline contains "wget") and
+    ai_agent_fetch_and_run
+  output: >-
+    AI agent piped a download into a shell | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, process, mitre_execution, T1059.004, AML.T0053]
+
+# Files that make something run later or grant access: shell startup files, cron and
+# at jobs, systemd units, XDG autostart, the dynamic loader preload list, init
+# scripts, SSH server and client config, authorized_keys, accounts and PAM, sudoers,
+# udev rules, git hooks.
+# Git hooks: git init and clone copy the *.sample templates, and pre-commit and
+# lefthook install hooks when asked to; anything else writing a hook alerts.
+- macro: ai_agent_persistence_path
+  condition: >-
+    (fd.name endswith "/.bashrc" or fd.name endswith "/.bash_profile" or
+     fd.name endswith "/.bash_login" or fd.name endswith "/.bash_logout" or
+     fd.name endswith "/.profile" or fd.name endswith "/.zshrc" or
+     fd.name endswith "/.zprofile" or fd.name endswith "/.zshenv" or fd.name endswith "/.zlogin" or
+     fd.name endswith "/.config/fish/config.fish" or fd.name contains "/.config/fish/conf.d/" or
+     fd.name in (/etc/profile, /etc/bash.bashrc, /etc/environment, /etc/ld.so.preload, /etc/rc.local,
+                 /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow) or
+     fd.name startswith /etc/profile.d/ or fd.name startswith /etc/zsh/ or
+     fd.name endswith "/.ssh/authorized_keys" or fd.name endswith "/.ssh/authorized_keys2" or
+     fd.name endswith "/.ssh/config" or fd.name endswith "/.ssh/rc" or
+     fd.name startswith /etc/ssh/sshd_config or fd.name = /etc/ssh/sshrc or
+     fd.name startswith /etc/cron or fd.name startswith /var/spool/cron/ or
+     fd.name startswith /var/spool/at/ or fd.name startswith /var/spool/atd/ or
+     fd.name startswith /etc/systemd/system/ or fd.name startswith /etc/systemd/user/ or
+     fd.name startswith /lib/systemd/system/ or fd.name startswith /usr/lib/systemd/system/ or
+     fd.name startswith /usr/lib/systemd/user/ or
+     fd.name contains "/.config/systemd/user/" or fd.name contains "/.local/share/systemd/user/" or
+     fd.name contains "/.config/autostart/" or fd.name startswith /etc/xdg/autostart/ or
+     fd.name startswith /etc/init.d/ or fd.name startswith /etc/update-motd.d/ or
+     fd.name startswith /etc/sudoers or fd.name startswith /etc/pam.d/ or
+     fd.name startswith /etc/udev/rules.d/ or
+     (fd.name contains "/.git/hooks/" and not fd.name endswith ".sample" and
+      not proc.name in (git, pre-commit, lefthook)))
+
+# The same paths as the destination of a rename (fs.path.target), for writers that
+# write a temporary file and move it into place.
+- macro: ai_agent_persistence_rename
+  condition: >-
+    (fs.path.target endswith "/.bashrc" or fs.path.target endswith "/.bash_profile" or
+     fs.path.target endswith "/.profile" or fs.path.target endswith "/.zshrc" or
+     fs.path.target endswith "/.zprofile" or fs.path.target endswith "/.zshenv" or
+     fs.path.target endswith "/.config/fish/config.fish" or
+     fs.path.target in (/etc/profile, /etc/bash.bashrc, /etc/environment, /etc/ld.so.preload, /etc/rc.local,
+                        /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow) or
+     fs.path.target startswith /etc/profile.d/ or
+     fs.path.target endswith "/.ssh/authorized_keys" or fs.path.target endswith "/.ssh/authorized_keys2" or
+     fs.path.target endswith "/.ssh/config" or fs.path.target startswith /etc/ssh/sshd_config or
+     fs.path.target startswith /etc/cron or fs.path.target startswith /var/spool/cron/ or
+     fs.path.target startswith /etc/systemd/ or fs.path.target startswith /lib/systemd/system/ or
+     fs.path.target startswith /usr/lib/systemd/ or fs.path.target contains "/.config/systemd/user/" or
+     fs.path.target contains "/.config/autostart/" or fs.path.target startswith /etc/init.d/ or
+     fs.path.target startswith /etc/sudoers or fs.path.target startswith /etc/pam.d/ or
+     fs.path.target startswith /etc/udev/rules.d/ or
+     (fs.path.target contains "/.git/hooks/" and not fs.path.target endswith ".sample" and
+      not proc.name in (git, pre-commit, lefthook)))
+
+- rule: AI agent wrote a persistence file
+  desc: >-
+    An AI agent wrote or replaced a file that runs something later or grants access:
+    a shell startup file, cron or at job, systemd unit, autostart entry, ld.so.preload,
+    init script, SSH config or authorized_keys, passwd/shadow/group, PAM, sudoers, a
+    udev rule or a git hook. Check the content that was written.
+  condition: >-
+    ((open_write and ai_agent_proc and ai_agent_persistence_path) or
+     (homelab_rename and ai_agent_proc and ai_agent_persistence_rename))
+  output: >-
+    AI agent process wrote a persistence file | file=%fd.name target=%fs.path.target process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_persistence, T1546.004]
+
+# Model APIs, registries and git hosts are all HTTPS, SSH or DNS. Anything else
+# leaving the LAN is unusual for an agent. Falco sees addresses, not host names,
+# so this can't tell one HTTPS host from another.
+# UDP "connects" to port 0 are excluded: glibc's getaddrinfo makes one to each
+# candidate address to sort them (RFC 6724) and sends nothing. They were 40 of the
+# first 42 alerts (hermes, and npm run by hermes, on 2026-10-27).
+# Local networks: RFC 1918, CGNAT (Tailscale's 100.64.0.0/10), loopback and
+# link-local, and for IPv6 loopback, link-local and ULA (fc00::/7 holds Tailscale's
+# fd7a:115c:a1e0::/48).
+- rule: AI agent outbound connection on unusual port
+  desc: >-
+    An AI agent connected to a public address on a port other than 22, 53, 80 or 443.
+    Check the destination and which tool opened the connection.
+  condition: >-
+    outbound and ai_agent_proc and
+    not fd.rport in (22, 53, 80, 443) and
+    not (fd.l4proto = udp and fd.rport = 0) and
+    not fd.rnet in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8",
+                    "169.254.0.0/16", "::1/128", "fe80::/10", "fc00::/7")
+  output: >-
+    AI agent process connected out on an unusual port | connection=%fd.name
+    process=%proc.name command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, network, mitre_command_and_control, T1571]
+
+# Commands whose effects are hard to undo. A verb is matched as the first word
+# that is not an option, so options before it (kubectl -n x --context c delete,
+# git -C dir push, terraform -chdir=dir apply) are allowed and the same word later
+# (a label value, a resource name) is not. The leading-options pattern, repeated in
+# each regex: ([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*
+# terraform plan -destroy only plans, so it is not matched. git reset --hard is too
+# common to alert on. rm -r alerts only on a top-level directory or a home
+# directory itself; shred alerts unless every path is under /tmp or /var/tmp (agents
+# clean up their own temporary secrets with shred -u).
+- macro: ai_agent_destructive_command
+  condition: >-
+    ((proc.name = kubectl and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*delete([[:space:]].*)?") or
+     (proc.name = git and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*push([[:space:]].*)?" and
+      proc.args regex ".*[[:space:]](--force|--force-with-lease|-f|--mirror|--delete|-d|[+][^[:space:]]+|:[^[:space:]]+)([[:space:]=].*)?") or
+     (proc.name in (terraform, tofu) and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(apply|destroy)([[:space:]].*)?") or
+     (proc.name = helm and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(uninstall|delete|del|un)([[:space:]].*)?") or
+     (proc.name in (docker, podman, nerdctl) and
+      (proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(system|volume|image|container|network|builder|buildx)[[:space:]]+prune([[:space:]].*)?" or
+       proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(volume[[:space:]]+(rm|remove)|(container[[:space:]]+)?rm[[:space:]](.*[[:space:]])?(--force|-[[:alnum:]]*f[[:alnum:]]*))([[:space:]].*)?")) or
+     (proc.name in (qm, pct) and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*destroy([[:space:]].*)?") or
+     (proc.name = vault and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(kv[[:space:]]+(delete|destroy|metadata[[:space:]]+delete)|delete)([[:space:]].*)?") or
+     (proc.name = argocd and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*(app|appset)[[:space:]]+delete([[:space:]].*)?") or
+     (proc.name = gh and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*repo[[:space:]]+delete([[:space:]].*)?") or
+     proc.name startswith mkfs or proc.name in (mke2fs, wipefs) or
+     (proc.name = dd and proc.args regex ".*of=/dev/(sd|vd|hd|xvd|nvme|mmcblk|dm-|md|loop|mapper/|disk/).*") or
+     (proc.name = shred and
+      not proc.args regex "((-[^[:space:]]+|[0-9]+|/tmp/[^[:space:]]+|/var/tmp/[^[:space:]]+)[[:space:]]*)+") or
+     (proc.name = rm and
+      proc.args regex "(.*[[:space:]])?(-[[:alnum:]]*[rR][[:alnum:]]*|--recursive)([[:space:]].*)?" and
+      proc.args regex "(.*[[:space:]])?(/|/(bin|boot|etc|home|lib|lib64|mnt|opt|root|sbin|srv|usr|var)|/home/[^/[:space:]]+)/?([[:space:]].*)?"))
+
+- rule: AI agent ran a destructive command
+  desc: >-
+    An AI agent ran a command that is hard to undo: a force push or remote branch
+    delete, terraform/tofu apply or destroy, kubectl delete, helm uninstall, docker
+    prune or forced removal, qm/pct destroy, a Vault or Argo CD delete, gh repo
+    delete, mkfs, dd onto a block device, shred, or rm -r of a top-level or home
+    directory. Check whether the owner asked for it.
+  condition: spawned_process and ai_agent_proc and ai_agent_destructive_command
+  output: >-
+    AI agent ran a destructive command | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, process, mitre_impact, T1485, AML.T0101]
+
+# Command-line reverse shells: netcat or socat with a program attached, a shell
+# using /dev/tcp or a fifo with a network tool, and the common interpreter
+# one-liners (a socket plus a process or pty).
+- rule: AI agent started a reverse shell
+  desc: >-
+    An AI agent ran netcat or socat with a program attached, a shell using /dev/tcp or
+    a fifo with a network tool, or an interpreter one-liner that connects a socket to a
+    shell. Check the remote address and kill the process tree.
+  condition: >-
+    spawned_process and ai_agent_proc and
+    ((proc.name in (nc, ncat, netcat, nc.traditional, nc.openbsd) and
+      (proc.args contains "-e" or proc.args contains "-c" or proc.args contains "--sh-exec" or
+       proc.args contains "--exec" or proc.args contains "--lua-exec")) or
+     (proc.name = socat and (proc.args contains "exec:" or proc.args contains "EXEC:" or
+      proc.args contains "system:" or proc.args contains "SYSTEM:")) or
+     (proc.name in (homelab_shell_binaries) and
+      (proc.cmdline contains "/dev/tcp/" or proc.cmdline contains "/dev/udp/" or
+       (proc.cmdline contains "mkfifo" and
+        (proc.cmdline contains "nc " or proc.cmdline contains "ncat " or
+         proc.cmdline contains "telnet " or proc.cmdline contains "s_client")))) or
+     (proc.name startswith python and proc.args contains "socket" and
+      (proc.args contains "pty" or proc.args contains "subprocess" or proc.args contains "dup2")) or
+     (proc.name = perl and proc.args contains "Socket" and proc.args contains "exec") or
+     (proc.name = ruby and (proc.args contains "TCPSocket" or proc.args contains "rsocket") and
+      (proc.args contains "exec" or proc.args contains "spawn" or proc.args contains "popen" or
+       proc.args contains "system")) or
+     (proc.name = php and proc.args contains "fsockopen") or
+     (proc.name in (awk, gawk) and proc.args contains "/inet/tcp/") or
+     (proc.name in (node, bun, deno) and proc.args contains "child_process" and
+      (proc.args contains "net.Socket" or proc.args contains "net.connect" or
+       proc.args contains "createConnection")))
+  output: >-
+    AI agent started a reverse shell | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: CRITICAL
+  tags: [ai_agent, host, container, process, network, mitre_execution, T1059, AML.T0072]
+
+# The language-independent form, after the stable rule "Redirect STDOUT/STDIN to
+# Network Connection in Container": a process under an agent duplicating a network
+# socket onto stdin, stdout or stderr, which is how a shell gets wired to a
+# connection whatever started it. On hosts as well as containers.
+- rule: AI agent redirected standard streams to a network connection
+  desc: >-
+    A process run by an AI agent duplicated a network socket onto stdin, stdout or
+    stderr (dup, dup2, dup3), the core of most reverse shells. Check the remote
+    address and the process tree.
+  condition: >-
+    dup and evt.rawres in (0, 1, 2) and fd.type in ("ipv4", "ipv6") and ai_agent_proc
+  output: >-
+    AI agent process redirected a standard stream to a network connection | connection=%fd.name
+    fd=%evt.rawres process=%proc.name command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: CRITICAL
+  tags: [ai_agent, host, container, process, network, mitre_execution, T1059, AML.T0072]
+
+# Agent settings, permissions, hooks and MCP server config (Claude Code, Codex,
+# OpenCode, Hermes, OpenClaw). A change here persists past the session and can
+# grant the agent tools or commands it did not have.
+# Not matched: what the agents write in ordinary use (transcripts, sessions,
+# history, memory, todos, caches, logs, plugin caches, auth token refreshes).
+# Claude Code rewrites ~/.claude.json (its state file, which also holds user MCP
+# servers) on every start, and writes .claude/settings.local.json when the owner
+# approves a permission; those count only when written by something other than
+# claude itself. Codex writes config.toml when the owner trusts a project or picks a
+# model, and that is matched: it is rare and done by hand.
+- macro: ai_agent_config_path
+  condition: >-
+    (fd.name endswith "/.claude/settings.json" or fd.name contains "/.claude/hooks/" or
+     fd.name endswith "/.mcp.json" or fd.name startswith /etc/claude-code/ or
+     ((fd.name endswith "/.claude.json" or fd.name endswith "/.claude/settings.local.json") and
+      not proc.name = claude) or
+     fd.name endswith "/.codex/config.toml" or fd.name endswith "/.codex/hooks.json" or
+     fd.filename in (opencode.json, opencode.jsonc) or
+     fd.name contains "/.opencode/plugin/" or fd.name contains "/.config/opencode/plugin/" or
+     fd.name endswith "/.hermes/config.yaml" or
+     fd.name endswith "/.openclaw/openclaw.json")
+
+- macro: ai_agent_config_rename
+  condition: >-
+    (fs.path.target endswith "/.claude/settings.json" or fs.path.target contains "/.claude/hooks/" or
+     fs.path.target endswith "/.mcp.json" or fs.path.target startswith /etc/claude-code/ or
+     ((fs.path.target endswith "/.claude.json" or fs.path.target endswith "/.claude/settings.local.json") and
+      not proc.name = claude) or
+     fs.path.target endswith "/.codex/config.toml" or fs.path.target endswith "/.codex/hooks.json" or
+     fs.path.target endswith "/opencode.json" or fs.path.target endswith "/opencode.jsonc" or
+     fs.path.target contains "/.opencode/plugin/" or fs.path.target contains "/.config/opencode/plugin/" or
+     fs.path.target endswith "/.hermes/config.yaml" or
+     fs.path.target endswith "/.openclaw/openclaw.json")
+
+- rule: AI agent changed agent configuration
+  desc: >-
+    An AI agent wrote agent settings, permissions, hooks or MCP server config
+    (Claude Code, Codex, OpenCode, Hermes, OpenClaw). Diff the file against its last
+    known content: new MCP servers, hooks, allowed commands or endpoints matter most.
+  condition: >-
+    ((open_write and ai_agent_proc and ai_agent_config_path) or
+     (homelab_rename and ai_agent_proc and ai_agent_config_rename))
+  output: >-
+    AI agent process changed agent configuration | file=%fd.name target=%fs.path.target process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, filesystem, mitre_persistence, T1546, AML.T0081]
+
+# Sending a local file somewhere: curl with a file body (-d @f, --data-binary @f,
+# -F name=@f, -T f), wget --post-file, gh gist create, rclone to a remote, scp or
+# rsync to a remote host, and netcat fed from a file or pipe. Uploads to localhost
+# are not matched. Agents do post files to APIs now and then, hence Notice.
+- macro: ai_agent_upload_command
+  condition: >-
+    ((proc.name = curl and
+      (proc.args regex ".*(^|[[:space:]])(-d|--data|--data-binary|--data-ascii|--json)([[:space:]]+|=)?@.*" or
+       proc.args regex ".*(^|[[:space:]])--data-urlencode([[:space:]]+|=)?[^[:space:]=]*@.*" or
+       proc.args regex ".*(^|[[:space:]])(-F|--form)([[:space:]]+|=)?[^[:space:]]*=[@<].*" or
+       proc.args regex ".*(^|[[:space:]])(-T|--upload-file)([[:space:]]+|=)?[^[:space:]-].*") and
+      not proc.args regex ".*://(localhost|127[.][0-9.]+|[[]::1[]])([:/].*)?") or
+     (proc.name = wget and (proc.args contains "--post-file" or proc.args contains "--body-file")) or
+     (proc.name = gh and
+      proc.args regex "([[:space:]]*-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]*gist[[:space:]]+create([[:space:]].*)?") or
+     (proc.name = rclone and
+      proc.args regex ".*(copy|copyto|sync|move|moveto)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*[[:space:]]+[[:alnum:]_.-]+:[^[:space:]]*([[:space:]]+-.*)?") or
+     (proc.name in (scp, rsync) and
+      proc.args regex ".*[[:space:]]([^[:space:]/]+@)?[[:alnum:]_.-]+:[^[:space:]]*" and
+      not proc.args regex ".*[[:space:]]([^[:space:]/]+@)?(localhost|127[.][0-9.]+):[^[:space:]]*") or
+     (proc.name in (homelab_shell_binaries) and
+      proc.cmdline regex ".*([^|][|][[:space:]]*(nc|ncat|netcat)[[:space:]]|(^|[[:space:]])(nc|ncat|netcat)[[:space:]][^|;&]*<[[:space:]]*[^[:space:]<(&]).*"))
+
+- rule: AI agent uploaded a file or data
+  desc: >-
+    An AI agent sent a local file or data to another host: curl with a file body or
+    upload, wget --post-file, gh gist create, rclone to a remote, scp/rsync to a remote
+    host, or netcat fed from a file. Check the destination and what was sent.
+  condition: spawned_process and ai_agent_proc and ai_agent_upload_command
+  output: >-
+    AI agent uploaded a file or data | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, process, network, mitre_exfiltration, T1567, AML.T0086]
+
+# The homelab's own monitoring: Falco, the OTel collector that ships its alerts, and
+# auditd. Stopping them, or editing their config, blinds detection. T1685 is
+# ATT&CK v20's Impair Defenses (T1562.001 before v19; see the REVOKED map in the
+# cc-falco-ocsf pack). Service and process names: falco, falco-modern-bpf,
+# otelcol, otelcol-contrib, auditd (matched as substrings of the arguments).
+
+- rule: AI agent stopped or changed a security tool
+  desc: >-
+    An AI agent stopped, disabled, masked or killed Falco, the OTel collector or auditd,
+    or wrote their configuration. Check whether the tool is still running and what
+    changed in its config.
+  condition: >-
+    ((spawned_process and ai_agent_proc and
+      ((proc.name in (systemctl, service) and
+        proc.args regex ".*(^|[[:space:]])(stop|disable|mask|kill|freeze)([[:space:]].*)?" and
+        (proc.args contains falco or proc.args contains otelcol or proc.args contains auditd)) or
+       (proc.name in (pkill, killall) and
+        (proc.args contains falco or proc.args contains otelcol or proc.args contains auditd)) or
+       (proc.name in (homelab_shell_binaries) and
+        proc.cmdline regex ".*kill.*(pidof|pgrep)[[:space:]]+(-[^[:space:]]+[[:space:]]+)*[^[:space:]]*(falco|otelcol|auditd).*"))) or
+     (open_write and ai_agent_proc and
+      (fd.name startswith /etc/falco/ or fd.name startswith /etc/otelcol-contrib/ or
+       fd.name startswith /etc/audit/)) or
+     (homelab_rename and ai_agent_proc and
+      (fs.path.target startswith /etc/falco/ or fs.path.target startswith /etc/otelcol-contrib/ or
+       fs.path.target startswith /etc/audit/)))
+  output: >-
+    AI agent stopped or changed a security tool | file=%fd.name target=%fs.path.target process=%proc.name
+    command=%proc.cmdline parent=%proc.pname ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5]
+    user=%user.name container_id=%container.id
+  priority: WARNING
+  tags: [ai_agent, host, container, process, filesystem, mitre_defense_evasion, T1685]
+
+- rule: AI agent used sudo or changed user
+  desc: >-
+    An AI agent ran sudo, su, doas, pkexec or run0. Check the command it ran with the
+    new privileges and whether the owner approved it.
+  condition: >-
+    spawned_process and ai_agent_proc and proc.name in (sudo, su, doas, pkexec, run0)
+  output: >-
+    AI agent used sudo or changed user | command=%proc.cmdline parent=%proc.pname
+    ancestors=%proc.aname[2],%proc.aname[3],%proc.aname[4],%proc.aname[5] user=%user.name container_id=%container.id
+  priority: NOTICE
+  tags: [ai_agent, host, container, process, users, mitre_privilege_escalation, T1548.003, AML.T0053]
