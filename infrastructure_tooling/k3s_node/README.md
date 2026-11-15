@@ -6,7 +6,7 @@ What k3s-01 needs on the host itself, which Argo CD can't apply, and how k3s is 
 |---|---|---|
 | `99-inotify.conf` | `/etc/sysctl.d/` | Falco and other pods that watch files fail to start at the default inotify limit |
 | `99-k3s-traefik.conf` | `/etc/sysctl.d/` | Traefik runs as non-root on the host network and must bind 80 and 443 |
-| `traefik-config.yaml` | `/var/lib/rancher/k3s/server/manifests/` | Traefik on the host network, no Service (there is no load balancer) |
+| `traefik-config.yaml` | `/var/lib/rancher/k3s/server/manifests/` | Traefik on the host network, no Service (there is no load balancer); its JSON access log, which Cribl sends to Splunk as `index=network sourcetype=traefik:access` (see the file's comments and `../monitoring_stack/splunk/README.md`). Any change to the values restarts Traefik: a few seconds without ingress |
 | `k3s-version` | | The k3s release and its binary's SHA-256, for `upgrade-k3s.sh` |
 | `k3s-hardening.conf` | `/etc/systemd/system/k3s.service.d/10-hardening.conf` | CIS 1.1.20: sets the server's PKI certificates to 600 every time k3s starts (k3s writes them 644, and again when it rotates them) |
 | `default-serviceaccounts.sh` | (run by `install.sh`) | CIS 5.1.5: sets `automountServiceAccountToken: false` on every namespace's `default` ServiceAccount |
@@ -58,7 +58,7 @@ Kubernetes moves one minor version at a time, and k3s can't be downgraded, so ea
 5. **Verify:**
    - The node is Ready on the new version.
    - Every Argo CD app is Synced and Healthy.
-   - The Traefik pod is running.
+   - The Traefik pod is running, and its access log arrives: `index=network sourcetype=traefik:access earliest=-15m` (at least the `ping@internal` heartbeat every 10 minutes).
    - `https://splunk.bmosan.com` and `https://cribl.bmosan.com` reach Authentik.
    - The MCP gateway tools answer.
    - `index=audit` and the k3s OTel collector are still sending.

@@ -6,7 +6,28 @@
 # updateStrategy: the chart starts the new pod before stopping the old one, but on
 # one node the new pod can't get host ports 80 and 443 while the old one holds them,
 # so a Traefik upgrade sits Pending forever (it did on the move to k3s 1.33). Stop
-# the old pod first instead: a few seconds without ingress per Traefik update.
+# the old pod first instead: a few seconds without ingress per Traefik update (and
+# per change to this file: any change to the values rolls the pod).
+#
+# Access log: one JSON line per request on stdout, next to Traefik's own text log
+# (an access line is a JSON object with RequestMethod; the text lines are not JSON).
+# The k3s OTel collector ships both; Cribl's hec_in pipeline sends the JSON lines to
+# index=network, sourcetype=traefik:access (monitoring_stack/splunk, apps/85_traefik).
+#   - Request headers: all dropped except User-Agent, Referer, Cf-Connecting-Ip and
+#     X-Forwarded-For, so Authorization, Cookie and Set-Cookie never reach a log.
+#     The host is RequestHost (Go doesn't keep Host as a header).
+#   - ClientHost is the TCP peer, which can't be spoofed: with no
+#     forwardedHeaders.trustedIPs on the entry points, Traefik deletes a client's
+#     X-Forwarded-For and X-Real-Ip before the access log reads them (and sets
+#     ClientHost from X-Forwarded-For only when it survives). Don't add tailnet or LAN
+#     ranges to trustedIPs, or every tailnet client can choose its logged address.
+#     Cf-Connecting-Ip is passed through as sent: whatever the client claims. Splunk
+#     calls it claimed_client_ip and never uses it as src.
+#   - addInternals logs Traefik's own routers too, so the kubelet's /ping probes
+#     (ping@internal, every 10 s) give a heartbeat; Cribl keeps about one in 60.
+#     Chart 27 (Traefik 2.11) has no addInternals and ignores it.
+#   - Query strings are kept (the exploit-pattern detections read them); Cribl's
+#     splunk_out masks tokens and signatures in them.
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -31,3 +52,29 @@ spec:
         port: 443
         hostPort: 443
         exposedPort: 443
+    logs:
+      access:
+        enabled: true
+        format: json
+        # Lines queue in memory (this many) and are written by a separate goroutine,
+        # so a slow stdout doesn't hold up requests. Lines still queued are lost if
+        # the pod is killed.
+        bufferingSize: 100
+        addInternals: true
+        fields:
+          general:
+            defaultmode: keep
+            names:
+              # Duplicates of other fields, or of no use here.
+              StartLocal: drop
+              ClientAddr: drop
+              RequestAddr: drop
+              GzipRatio: drop
+              Overhead: drop
+          headers:
+            defaultmode: drop
+            names:
+              User-Agent: keep
+              Referer: keep
+              Cf-Connecting-Ip: keep
+              X-Forwarded-For: keep
