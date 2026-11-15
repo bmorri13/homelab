@@ -104,6 +104,34 @@ functions:
     description: >-
       kube-bench's monthly CIS k3s benchmark on k3s-01 (infrastructure_tooling/
       kube_bench), one line per check: to security.
+  - id: drop
+    filter: >-
+      __e['k8s.namespace.name'] == 'kube-system' && __e['k8s.container.name'] == 'traefik' &&
+      /^\{.*"RouterName":"ping@internal"/.test(_raw) && !/"StartUTC":"[^"]*T\d\d:\d0:0\d/.test(_raw)
+    conf: {}
+    description: >-
+      Traefik access log: the kubelet's /ping probes (two every 10 s) are logged only
+      as a heartbeat for the "Traefik - access log stopped" alert. Keep those that
+      start in the first 10 seconds of every tenth minute, about 290 lines a day.
+  - id: eval
+    filter: >-
+      __e['k8s.namespace.name'] == 'kube-system' && __e['k8s.container.name'] == 'traefik' && /^\{.*"RequestMethod":/.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'network'"
+        - name: sourcetype
+          value: "'traefik:access'"
+        - name: _time
+          value: >-
+            Date.parse((_raw.match(/"StartUTC":"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?)\d*Z"/) || ['', ''])[1] + 'Z') / 1000 || _time
+    final: true
+    description: >-
+      Traefik's access log on k3s-01 (k3s_node/traefik-config.yaml), one JSON line per
+      request, to network as traefik:access (apps/85_traefik). _time is the request's
+      start (StartUTC, to the millisecond). Final, so the drops below can't discard a
+      request because its path or user agent contains "DEBUG", "kube-probe/" or a
+      health-check path; Traefik's own text log stays in k8s.
   - id: eval
     filter: >-
       source && source.startsWith('cloudflare-logs:') && sourcetype && sourcetype.startsWith('cloudflare:')

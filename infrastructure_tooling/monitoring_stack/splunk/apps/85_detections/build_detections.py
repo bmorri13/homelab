@@ -375,6 +375,125 @@ det("HL - DNS zone transfer or ANY query",
     suppress="src", period="24h",
     description="A client asked AdGuard for a zone transfer (AXFR/IXFR) or an ANY record: listing a zone's names, or probing the resolver for amplification. Ordinary software asks for specific record types.")
 
+# ---- Web (Traefik access log on k3s-01) ----------------------------------------------------
+# index=network sourcetype=traefik:access (apps/85_traefik). Every host Traefik routes
+# (apiary, auth, cribl, splunk, mcp and vault .bmosan.com) has a tailnet-only
+# ipAllowList, so requests come from the tailnet or, refused with 403, from the LAN
+# (k3s-01's address with a Host header); the Cloudflare-tunnel apps don't pass through
+# it. A few requests a day in 2026-11, so nothing here needs tstats. src is ClientHost,
+# the TCP peer, which a client can't spoof; the Cf-Connecting-Ip header it may send is
+# only reported, as claimed_ip. Traefik's own routers (*@internal: the ping heartbeat,
+# the dashboard) are left out. path is the request path and query, url-decoded and
+# lower-cased; raw_path the same before decoding (encoded traversal, %00). The user's
+# own scanners go in the hl_web_scanner_allowed macro on the Splunk host.
+WEB_PREP = (
+    "index=network sourcetype=traefik:access NOT RouterName=\"*@internal\" "
+    '| eval src=coalesce(ClientHost, "unknown"), site=coalesce(RequestHost, "(none)"), raw_path=lower(coalesce(RequestPath, "")), '
+    'path=lower(coalesce(urldecode(RequestPath), RequestPath, "")), ua=coalesce(\'request_User-Agent\', ""), '
+    'status=tonumber(DownstreamStatus), origin_status=coalesce(tonumber(OriginStatus), 0), router=coalesce(RouterName, "(no router)"), '
+    "claimed_ip='request_Cf-Connecting-Ip' "
+    "| where NOT `hl_web_scanner_allowed` "
+)
+# Paths no app here serves, which wordlist scanners try first: dotfiles holding
+# credentials or source, WordPress and PHP admin pages, Spring actuator, Apache status,
+# CGI, router and IoT exploit paths, path traversal (plain, or encoded once or twice).
+WEB_SENSITIVE = (
+    "(^|/)(\\.env|\\.git(/|$)|\\.svn/|\\.hg/|\\.aws/|\\.ssh/|\\.docker/|\\.kube/|\\.htpasswd|\\.htaccess|\\.ds_store|\\.vscode/|"
+    "wp-admin|wp-login\\.php|wp-config|xmlrpc\\.php|actuator(/|$)|server-status|phpinfo|phpmyadmin|cgi-bin/|vendor/phpunit|"
+    "boaform|hnap1|\\.\\./|etc/passwd|backup\\.(zip|tar|sql))"
+)
+WEB_SENSITIVE_RAW = "%2e%2e|%252e|\\.%2e|%2e\\.|%00"
+# Injection payloads in the path or query (log4shell/JNDI, template expressions, XSS,
+# SQL injection, file inclusion and command injection), and scanners' user agents.
+WEB_EXPLOIT = (
+    "jndi:|\\$\\{|%\\{|<script|javascript:|onerror=|union(\\s|\\+|/\\*.*\\*/)+(all(\\s|\\+)+)?select|"
+    "/etc/(passwd|shadow)|win\\.ini|[?&](cmd|exec|command|shell)=|log4shell|<\\?php|php://|file://|expect://|base64_decode\\(|"
+    "\\bsleep\\(\\d|benchmark\\(|waitfor(\\s|\\+)+delay|'(\\s|\\+)*or(\\s|\\+)*'?1'?(\\s|\\+)*=(\\s|\\+)*'?1|/bin/(ba)?sh|;(\\s|\\+)*(wget|curl)(\\s|\\+)|\\$\\("
+)
+WEB_SCANNER_UA = (
+    "sqlmap|nuclei|zgrab|masscan|nikto|nmap|gobuster|dirbuster|feroxbuster|ffuf|wfuzz|wpscan|acunetix|nessus|openvas|"
+    "qualys|zmeu|jaeles|interactsh|commix|whatweb|burp|jndi:|\\$\\{"
+)
+
+# Tailnet clients browse these hosts a few times a day; nothing walks 20 missing paths
+# in 15 minutes, or asks for a dotfile, a WordPress page or ../ (no app here is PHP or
+# WordPress, so even one such request is a wordlist).
+det("HL - Web scanning from a client",
+    "T1595.003", "Reconnaissance", "medium", "",
+    WEB_PREP +
+    f"| eval missing=if(status==404, path, null()), sensitive=if(match(path, \"{WEB_SENSITIVE}\") OR match(raw_path, \"{WEB_SENSITIVE_RAW}\"), path, null()), "
+    "blocked=if(status==403 AND origin_status==0, 1, 0) "
+    "| stats count dc(missing) as missing_paths dc(sensitive) as sensitive_paths sum(blocked) as blocked values(sensitive) as sensitive_list "
+    "values(missing) as missing_list values(site) as sites values(ua) as agents values(claimed_ip) as claimed min(_time) as first_seen max(_time) as last_seen by src "
+    "| where missing_paths>=20 OR sensitive_paths>=1 "
+    "| eval host=\"traefik\", user=\"\", object=mvjoin(mvindex(sites, 0, 4), \",\"), "
+    "detail=count.\" requests, \".missing_paths.\" distinct paths answered 404, \".sensitive_paths.\" sensitive paths (\".coalesce(mvjoin(mvindex(sensitive_list, 0, 4), \" \"), \"none\")"
+    ".\"), \".blocked.\" refused by the tailnet allowlist; e.g. \".coalesce(mvjoin(mvindex(missing_list, 0, 4), \" \"), \"none\").\"; user_agent=\".coalesce(mvjoin(mvindex(agents, 0, 2), \" | \"), \"none\")"
+    ".if(isnotnull(claimed), \"; claimed client IP (Cf-Connecting-Ip, unverified)=\".mvjoin(mvindex(claimed, 0, 2), \",\"), \"\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a tailnet client: curl -sk https://vault.bmosan.com/.env (one sensitive path is enough), or 25 requests to random missing paths on https://splunk.bmosan.com",
+    suppress="src", period="6h",
+    description="One client asked Traefik for 20 or more distinct missing paths (404) in 15 minutes, or for any path no app here serves but wordlist scanners try first: .env, .git, .aws and other dotfiles, WordPress and PHP admin pages, Spring actuator, server-status, cgi-bin, ../ traversal (also encoded). src is the TCP peer, which can't be spoofed; a Cf-Connecting-Ip header the client sent is shown as claimed only. The user's own scanners go in the hl_web_scanner_allowed macro on the Splunk host.")
+
+det("HL - Web exploit attempt",
+    "T1190", "Initial Access", "high", "",
+    WEB_PREP +
+    f"| eval payload=if(match(path, \"{WEB_EXPLOIT}\") OR match(raw_path, \"%00\"), path, null()), "
+    f"scanner_ua=if(match(lower(ua), \"{WEB_SCANNER_UA}\"), ua, null()) "
+    "| where isnotnull(payload) OR isnotnull(scanner_ua) "
+    "| stats count values(payload) as payloads values(scanner_ua) as agents values(status) as statuses values(claimed_ip) as claimed min(_time) as first_seen max(_time) as last_seen by src site "
+    "| eval host=\"traefik\", user=\"\", object=site, "
+    "detail=count.\" requests with an exploit payload or a scanner's user agent, statuses=\".mvjoin(statuses, \",\").\"; e.g. \".coalesce(substr(mvjoin(mvindex(payloads, 0, 2), \" \"), 1, 400), \"no payload\")"
+    ".if(isnotnull(agents), \"; user_agent=\".mvjoin(mvindex(agents, 0, 2), \" | \"), \"\")"
+    ".if(isnotnull(claimed), \"; claimed client IP (Cf-Connecting-Ip, unverified)=\".mvjoin(mvindex(claimed, 0, 2), \",\"), \"\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a tailnet client: curl -sk -g 'https://splunk.bmosan.com/?q=${jndi:ldap://hl-test.invalid/a}'",
+    suppress="src,object", period="6h",
+    description="A request to Traefik carried an exploit payload in its path or query (JNDI/log4shell, ${ } template expressions, <script>, SQL injection such as UNION SELECT or ' or 1=1, /etc/passwd or win.ini, php://, cmd= parameters, shell commands, a NUL byte) or a scanner's user agent (sqlmap, nuclei, zgrab, masscan, nikto, nmap, ffuf, wpscan and others). Only the path, query, User-Agent and Referer are logged, so a payload in another header or the body is not seen. A 4xx status means the request was refused or failed; a 2xx means a backend accepted it and is worth checking first.")
+
+# Only replies from the backend count: the tailnet allowlist's 403 (origin_status 0)
+# is a LAN client using the wrong address, not a credential being tried. A browser tab
+# whose session expired can poll and get 401s; 20 in 15 minutes from one client to one
+# host is above that so far.
+det("HL - Web authentication failures from a client",
+    "T1110", "Credential Access", "medium", "",
+    WEB_PREP +
+    "| where in(status, 401, 403) AND origin_status>0 "
+    "| eval request=RequestMethod.\" \".replace(path, \"\\?.*$\", \"\") "
+    "| stats count values(status) as statuses values(request) as requests dc(request) as distinct_requests values(ua) as agents values(claimed_ip) as claimed "
+    "min(_time) as first_seen max(_time) as last_seen by src site "
+    "| where count>=20 "
+    "| eval host=\"traefik\", user=\"\", object=site, "
+    "detail=count.\" responses \".mvjoin(statuses, \"/\").\" from the backend for \".distinct_requests.\" distinct requests, e.g. \".mvjoin(mvindex(requests, 0, 4), \", \")"
+    ".\"; user_agent=\".coalesce(mvjoin(mvindex(agents, 0, 2), \" | \"), \"none\")"
+    ".if(isnotnull(claimed), \"; claimed client IP (Cf-Connecting-Ip, unverified)=\".mvjoin(mvindex(claimed, 0, 2), \",\"), \"\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a tailnet client: for i in $(seq 25); do curl -sk -o /dev/null -H 'X-Vault-Token: hl-test' https://vault.bmosan.com/v1/kv/data/hl-test; done",
+    suppress="src,object", period="4h",
+    description="One client got 20 or more 401 or 403 responses from one host's backend in 15 minutes: passwords, tokens or API keys being guessed against Vault, the MCP gateway, Authentik, Splunk or Cribl. Refusals by Traefik's tailnet allowlist are not counted (see HL - Web scanning from a client). Authentik's own login failures have their own detections.")
+
+# First request in 14 days that a backend answered (2xx or 3xx) for a host, router and
+# path prefix (first two path segments, with id-like segments as *): an endpoint
+# nobody used before is now being reached. Hosts with less than 7 days of history are
+# skipped, so the first week after access logging starts doesn't flag every path.
+det("HL - Web host reached on a new path",
+    "T1190", "Initial Access", "low", "",
+    "earliest=-14d@d latest=-5m@m " + WEB_PREP +
+    "| where status>=200 AND status<400 AND origin_status>0 "
+    "| eval uri=replace(path, \"\\?.*$\", \"\") "
+    "| rex field=uri \"^(?<prefix>/[^/]*(/[^/]*)?)\" "
+    "| eval prefix=replace(coalesce(prefix, \"/\"), \"/([0-9a-f-]{8,}|[0-9]+)(?=/|$)\", \"/*\") "
+    "| eventstats min(_time) as site_first by site "
+    "| where site_first<=relative_time(now(), \"-7d@d\") "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(src) as srcs values(RequestMethod) as methods values(uri) as uris by site router prefix "
+    "| where first_seen>=relative_time(now(), \"-20m@m\") "
+    "| eval host=\"traefik\", user=\"\", src=mvjoin(mvindex(srcs, 0, 2), \",\"), object=site.prefix, "
+    "detail=\"first answered request in 14 days for \".site.prefix.\" (router \".router.\"): \".count.\" requests, methods=\".mvjoin(methods, \",\").\"; e.g. \".mvjoin(mvindex(uris, 0, 2), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "after the first 7 days of access logs: from a tailnet client, open a page of https://vault.bmosan.com that hasn't been used in 14 days (for example /v1/sys/seal-status)",
+    suppress="object", period="24h", window=("-14d@d", "-5m@m"),
+    description="A backend answered (2xx or 3xx) a request for a path prefix (first two segments) or a router on one host that had not been answered in the previous 14 days: a new endpoint in use, a new route, or someone exploring an app after getting in. Low severity, for context; a host with less than 7 days of access logs is skipped.")
+
 # ---- Watch lists and threat indicators (lookups/) ----------------------------------------
 # hl_dns_watch_domains.csv (domain,category,note): services with a DNS signal of their
 # own. A name matches an entry if it is the entry or a subdomain of it, also with a

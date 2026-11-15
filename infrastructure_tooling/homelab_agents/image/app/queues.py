@@ -58,6 +58,7 @@ DETECTION_RUNBOOKS = [
     ("HL - DNS lookup of a threat feed", "threat-indicators.md"),
     ("HL - DNS", "dns.md"),
     ("HL - Cloudflare", "cloudflare.md"),
+    ("HL - Web", "traefik.md"),
 ]
 
 # Alerts that don't write to the homelab:detection queue. Each firing's results are
