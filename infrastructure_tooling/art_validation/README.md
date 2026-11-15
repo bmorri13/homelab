@@ -23,6 +23,7 @@ Both run weekly, Sunday 06:00 UTC.
 | host | T1136.001 | `sudo useradd` a system account `art-validation` (no home, no shell), deleted at the end | *HL - Sensitive command run over SSH or sudo* |
 | host | T1053.003 | Installs a crontab for that account containing only a comment, removed at the end | same |
 | host | T1070.003 | `history -c` in a throwaway shell through sudo | same |
+| host | T1071 | Logs a line containing the canary row of `hl_threat_indicators.csv` (`198.51.100.73`, an RFC 5737 documentation address; nothing is contacted) | *HL - Threat indicator IP seen in logs* |
 | k8s | T1610 | Creates a pod by hand (busybox, `sleep 600`, non-root) | *HL - Kubernetes workload created by hand* |
 | k8s | T1609 | `kubectl exec` into it | *HL - Kubernetes exec, attach or port-forward into a pod* |
 | k8s | T1552.007 | Creates and reads a dummy secret | *HL - Kubernetes secrets read by a person or application* |
@@ -36,7 +37,7 @@ Everything the tests create is named `art-validation`.
 
 Before each test the runner logs a marker, `ART-VALIDATION run=<id> expect="<detection>" test=<technique>`: to the journal on ubuntu-desktop-01 (`index=infra`) or the pod log (`index=k8s`). *Splunk - detection validation failed* (`monitoring_stack/splunk/apps/85_homelab_ops`) runs hourly, takes the markers 40 to 100 minutes old (so each run is checked exactly once, after two runs of each detection), and posts to Slack for every expected detection with no finding containing `art-validation` since.
 
-The findings themselves still land in `index=security`, but the security agent sets aside the ones whose host, user, object, command or Falco rule are exactly what a test produces (`VALIDATION_*` in `homelab_agents/image/app/queues.py`), so test runs don't reach Slack as incidents.
+The findings themselves still land in `index=security`, but the security agent sets aside the ones whose host, user, object, command, indicator or Falco rule are exactly what a test produces (`VALIDATION_*` in `homelab_agents/image/app/queues.py`), so test runs don't reach Slack as incidents.
 
 Detections suppress repeats for 1 to 24 hours. A second run within that time finds its findings suppressed and is reported as failed; leave a day between manual runs.
 

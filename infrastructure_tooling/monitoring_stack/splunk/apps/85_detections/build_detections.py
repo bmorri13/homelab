@@ -375,6 +375,160 @@ det("HL - DNS zone transfer or ANY query",
     suppress="src", period="24h",
     description="A client asked AdGuard for a zone transfer (AXFR/IXFR) or an ANY record: listing a zone's names, or probing the resolver for amplification. Ordinary software asks for specific record types.")
 
+# ---- Watch lists and threat indicators (lookups/) ----------------------------------------
+# hl_dns_watch_domains.csv (domain,category,note): services with a DNS signal of their
+# own. A name matches an entry if it is the entry or a subdomain of it, also with a
+# search domain appended (hl_dns_name_candidates). hl_threat_indicators.csv
+# (indicator,type,source,context,added,expires): indicators from published advisories,
+# each ignored from its expires date on (hl_ti_active). Both are in git and synced with
+# --delete, so they are edited here, never in Splunk Web; README, Detections.
+def dns_prep(base):
+    """DNS_PREP with more base-search terms: a time range, a raw-term prefilter."""
+    return DNS_PREP.replace("sourcetype=adguard:querylog ", "sourcetype=adguard:querylog " + base, 1)
+
+
+def lookup_terms(lookup, where, empty):
+    """A subsearch that ORs a lookup's rows as raw search terms, to cut the events read
+    before the exact match. With no rows it returns a term that matches nothing:
+    an empty subsearch would leave the base search matching everything."""
+    return (f"[| inputlookup {lookup} {where} "
+            "| stats count values(hl_term) as hl_terms "
+            f"| eval search=if(count>0, \"(\".mvjoin(hl_terms, \" OR \").\")\", \"TERM({empty})\") | fields search] ")
+
+
+# Each name's watch-list entry, one row per entry. The first lookup takes every
+# candidate suffix of the name; the second, on the single matched entry, keeps
+# category aligned with it.
+WATCH_MATCH = (
+    "| `hl_dns_name_candidates` "
+    "| lookup hl_dns_watch_domains domain AS hl_cand OUTPUT domain AS watch_domain "
+    "| where isnotnull(watch_domain) "
+    "| mvexpand watch_domain "
+    "| lookup hl_dns_watch_domains domain AS watch_domain OUTPUT category AS watch_category "
+)
+
+# Intel matches have no ATT&CK technique or detection strategy of their own, and a
+# matched address says nothing about direction (a scanner hitting the honeypot, or a
+# host calling out). T1071: every row from FLASH-20261113-001 is a C2, proxy or attack
+# server, or the LLM reseller the framework calls over HTTPS; the context column in
+# the finding says which. Searched: every event index except the agents' run log, the
+# findings themselves, and the agents' gateway and pods, which log the agents' own
+# queries (so a triage can't re-fire it); _audit (searches' text) is not an event index
+# in index=*. Not TERM(): = and : are minor breakers, so TERM(1.2.3.4) misses
+# src=1.2.3.4 and 1.2.3.4:443. The plain terms only narrow the events; every IPv4
+# address in each event is then looked up exactly. The sample is up to 80 characters
+# either side of the first occurrence.
+det("HL - Threat indicator IP seen in logs",
+    "T1071", "Command and Control", "high", "",
+    "index=* NOT index=ai_agents NOT sourcetype=homelab:detection NOT sourcetype=toolhive:vmcp:audit "
+    "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
+    + lookup_terms("hl_threat_indicators", "where type=\"ip\" | where `hl_ti_active(expires)` | eval hl_term=indicator",
+                   "hl-no-active-ip-indicators") +
+    "| rex max_match=0 field=_raw \"(?<hl_ipv4>(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?!\\.?[0-9]))\" "
+    "| lookup hl_threat_indicators indicator AS hl_ipv4 OUTPUT indicator AS ti_indicator "
+    "| where isnotnull(ti_indicator) "
+    "| mvexpand ti_indicator "
+    "| lookup hl_threat_indicators indicator AS ti_indicator OUTPUT type AS ti_type expires AS ti_expires context AS ti_context source AS ti_source "
+    "| where ti_type==\"ip\" AND `hl_ti_active(ti_expires)` "
+    "| eval sample=substr(replace(replace(_raw, \"(?s)^.*?(.{0,80}(?<![0-9.])\".replace(ti_indicator, \"\\.\", \"[.]\").\"(?![0-9]).{0,80}).*$\", \"\\1\"), \"[\\x00-\\x1f\\s]+\", \" \"), 1, 200) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen first(sample) as sample values(ti_context) as context values(ti_source) as sources by ti_indicator index sourcetype host "
+    "| eval user=\"\", src=ti_indicator, object=index.\"/\".sourcetype, "
+    "detail=\"threat indicator \".ti_indicator.\" (\".mvjoin(sources, \", \").\": \".mvjoin(context, \" | \").\") in \".count.\" events, index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\"; sample: \".sample "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "on a monitored host: logger 'hl-test threat indicator 198.51.100.73' (the art_validation canary row, an RFC 5737 documentation address)",
+    suppress="src,host,object", period="6h",
+    description="An IP address from hl_threat_indicators.csv (published advisories, ignored after each row's expires date) appeared in any event: an SSH or login source, a honeypot connection, a firewall or proxy line, a pod log. The detail names the advisory and what the address was used for. Advisories warn that addresses get reassigned, so corroborate before acting. Not searched: the agents' run log and gateway, and homelab:detection.")
+
+det("HL - DNS lookup of a threat indicator domain",
+    "T1071", "Command and Control", "high", "",
+    DNS_PREP +
+    "| `hl_dns_name_candidates` "
+    "| lookup hl_threat_indicators indicator AS hl_cand OUTPUT indicator AS ti_indicator "
+    "| where isnotnull(ti_indicator) "
+    "| mvexpand ti_indicator "
+    "| lookup hl_threat_indicators indicator AS ti_indicator OUTPUT type AS ti_type expires AS ti_expires context AS ti_context source AS ti_source "
+    "| where ti_type==\"domain\" AND `hl_ti_active(ti_expires)` "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(qname) as names values(QT) as types values(ti_context) as context values(ti_source) as sources by src ti_indicator "
+    "| eval host=\"adguard\", user=\"\", object=ti_indicator, "
+    "detail=\"threat indicator domain \".ti_indicator.\" (\".mvjoin(sources, \", \").\": \".mvjoin(context, \" | \").\") looked up \".count.\" times; types=\".mvjoin(types, \",\").\"; names: \".mvjoin(mvindex(names, 0, 4), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard: dig xcai.pro.invalid (matched as if a search domain were appended; the reserved .invalid name never reaches the indicator's servers)",
+    suppress="src,object", period="12h",
+    description="A client looked up a domain from hl_threat_indicators.csv, or a subdomain of it, also with a search domain appended. Rows past their expires date are ignored. The detail names the advisory and what the domain was used for.")
+
+# Category -> ATT&CK v20 technique, tactic, severity, and how the detail names it.
+# Webhook collectors and OOB callbacks are high: nothing here uses them, and a callback
+# lookup is how a blind injection (SSRF, template, deserialisation) proves it worked.
+# OOB callbacks are T1071.004: the lookup itself carries the token to the scanner's
+# DNS server. Paste sites are T1102 (they are used as dead drops more than for
+# exfiltration). Geolocation and LLM APIs have their own first-lookup detections below.
+WATCH_CATEGORIES = {
+    "webhook": ("T1567.004", "Exfiltration", "high", "request-capture (webhook) service"),
+    "callback": ("T1071.004", "Command and Control", "high", "out-of-band callback service"),
+    "paste": ("T1102", "Command and Control", "medium", "paste site"),
+    "filedrop": ("T1567.002", "Exfiltration", "medium", "anonymous file-upload service"),
+    "tunnel": ("T1572", "Command and Control", "medium", "ad-hoc tunnel service"),
+    "tor": ("T1090.003", "Command and Control", "medium", "Tor download or gateway"),
+}
+
+
+def by_category(i):
+    return "case(" + ", ".join(f'watch_category=="{c}", "{v[i]}"' for c, v in WATCH_CATEGORIES.items()) + ")"
+
+
+det("HL - DNS lookup of a data-drop or callback service",
+    "T1567.004", "Exfiltration", "medium", "",
+    DNS_PREP + WATCH_MATCH +
+    "| where in(watch_category, " + ", ".join(f'"{c}"' for c in WATCH_CATEGORIES) + ") AND NOT `hl_dns_watch_allowed` "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(watch_domain) as domains values(qname) as names by src watch_category "
+    f"| eval hl_technique={by_category(0)}, hl_tactic={by_category(1)}, hl_severity={by_category(2)}, label={by_category(3)} "
+    "| eval host=\"adguard\", user=\"\", object=watch_category, "
+    "detail=count.\" lookups of a \".label.\" (\".mvjoin(domains, \", \").\"); names: \".mvjoin(mvindex(names, 0, 4), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "from a client that uses AdGuard: dig webhook.site",
+    suppress="src,object", period="24h",
+    description="A client looked up a service from hl_dns_watch_domains.csv that malware and intrusion tools use to move data or prove a blind exploit worked: request-capture webhooks (T1567.004, high), out-of-band callback servers such as Interactsh and Burp Collaborator (T1071.004, high), paste sites (T1102), anonymous file drops (T1567.002), ad-hoc tunnels such as ngrok and Cloudflare quick tunnels (T1572), and the Tor Project (T1090.003); the finding's technique and severity follow the category. One finding per client and category. Known-good client and name pairs, such as a security scanner that uses OOB callbacks, go in the hl_dns_watch_allowed macro on the Splunk host.")
+
+
+def first_lookup(category, ignore):
+    """A client's first lookup of a domain in one watch-list category in 14 days. The
+    baseline reads only the events that name a domain of that category."""
+    return (
+        dns_prep("earliest=-14d@d latest=-5m@m "
+                 + lookup_terms("hl_dns_watch_domains", f"where category=\"{category}\" | eval hl_term=domain",
+                                "hl-no-watch-domains"))
+        + WATCH_MATCH +
+        f"| where watch_category==\"{category}\" AND NOT `{ignore}` "
+        "| stats count min(_time) as first_seen max(_time) as last_seen values(qname) as names by src watch_domain "
+        "| where first_seen>=relative_time(now(), \"-20m@m\") "
+        "| eval host=\"adguard\", user=\"\", object=watch_domain, "
+        "detail=\"first lookup of \".watch_domain.\" by this client in 14 days (\".count.\" lookups since); names: \".mvjoin(mvindex(names, 0, 4), \" \") "
+        "| convert ctime(first_seen) ctime(last_seen) "
+    )
+
+
+# Client and domain pairs, so no addresses are needed here. A pod gets a new address
+# each run, so every pod that calls an LLM API is new: hl_dns_llm_client_ignore (both
+# detections) takes the pod range, set on the Splunk host. ATLAS v5.6.0 AML.T0096 (AI
+# Service API, Command and Control) is the closest: a tool or implant driving an LLM
+# over its API, as the agent frameworks in FLASH-20261113-001 do.
+det("HL - DNS first lookup of an LLM API by a client",
+    "AML.T0096", "Command and Control", "low", "",
+    first_lookup("llm_api", "hl_dns_llm_client_ignore"),
+    "from a client that hasn't looked it up in 14 days: dig api.mistral.ai",
+    suppress="src,object", period="24h",
+    description="A client looked up an LLM API host from hl_dns_watch_domains.csv (category llm_api: Anthropic, OpenAI, Gemini, xAI, DeepSeek, Zhipu GLM, Moonshot Kimi, Mistral, Groq, OpenRouter, Together, Fireworks, Qwen DashScope, Cohere) that it had not looked up in the previous 14 days. Agentic attack frameworks call these APIs from the host they run on. Pods get a new address each run, so set the pod range in the hl_dns_llm_client_ignore macro on the Splunk host.")
+
+# T1614 names online geolocation IP-lookup services; FLASH-20261113-001 reports
+# api.db-ip.com used that way. Some software checks its public address routinely, so
+# only a client's first lookup in 14 days counts.
+det("HL - DNS first lookup of an IP geolocation service by a client",
+    "T1614", "Discovery", "low", "",
+    first_lookup("geoip", "hl_dns_llm_client_ignore"),
+    "from a client that hasn't looked it up in 14 days: dig api.db-ip.com",
+    suppress="src,object", period="24h",
+    description="A client looked up a what-is-my-IP or IP geolocation service from hl_dns_watch_domains.csv (category geoip: db-ip, ip-api, ipinfo, ifconfig.me, icanhazip, ipify) that it had not looked up in the previous 14 days. Implants and attack tools check where they landed this way. Clients that do it routinely stop firing after their first lookup. Pod addresses are skipped with hl_dns_llm_client_ignore, as for the LLM API detection.")
+
 # ---- Authentik and Splunk Web logins ------------------------------------------------------
 AK_TAIL = (
     '| fillnull value="unknown" user src '
