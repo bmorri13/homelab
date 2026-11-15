@@ -1,0 +1,27 @@
+indicator,type,source,context,added,expires
+38.244.50.120,ip,FBI FLASH-20261113-001,ARTEX host and open directory (South Korea financial campaign); reported by CrowdStrike and Censys,2026-11-13,2027-05-12
+144.172.64.60,ip,FBI FLASH-20261113-001,ConnectWise campaign: sign-ins and Graph API activity in customer environments; reported by Microsoft,2026-11-13,2027-05-12
+144.172.64.99,ip,FBI FLASH-20261113-001,ConnectWise campaign: sign-ins and Graph API activity in customer environments; reported by Microsoft,2026-11-13,2027-05-12
+144.172.64.128,ip,FBI FLASH-20261113-001,ConnectWise campaign: sign-ins and Graph API activity in customer environments; reported by Microsoft,2026-11-13,2027-05-12
+187.15.88.186,ip,FBI FLASH-20261113-001,Graph API access via compromised apps (transient VPN addresses relevant 2026-10-15 to 2026-10-16); reported by Microsoft,2026-11-13,2027-05-12
+187.15.90.217,ip,FBI FLASH-20261113-001,Graph API access via compromised apps (transient VPN addresses relevant 2026-10-15 to 2026-10-16); reported by Microsoft,2026-11-13,2027-05-12
+187.15.89.186,ip,FBI FLASH-20261113-001,Graph API access via compromised apps (transient VPN addresses relevant 2026-10-15 to 2026-10-16); reported by Microsoft,2026-11-13,2027-05-12
+101.53.80.20,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+205.214.59.31,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+124.155.252.63,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+154.201.79.246,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+23.248.249.90,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+23.158.220.98,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+103.248.148.84,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+203.160.133.172,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+209.209.85.38,ip,FBI FLASH-20261113-001,Proxy address (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+199.19.95.66,ip,FBI FLASH-20261113-001,WISP C2 node (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+199.19.95.67,ip,FBI FLASH-20261113-001,WISP C2 node (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+199.19.95.68,ip,FBI FLASH-20261113-001,WISP C2 node (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+91.92.240.238,ip,FBI FLASH-20261113-001,ARTEX server (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+85.11.168.45,ip,FBI FLASH-20261113-001,ARTEX server (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+178.16.54.129,ip,FBI FLASH-20261113-001,ARTEX server (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+31.77.229.35,ip,FBI FLASH-20261113-001,ARTEX server (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+85.11.167.52,ip,FBI FLASH-20261113-001,C2 server (Storm-3358 campaign; active as of 2026-11-06); reported by Microsoft,2026-11-13,2027-05-12
+xcai.pro,domain,FBI FLASH-20261113-001,LLM API reseller used by ARTEX (South Korea financial campaign); reported by CrowdStrike,2026-11-13,2027-05-12
+198.51.100.73,ip,art_validation,Detection test canary: an RFC 5737 documentation address that the weekly art_validation host test writes to the journal; never a real host,2026-11-15,2099-12-31

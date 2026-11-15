@@ -1,0 +1,61 @@
+domain,category,note
+webhook.site,webhook,Request capture service; the FBI ARTEX FLASH reports command output sent to rotating webhook.site endpoints
+requestcatcher.com,webhook,Request capture service
+m.pipedream.net,webhook,Pipedream request bin endpoints (<id>.m.pipedream.net)
+requestbin.com,webhook,RequestBin (Pipedream) site
+requestbin.net,webhook,Request and DNS bin service
+beeceptor.com,webhook,Mock API and request capture service
+interact.sh,callback,ProjectDiscovery Interactsh out-of-band callback server
+oast.pro,callback,Interactsh public callback server
+oast.live,callback,Interactsh public callback server
+oast.site,callback,Interactsh public callback server
+oast.online,callback,Interactsh public callback server
+oast.fun,callback,Interactsh public callback server
+oast.me,callback,Interactsh public callback server
+oastify.com,callback,Burp Collaborator callback domain
+burpcollaborator.net,callback,Burp Collaborator callback domain (older)
+dnslog.cn,callback,DNSLog out-of-band callback service
+ceye.io,callback,CEYE out-of-band callback service
+pastebin.com,paste,Paste site
+paste.ee,paste,Paste site
+transfer.sh,filedrop,Anonymous file upload from the command line
+file.io,filedrop,Anonymous one-time file upload
+0x0.st,filedrop,Anonymous file upload from the command line
+temp.sh,filedrop,Anonymous temporary file upload
+gofile.io,filedrop,Anonymous file hosting
+ngrok.io,tunnel,ngrok tunnel endpoints (older)
+ngrok-free.app,tunnel,ngrok free tunnel endpoints
+ngrok.app,tunnel,ngrok tunnel endpoints
+ngrok-agent.com,tunnel,ngrok agent connecting out (connect.ngrok-agent.com)
+trycloudflare.com,tunnel,Cloudflare quick tunnels (named tunnels do not use it)
+serveo.net,tunnel,SSH reverse tunnel service
+localhost.run,tunnel,SSH reverse tunnel service
+loca.lt,tunnel,localtunnel endpoints
+bore.pub,tunnel,bore TCP tunnel public server
+portmap.io,tunnel,Port forwarding tunnel service
+playit.gg,tunnel,Game and TCP tunnel service
+torproject.org,tor,Tor Project downloads and Tor Browser; Tor itself reaches relays by address so DNS only shows the download
+api.db-ip.com,geoip,IP geolocation API; the FBI ARTEX FLASH reports it used to locate victims
+ip-api.com,geoip,IP geolocation API
+ipinfo.io,geoip,IP address and geolocation API
+ifconfig.me,geoip,What-is-my-IP service
+icanhazip.com,geoip,What-is-my-IP service
+api.ipify.org,geoip,What-is-my-IP API
+api.anthropic.com,llm_api,Anthropic API
+api.openai.com,llm_api,OpenAI API
+generativelanguage.googleapis.com,llm_api,Google Gemini API
+api.x.ai,llm_api,xAI Grok API
+api.deepseek.com,llm_api,DeepSeek API; the FBI ARTEX FLASH reports DeepSeek models are the most used by ARTEX operators
+open.bigmodel.cn,llm_api,Zhipu GLM API (China)
+api.z.ai,llm_api,Zhipu GLM API (international)
+api.moonshot.cn,llm_api,Moonshot Kimi API (China)
+api.moonshot.ai,llm_api,Moonshot Kimi API (international)
+api.mistral.ai,llm_api,Mistral API
+api.groq.com,llm_api,Groq API
+openrouter.ai,llm_api,OpenRouter model gateway (site and API)
+api.together.xyz,llm_api,Together AI API
+api.fireworks.ai,llm_api,Fireworks AI API
+dashscope.aliyuncs.com,llm_api,Alibaba Qwen DashScope API (China)
+dashscope-intl.aliyuncs.com,llm_api,Alibaba Qwen DashScope API (international)
+api.cohere.com,llm_api,Cohere API
+api.cohere.ai,llm_api,Cohere API (older hostname)
