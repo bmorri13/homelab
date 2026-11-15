@@ -1,10 +1,10 @@
 {
   "name": "cc-falco-ocsf",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "spec": "1.0.0",
   "displayName": "Falco to OCSF",
   "author": "bmorri13",
-  "description": "Converts Falco JSON alerts into OCSF 1.9.0 Detection Findings with MITRE ATT&CK mapping.",
+  "description": "Converts Falco JSON alerts into OCSF 1.9.0 Detection Findings with MITRE ATT&CK and ATLAS mapping.",
   "tags": {
     "dataType": [
       "logs"
