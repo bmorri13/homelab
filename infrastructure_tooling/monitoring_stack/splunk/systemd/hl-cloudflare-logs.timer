@@ -1,0 +1,12 @@
+# Installed by scripts/deploy.sh. Every 10 minutes, and 3 minutes after boot.
+[Unit]
+Description=Send Cloudflare account logs to Splunk every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnCalendar=*:02/10
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -588,6 +588,164 @@ det("HL - DNS first lookup of an IP geolocation service by a client",
     suppress="src,object", period="24h",
     description="A client looked up a what-is-my-IP or IP geolocation service from hl_dns_watch_domains.csv (category geoip: db-ip, ip-api, ipinfo, ifconfig.me, icanhazip, ipify) that it had not looked up in the previous 14 days. Implants and attack tools check where they landed this way. Clients that do it routinely stop firing after their first lookup. Pod addresses are skipped with hl_dns_llm_client_ignore, as for the LLM API detection.")
 
+# ---- Cloudflare (account audit log, tunnels, firewall events) ----------------------------
+# scripts/cloudflare-logs.py pulls these every 10 minutes and Cloudflare's own audit log
+# lags by a few minutes, so an event can reach Splunk 15 to 20 minutes after it happened.
+# These detections look at [-40m@m, -25m@m) instead of the usual window. The audit log's
+# "first seen" baselines are 30 days (the collector's first run backfills 29).
+# Changes the owner or the homelab's own automation make on purpose (a Terraform or
+# cert-manager token, a known script) go in the host-only hl_cf_expected_change macro;
+# the token IDs are never written here. cert-manager's ACME TXT records are left out
+# here, by name; its deletes carry only the record ID, which is matched to the create.
+CF_WINDOW = ("-40m@m", "-25m@m")
+CF_SINCE = 'relative_time(now(), "-40m@m")'
+CF_CHANGE = "| where cf_result==\"success\" AND cf_type!=\"view\" AND NOT `hl_cf_expected_change` "
+CF_TAIL = (
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(cf_desc) as actions values(cf_uri) as uris values(cf_via) as via by user src object "
+    "| eval host=\"cloudflare\", detail=\"actions=\".mvjoin(mvindex(actions, 0, 4), \"; \").\" via=\".mvjoin(via, \",\").\" requests=\".mvjoin(mvindex(uris, 0, 4), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) "
+)
+
+det("HL - Cloudflare API token or API key changed",
+    "T1098.001", "Persistence", "high", "",
+    "`hl_cf_audit` "
+    "| where cf_result==\"success\" AND NOT `hl_cf_expected_change` "
+    "| where (cf_product==\"tokens\" AND cf_type!=\"view\") OR match(cf_desc, \"(?i)^TOKEN_|api.?key\") "
+    "OR match(cf_uri, \"^/user/(api_key|service_keys)\") OR (cf_type!=\"view\" AND match(cf_uri, \"/tokens(/|$)\")) "
+    # Explicit paths: a token's response lists every permission group, past the
+    # 5,000 characters automatic JSON extraction reads.
+    "| spath output=hl_token_name path=resource.response.name | spath output=hl_token_req_name path=resource.request.name "
+    "| spath output=hl_perms path=resource.response.policies{}.permission_groups{}.name "
+    "| eval user=cf_actor, hl_obj=coalesce(hl_token_name, hl_token_req_name, nullif(cf_uri, \"\")) "
+    # Creating a token logs twice (Create Token, and TOKEN_CREATE with no name): one finding.
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(hl_obj) as objects values(cf_desc) as actions values(hl_perms) as perms values(cf_via) as via by user src "
+    "| eval object=coalesce(mvjoin(mvindex(objects, 0, 4), \",\"), \"account\"), host=\"cloudflare\", detail=\"actions=\".mvjoin(actions, \"; \").\" via=\".mvjoin(via, \",\").if(isnotnull(perms), \" permissions=\".mvjoin(mvindex(perms, 0, 14), \", \").if(mvcount(perms)>15, \" (+\".(mvcount(perms)-15).\" more)\", \"\"), \"\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in the Cloudflare dashboard, create a read-only API token hl-test (Account API Tokens), then delete it",
+    window=CF_WINDOW, period="4h",
+    description="An API token was created, rolled, changed or deleted, or the Global API Key was viewed or rolled. A token is a credential that outlives a password change, and Cloudflare holds DNS, tunnels and Zero Trust for every public site. object is the token name, and the detail lists its permission groups. Creating one logs twice (Create Token and TOKEN_CREATE); both are in one finding.")
+
+det("HL - Cloudflare account member, role or login settings changed",
+    "T1098.003", "Persistence", "high", "",
+    "`hl_cf_audit` " + CF_CHANGE +
+    "| where match(cf_uri, \"^/(accounts/<id>/(members|roles|iam|sso)|memberships|user/(two_factor|tfa|password|email))\") "
+    "OR match(cf_desc, \"(?i)member|invit|two.?factor|\\btfa|2fa|mfa|password|email.?change|sso_(?!login)|super.?admin\") "
+    "| where NOT match(cf_desc, \"(?i)^(sso_)?login\") "
+    "| eval user=cf_actor, object=coalesce('resource.request.email', 'resource.response.email', 'resource.response.user.email', nullif(cf_uri, \"\"), \"account\") "
+    + CF_TAIL,
+    "invite a test address to the account with a read-only role, then revoke the invitation",
+    window=CF_WINDOW, period="4h",
+    description="A member was invited, added, removed or given a different role, or SSO, two-factor, password or email settings changed. One owner runs this account, so any of these is worth a look.")
+
+det("HL - Cloudflare DNS record changed",
+    "T1584.001", "Resource Development", "medium", "",
+    "`hl_cf_audit_window(-30d@d, -25m@m)` "
+    "| where cf_result==\"success\" AND cf_type!=\"view\" AND (cf_product==\"dns_records\" OR (cf_product==\"dns\" AND cf_rtype==\"record\")) "
+    "| eval hl_rec_id=coalesce('resource.response.id', 'resource.id', 'resource.value.id'), "
+    "hl_names=mvdedup(mvappend('resource.response.name', 'resource.value.name', 'resource.response.posts{}.name', 'resource.response.patches{}.name', 'resource.response.puts{}.name', 'resource.response.deletes{}.name')), "
+    "hl_types=mvdedup(mvappend('resource.response.type', 'resource.value.type', 'resource.response.posts{}.type', 'resource.response.patches{}.type', 'resource.response.puts{}.type', 'resource.response.deletes{}.type')), "
+    "hl_contents=mvdedup(mvappend('resource.response.content', 'resource.value.content', 'resource.response.posts{}.content', 'resource.response.patches{}.content', 'resource.response.puts{}.content')), "
+    "hl_repoint=if(cf_type==\"update\" OR isnotnull('resource.response.patches{}.name') OR isnotnull('resource.response.puts{}.name'), 1, 0) "
+    # A delete by API token carries only the record ID: take its name and type from the create.
+    "| eventstats values(hl_names) as hl_known_names values(hl_types) as hl_known_types by hl_rec_id "
+    "| eval hl_names=coalesce(hl_names, hl_known_names), hl_types=coalesce(hl_types, hl_known_types), hl_content1=mvindex(hl_contents, 0) "
+    "| eventstats min(_time) as hl_content_first by hl_content1 "
+    f"| where _time>={CF_SINCE} "
+    "| where NOT (mvjoin(hl_types, \",\")==\"TXT\" AND match(mvjoin(hl_names, \" \"), \"^_acme-challenge\\.\\S+( _acme-challenge\\.\\S+)*$\")) "
+    "| where NOT `hl_cf_expected_change` "
+    "| eval hl_severity=if(match(mvjoin(hl_types, \",\"), \"\\b(NS|MX)\\b\") OR (hl_repoint==1 AND isnotnull(hl_content1) AND hl_content_first>=" + CF_SINCE + "), \"high\", \"medium\"), hl_rank=if(hl_severity==\"high\", 2, 1), "
+    "user=cf_actor, object=cf_zone.\": \".coalesce(mvjoin(hl_types, \",\"), \"?\").\" \".coalesce(mvjoin(mvindex(hl_names, 0, 4), \",\"), \"record \".hl_rec_id), "
+    "hl_change=case(isnotnull('resource.response.deletes{}.name'), \"delete\", hl_repoint==1, \"update\", true(), cf_type).if(isnotnull(hl_contents), \" -> \".mvjoin(mvindex(hl_contents, 0, 2), \",\"), \"\") "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(cf_desc) as actions values(hl_change) as changes values(cf_via) as via max(hl_rank) as hl_rank by user src object "
+    "| eval hl_severity=if(hl_rank==2, \"high\", \"medium\"), host=\"cloudflare\", detail=\"changes=\".mvjoin(mvindex(changes, 0, 4), \"; \").\" actions=\".mvjoin(actions, \"; \").\" via=\".mvjoin(via, \",\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in the Cloudflare dashboard, add a TXT record hl-test with any text to a zone, then delete it (medium); point an existing test record at a new address (high)",
+    window=CF_WINDOW, period="1h",
+    description="A DNS record was created, changed or deleted on any zone, by a person, an API token or Cloudflare itself. High for NS or MX records, and for a record changed to point at a target not seen in a DNS change in 30 days (a hijacked name looks like that). ACME challenge TXT records (cert-manager, Proxmox, Cloudflare's own certificates) are left out.")
+
+det("HL - Cloudflare tunnel or Zero Trust Access changed",
+    "T1572", "Command and Control", "high", "",
+    "`hl_cf_audit` "
+    "| where cf_result==\"success\" AND NOT `hl_cf_expected_change` "
+    "| eval hl_tunnel=if(cf_product IN (\"tunnels\", \"cfd_tunnel\") OR match(cf_uri, \"/(cfd_tunnel|tunnels|warp_connector|teamnet)(/|$)\"), 1, 0), "
+    "hl_access=if(cf_product IN (\"access\", \"gateway\", \"devices\", \"zero_trust\") OR match(cf_uri, \"/(access|gateway|devices)/\"), 1, 0) "
+    # A tunnel's token is its connector credential: reading it counts.
+    "| where (cf_type!=\"view\" AND (hl_tunnel==1 OR hl_access==1)) OR match(cf_uri, \"/cfd_tunnel/[^/]+/token$\") "
+    "| eval hl_technique=if(hl_tunnel==1, \"T1572\", \"T1556\"), hl_tactic=if(hl_tunnel==1, \"Command and Control\", \"Persistence\"), "
+    "user=cf_actor, object=coalesce('resource.request.name', 'resource.response.name', cf_uri), "
+    "hl_ingress=mvdedup('resource.request.config.ingress{}.hostname') "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(cf_desc) as actions values(cf_uri) as uris values(hl_ingress) as ingress values(cf_via) as via by user src object hl_technique hl_tactic "
+    "| eval host=\"cloudflare\", detail=\"actions=\".mvjoin(mvindex(actions, 0, 4), \"; \").\" via=\".mvjoin(via, \",\").\" requests=\".mvjoin(mvindex(uris, 0, 4), \" \").if(isnotnull(ingress), \" ingress hostnames=\".mvjoin(mvindex(ingress, 0, 9), \",\"), \"\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "in Zero Trust > Networks > Tunnels, add a public hostname hl-test to an existing test tunnel, then remove it; or create an Access application and delete it",
+    window=CF_WINDOW, period="4h",
+    description="A Cloudflare Tunnel was created, deleted or reconfigured (its ingress rules decide which hostname reaches which internal service), its connector token was read, or a Zero Trust Access application, policy, group, identity provider, service token, Gateway or device setting changed. A new ingress rule or tunnel exposes an internal service to the internet; an Access change can open an application to anyone (T1556 for Access changes). The detail lists ingress hostnames for a configuration change.")
+
+det("HL - Cloudflare zone security setting weakened",
+    "T1686", "Defense Impairment", "high", "",
+    "`hl_cf_audit` " + CF_CHANGE +
+    "| where cf_method!=\"GET\" AND match(cf_uri, \"^/zones/<id>/(settings|rulesets|firewall|filters|rate_limits|bot_management|page_shield|waf|managed_headers|ssl)\") "
+    "| eval hl_req=coalesce(cf_req, \"\"), "
+    "hl_pairs=if(match(cf_uri, \"/settings/[a-z0-9_]+$\"), replace(cf_uri, \"^.*/settings/\", \"\").\"=\".coalesce('resource.request.value', \"\"), null()) "
+    "| rex field=hl_req max_match=30 \"\\\"id\\\":\\s*\\\"(?<hl_bulk_id>[a-z0-9_]+)\\\",\\s*\\\"value\\\":\\s*\\\"(?<hl_bulk_val>[^\\\"]*)\\\"\" "
+    "| eval hl_pairs=mvappend(hl_pairs, mvzip(hl_bulk_id, hl_bulk_val, \"=\")) "
+    "| eval hl_weak=mvfilter(match(hl_pairs, \"^(security_level=(essentially_off|low|off)|ssl=(off|flexible)|min_tls_version=1\\.0|(always_use_https|automatic_https_rewrites|browser_check|waf|tls_1_3|hotlink_protection|email_obfuscation|server_side_exclude)=off)$\")) "
+    "| eval hl_weak=mvappend(hl_weak, "
+    "if(cf_method==\"DELETE\" AND match(cf_uri, \"/(rulesets|firewall|filters|rate_limits|page_shield)\"), \"deleted \".cf_uri, null()), "
+    "if(match(hl_req, \"\\\"enabled\\\":\\s*false\") AND match(cf_uri, \"/(rulesets|firewall|rate_limits|page_shield|managed_headers)\"), \"rule or ruleset disabled\", null()), "
+    "if(match(hl_req, \"\\\"mode\\\":\\s*\\\"whitelist\\\"\"), \"IP access rule allowlist\", null()), "
+    "if(match(cf_uri, \"/bot_management$\") AND match(hl_req, \"\\\"(fight_mode|enable_js|optimize_wordpress|sbfm_[a-z_]+|ai_bots_protection|crawler_protection)\\\":\\s*(false|\\\"(allow|allowed|disabled)\\\")\"), \"bot protection turned down\", null())) "
+    "| where isnotnull(hl_weak) "
+    "| eval user=cf_actor, object=coalesce(cf_zone, \"account\").\": \".mvjoin(mvindex(hl_weak, 0, 4), \"; \") "
+    + CF_TAIL,
+    "in the Cloudflare dashboard set a test zone's Security Level to Low (Security > Settings), then back",
+    window=CF_WINDOW, period="4h",
+    description="A zone's protection was turned down: security level to Low or off, SSL/TLS mode to Off or Flexible (Flexible sends traffic to the origin unencrypted), minimum TLS 1.0, Always Use HTTPS, Browser Integrity Check, TLS 1.3 or the WAF switched off, a WAF, firewall or rate-limit rule deleted or disabled, an IP allowlisted, or Bot Fight Mode turned off. Settings turned up are not reported.")
+
+det("HL - Cloudflare dashboard login from a new IP or country",
+    "T1078.004", "Initial Access", "medium", "",
+    "`hl_cf_audit_window(-30d@d, -25m@m)` "
+    "| where match(cf_desc, \"(?i)^(sso_)?login\") AND src!=\"\" "
+    "| iplocation src | eval hl_country=coalesce(nullif(Country, \"\"), \"unknown\") "
+    "| eventstats min(_time) as hl_ip_first by cf_actor src "
+    "| eventstats min(_time) as hl_country_first by cf_actor hl_country "
+    "| eventstats min(_time) as hl_data_start "
+    f"| where _time>={CF_SINCE} AND hl_ip_first>={CF_SINCE} AND hl_data_start<relative_time(now(), \"-1d\") "
+    f"| eval hl_severity=if(hl_country_first>={CF_SINCE}, \"high\", \"medium\"), hl_rank=if(hl_severity==\"high\", 2, 1), user=cf_actor, object=\"cloudflare dashboard\" "
+    "| stats count min(_time) as first_seen max(_time) as last_seen values(cf_desc) as actions values(cf_result) as results values(hl_country) as countries max(hl_rank) as hl_rank by user src object "
+    "| eval hl_severity=if(hl_rank==2, \"high\", \"medium\"), host=\"cloudflare\", detail=\"first login from this address in 30 days, country=\".mvjoin(countries, \",\").if(hl_severity==\"high\", \" (new country)\", \"\").\" actions=\".mvjoin(actions, \",\").\" results=\".mvjoin(results, \",\") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "log in to the Cloudflare dashboard from a network you have not used in 30 days (a phone hotspot)",
+    window=CF_WINDOW, period="24h", suppress="user,src",
+    description="A login to the Cloudflare account (SSO_LOGIN or LOGIN in the audit log, success or failure) from an address not seen for that user in the previous 30 days; high when the country is new too (iplocation). A home address that changes after an ISP lease renewal also shows here, once.")
+
+det("HL - Cloudflare tunnel connector from a new origin address",
+    "T1572", "Command and Control", "medium", "",
+    "index=network sourcetype=cloudflare:tunnel earliest=-30d@d latest=-25m@m connections>0 "
+    "| stats min(_time) as first_seen max(_time) as last_seen values(tunnel_name) as tunnels by origin_ips{} "
+    "| rename origin_ips{} as src "
+    "| eventstats min(first_seen) as hl_data_start "
+    f"| where first_seen>={CF_SINCE} AND hl_data_start<relative_time(now(), \"-1d\") "
+    "| eval host=\"cloudflare\", user=\"\", object=mvjoin(mvindex(tunnels, 0, 9), \",\"), count=mvcount(tunnels), "
+    "detail=\"first tunnel connection from this address in 30 days, tunnels=\".object "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "run cloudflared for a test tunnel from another network (a laptop on a hotspot) for one snapshot",
+    window=CF_WINDOW, period="24h", suppress="src",
+    description="A Cloudflare Tunnel connector connected from a public address none of the tunnels used in the previous 30 days. Anyone holding a tunnel's token can run a connector and receive that tunnel's traffic. A changed home address shows here too, once, naming every tunnel.")
+
+det("HL - Cloudflare firewall burst from one address",
+    "T1595", "Reconnaissance", "medium", "",
+    "index=network sourcetype=cloudflare:firewall action IN (block, challenge, managed_challenge, jschallenge, js_challenge, challenge_failed, managed_challenge_failed, jschallenge_failed) "
+    "| where NOT `hl_cf_firewall_ignore` "
+    "| stats count min(_time) as first_seen max(_time) as last_seen dc(clientRequestHTTPHost) as hosts values(clientRequestHTTPHost) as host_list values(action) as actions values(source) as sources values(clientCountryName) as countries values(clientASNDescription) as asn values(clientRequestPath) as paths by clientIP "
+    "| where hosts>=3 OR count>=50 "
+    "| eval hl_severity=if(count>=500, \"high\", \"medium\"), host=\"cloudflare\", user=\"\", src=clientIP, object=mvjoin(mvindex(host_list, 0, 9), \",\"), "
+    "detail=count.\" blocked or challenged requests to \".hosts.\" hosts, actions=\".mvjoin(actions, \",\").\" sources=\".mvjoin(sources, \",\").\" country=\".mvjoin(countries, \",\").\" asn=\".mvjoin(asn, \",\").\" paths=\".mvjoin(mvindex(paths, 0, 4), \" \") "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "needs Zone > Analytics > Read on the collector's token; then add a custom WAF rule blocking a test path and request it on three hostnames, or 50 times on one",
+    window=CF_WINDOW, period="4h", suppress="src",
+    description="One client address had 50 or more requests blocked or challenged by Cloudflare in 15 minutes, or was blocked or challenged on 3 or more hostnames: a scanner working through the sites. High at 500. Addresses in the hl_cf_firewall_ignore macro are skipped. Finds nothing until the collector's token has Zone > Analytics > Read.")
+
 # ---- Authentik and Splunk Web logins ------------------------------------------------------
 AK_TAIL = (
     '| fillnull value="unknown" user src '

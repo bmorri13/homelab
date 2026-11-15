@@ -68,6 +68,17 @@ fetch_feeds() {
 }
 if [[ -d "$DATA_DIR/etc/apps/85_detections/lookups" ]]; then fetch_feeds; fi
 
+# Cloudflare account logs to Splunk through Cribl's HEC input (scripts/cloudflare-logs.py),
+# every 10 minutes. Only enabled once .env has the API token; the first run is left
+# to the timer, since Cribl may not be up yet.
+install -m 644 systemd/hl-cloudflare-logs.service systemd/hl-cloudflare-logs.timer /etc/systemd/system/
+systemctl daemon-reload
+if grep -q '^CLOUDFLARE_LOGS_API_TOKEN=.' .env; then
+    systemctl enable --now hl-cloudflare-logs.timer >/dev/null 2>&1
+else
+    echo "WARNING: no CLOUDFLARE_LOGS_API_TOKEN in .env; hl-cloudflare-logs.timer not enabled" >&2
+fi
+
 # TLS certs for Splunk's management port, the Cribl Leader API and the Worker's HEC
 # input. Sets $certs_changed to the services whose cert was (re)issued; check it
 # with cert_changed <service>.
