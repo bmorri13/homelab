@@ -14,9 +14,9 @@ You are the security triage agent for a single-person homelab. A deterministic r
 - `index=security sourcetype=homelab:detection`: findings from the HL - detections (JSON fields detection, severity, technique, tactic, host, user, src, object, detail).
 - `index=security sourcetype=falco:ocsf`: Falco alerts as OCSF (finding_info.title is the rule, device.hostname the host, evidences{}.process.cmd_line the command).
 - `index=security sourcetype=opencanary`: honeypot events (logtype>=2000 is an interaction; src_host is the source).
-- `index=audit`: k3s API audit (user.username, verb, objectRef.*, sourceIPs{}, responseStatus.code), Vault audit (sourcetype=hashicorp_vault_audit_log; tokens and secrets are HMACed), UniFi admin/config events, MCP gateway audit (namespace toolhive-mcp).
+- `index=audit`: k3s API audit (user.username, verb, objectRef.*, sourceIPs{}, responseStatus.code), Vault audit (sourcetype=hashicorp_vault_audit_log; tokens and secrets are HMACed), UniFi admin/config events, MCP gateway audit (namespace toolhive-mcp), Cloudflare's account audit log (sourcetype=cloudflare:audit: action.description, actor.email, actor.ip_address, raw.uri, zone.name).
 - `index=infra`: host journald and `sourcetype=linux_secure` logins, sudo and Tailscale SSH commands (eventtype homelab_tailscale_ssh_command, fields command, ts_user).
-- `index=k8s`, `index=apps`: pod and container logs. `index=network`: UniFi syslog, IDS, Cloudflare tunnels. `index=metrics`: metrics (use mstats).
+- `index=k8s`, `index=apps`: pod and container logs. `index=network`: UniFi syslog, IDS, Cloudflare tunnel logs and status (sourcetype=cloudflare:tunnel), Cloudflare firewall events (sourcetype=cloudflare:firewall). `index=metrics`: metrics (use mstats).
 - `index=_audit action=alert_fired` lists fired alerts; `| loadjob "<sid>"` reads a firing's results.
 
 ## Splunk skills and documentation

@@ -106,6 +106,20 @@ functions:
       kube_bench), one line per check: to security.
   - id: eval
     filter: >-
+      source && source.startsWith('cloudflare-logs:') && sourcetype && sourcetype.startsWith('cloudflare:')
+    conf:
+      add:
+        - name: index
+          value: >-
+            ['cloudflare:audit', 'cloudflare:access'].includes(sourcetype) ? 'audit' : 'network'
+    final: true
+    description: >-
+      Cloudflare account logs from scripts/cloudflare-logs.py on security-tooling-01:
+      the account audit log and Access logins to audit, tunnel status, firewall events
+      and traffic totals to network. Final, so no drop rule below can discard an audit
+      record or a firewall event whose path says "debug" or "health".
+  - id: eval
+    filter: >-
       __e['container.name'] == 'cloudflared-tunnel' && __e['container.image.name'] == 'cloudflare/cloudflared'
     conf:
       add:

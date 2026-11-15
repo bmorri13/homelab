@@ -1,0 +1,30 @@
+# Installed by scripts/deploy.sh. Pulls Cloudflare's account audit log, Access
+# authentication log, tunnel status and zone security events into Splunk through
+# Cribl's HEC input (scripts/cloudflare-logs.py); started by hl-cloudflare-logs.timer.
+# Runs as root only to read the root-only .env (three lines of it: the Cloudflare
+# token and account ID, and the HEC token); it needs no capabilities and writes only
+# its state directory.
+[Unit]
+Description=Send Cloudflare account logs to Splunk (cloudflare-logs.py)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /opt/splunk-stack/scripts/cloudflare-logs.py
+SyslogIdentifier=hl-cloudflare-logs
+StateDirectory=hl-cloudflare-logs
+StateDirectoryMode=0700
+TimeoutStartSec=8min
+Nice=10
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallArchitectures=native
