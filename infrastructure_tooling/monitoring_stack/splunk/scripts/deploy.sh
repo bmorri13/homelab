@@ -18,6 +18,15 @@ CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
 CRIBL_WORKER_DIR="${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}"
 CRIBL_GROUP=default
 
+# A saved search must not start with the search command: the scheduler adds its own,
+# so "search = search index=..." runs as "search search index=..." and the second
+# "search" becomes a term that matches almost nothing. Ad hoc runs of the same text
+# work, which is how three ops alerts went quiet unnoticed until 2026-11-15.
+if grep -n '^search = search ' apps/*/default/savedsearches.conf >&2; then
+    echo "saved searches above start with 'search '; drop it" >&2
+    exit 1
+fi
+
 wait_healthy() {
     local status
     for _ in $(seq 1 90); do
