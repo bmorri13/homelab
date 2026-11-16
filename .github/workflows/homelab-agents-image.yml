@@ -2,6 +2,8 @@
 # it to ghcr.io/bmorri13/homelab-agents.
 #   push to main      -> :main and :sha-<commit>   (the CronJobs run :main)
 #   push to a branch  -> :<branch> and :sha-<commit> (for testing before merge)
+# The image is tested before it is pushed: a build that fails the offline test never
+# becomes :main.
 # Runs on GitHub-hosted runners: the ARC runners for this repo are in Kubernetes
 # mode and can't build images. The image contains no credentials.
 name: homelab-agents image
@@ -31,6 +33,26 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      - name: Build (local, for the offline test)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infrastructure_tooling/homelab_agents/image
+          platforms: linux/amd64
+          load: true
+          tags: homelab-agents:test
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      # The offline test (image/tests/test_offline.py) inside the image just built, so
+      # it runs on the Python and the locked packages the CronJobs will get: whole runs
+      # with Vault, the gateway, Slack, HEC and the model replaced by fakes. No network.
+      # The tests are not part of the image, so they are mounted in.
+      - name: Offline test
+        run: |
+          docker run --rm --network none --entrypoint python -e PYTHONPATH=/app \
+            -v "$PWD/infrastructure_tooling/homelab_agents/image/tests:/tests:ro" \
+            homelab-agents:test /tests/test_offline.py
+
       - name: Log in to GHCR
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -53,6 +75,7 @@ jobs:
           context: infrastructure_tooling/homelab_agents/image
           platforms: linux/amd64
           push: true
+          cache-from: type=gha
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
