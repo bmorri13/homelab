@@ -683,12 +683,19 @@ det("HL - Reported attacker IP seen in logs",
     "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
     "| rex max_match=0 field=_raw \"(?<hl_ipv4>(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?!\\.?[0-9]))\" "
     "| where isnotnull(hl_ipv4) "
-    + lowrisk_ip_match(f"match(ti_category, \"(^|;)attacker(;|$)\") AND NOT {TOR}") + LOWRISK_IP_TAIL +
+    + lowrisk_ip_match(f"match(ti_category, \"(^|;)attacker(;|$)\") AND NOT {TOR}") +
+    # A request Cloudflare refused at the edge never reached a site here, so it is not a
+    # finding. Only an event that says all of it: the address is the client (not text in a
+    # path or user agent), the action is block and the response an error. Every coalesce
+    # makes a missing field count as not blocked, so the event is still reported.
+    "| eval hl_edge_block=if(sourcetype==\"cloudflare:firewall\" AND coalesce(action, \"\")==\"block\" AND coalesce(clientIP, \"\")==ti_indicator AND coalesce(tonumber(edgeResponseStatus), 0)>=400, 1, 0) "
+    "| where hl_edge_block==0 "
+    + LOWRISK_IP_TAIL +
     "detail=\"reported attacker \".ti_indicator.\" (\".mvjoin(context, \" | \").\") in \".count.\" events, index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\"; sample: \".sample "
     "| convert ctime(first_seen) ctime(last_seen) ",
     "on a monitored host: logger 'hl-test attacker <an address from | inputlookup hl_ti_feed_lowrisk where category=\"attacker\">' (a log line only; nothing connects to it)",
     suppress="src,host", period="24h",
-    description="An address blocklist.de received reports about in the last days (hl_ti_feed_lowrisk.csv, category attacker: SSH, mail and web brute force, refreshed every 6 hours) appeared in any event, usually a blocked request or a failed login from it. Low: these hosts attack the whole Internet. It matters when something from the address succeeded. Research scanners and CDN ranges are removed by the feed job's warninglists; Tor exits are left to the Tor detection, and addresses on the hand-picked or medium feed lists to those detections. Not searched: the agents' run log and gateway, and homelab:detection.")
+    description="An address blocklist.de received reports about in the last days (hl_ti_feed_lowrisk.csv, category attacker: SSH, mail and web brute force, refreshed every 6 hours) appeared in any event, usually a failed login from it. Low: these hosts attack the whole Internet. It matters when something from the address succeeded. Requests from the address that Cloudflare blocked at the edge (cloudflare:firewall, action=block, an error status) are not reported; a logged, skipped or challenged one is, and so is the address in any other log. Research scanners and CDN ranges are removed by the feed job's warninglists; Tor exits are left to the Tor detection, and addresses on the hand-picked or medium feed lists to those detections. Not searched: the agents' run log and gateway, and homelab:detection.")
 
 # Category -> ATT&CK v20 technique, tactic, severity, and how the detail names it.
 # Webhook collectors and OOB callbacks are high: nothing here uses them, and a callback
