@@ -67,3 +67,12 @@ What can show that an update to each component is safe: what runs before the mer
 | `infrastructure_tooling/trivy_operator` | Workflow: Chart render diff | Argo CD app `trivy-operator` is Synced and Healthy<br>Rolled out: `deployment/trivy-operator`, `statefulset/trivy-server` in `trivy-system`<br>Accepted by their controller: `ClusterComplianceReport` objects<br>12 CRDs: existing objects of those kinds still reconcile | Revert the merge: Argo CD syncs the previous version<br>A revert does not undo CRD changes: objects stored in a new schema stay that way<br>Data written by the new version stays (`statefulset/trivy-server`): take a backup first when the update changes a data format | None |
 | `infrastructure_tooling/vault` | None | A merge deploys nothing: `vault` is applied or synced by hand, then must be Synced and Healthy | Revert the merge. If it was already applied by hand, apply the previous version the same way | nothing runs on a pull request |
 | `infrastructure_tooling/vault_ingress` | None | Argo CD app `vault-ingress` is Synced and Healthy<br>Answers: `vault.bmosan.com`<br>Accepted by their controller: `Middleware` objects | Revert the merge: Argo CD syncs the previous version | nothing runs on a pull request<br>deploys on merge but defines no workload: Argo CD's Healthy is the only signal |
+## Sources
+
+Where a package's release notes are, for packages Renovate cannot trace to a repository. The triage agent reads the releases between the old and the new version.
+
+| Package | Releases |
+|---|---|
+| `toolhive-operator` | `stacklok/toolhive` |
+| `toolhive-operator-crds` | `stacklok/toolhive` |
+| `ghcr.io/sirkirby/unifi-network-mcp` | `sirkirby/unifi-mcp` |
