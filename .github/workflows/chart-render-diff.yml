@@ -1,0 +1,46 @@
+# Render every Helm chart a pull request touches, before and after, and put what
+# differs in the job summary: which images move, whether CRDs change, whether
+# anything is removed. Argo CD syncs most of these charts within minutes of a merge
+# and nothing else looks at them first.
+#
+# Fails when a chart stops rendering, or when the archives vendored in charts/ do not
+# match Chart.yaml: a Renovate bump that changes Chart.yaml alone renders the old
+# chart or drops the dependency (see the helmv3 rule in renovate.json).
+#
+# No secrets and no cluster access: helm template and git on a GitHub-hosted runner,
+# so a pull request from a fork is safe to run.
+name: Chart render diff
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/**'
+      - '.github/workflows/chart-render-diff.yml'
+      - '.github/scripts/chart-render-diff.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chart-render-diff-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: Render changed charts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Render and compare
+        run: |
+          helm version --short
+          .github/scripts/chart-render-diff.sh origin/main "$GITHUB_STEP_SUMMARY"
