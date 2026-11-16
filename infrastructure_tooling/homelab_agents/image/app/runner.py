@@ -7,8 +7,8 @@ Runs as a Kubernetes CronJob pod under the agent's own ServiceAccount (agent-sec
 agent-ops). Each run: read the pod's projected tokens (gateway, Vault), collect the
 agent's queue (queues.py) through the gateway, drop what was already reported
 (state.py), have Claude triage each new item with read-only gateway tools and the
-Splunk agent skills, then post to Slack and send the run log to Splunk
-(index=ai_agents).
+Splunk agent skills, then post to Slack, run a retro over the triages' traces
+(retro.py) and send the run log to Splunk (index=ai_agents).
 
 Every new item is triaged and logged. Items the agent calls routine (routine()) get no
 Slack card; everything else is posted, with the runner's own facts first and the agent's
@@ -35,7 +35,9 @@ from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage
 import clients
 import config
 import queues
+import retro
 from state import State
+from tracing import Trace
 
 TRIAGE_SCHEMA = {
     "sec": ["expected_activity", "benign", "suspicious", "likely_malicious", "inconclusive"],
@@ -94,7 +96,9 @@ def agent_options(agent, gateway_token, claude_env, output_schema):
     )
 
 
-async def triage(agent, item, gateway_token, claude_env):
+async def triage(agent, item, gateway_token, claude_env, trace, sdk_init):
+    """trace collects every tool call as it happens, so a triage that fails or times
+    out still leaves its trace; sdk_init gets what the SDK reported at start (tools)."""
     runbook_path = os.path.join("runbooks", item["runbook"])
     runbook = read(runbook_path) if os.path.exists(os.path.join(config.APP_DIR, runbook_path)) else ""
     prompt = (
@@ -104,31 +108,29 @@ async def triage(agent, item, gateway_token, claude_env):
         f"<runbook>\n{runbook}\n</runbook>"
     )
     options = agent_options(agent, gateway_token, claude_env, schema(agent))
-    result, init, tools_used = None, {}, {}
+    result, init = None, {}
     async for message in query(prompt=prompt, options=options):
+        trace.add(message)
         if isinstance(message, SystemMessage) and message.subtype == "init":
             init = message.data
+            sdk_init.update(init)
             gateway = next((m for m in init.get("mcp_servers", []) if m.get("name") == "homelab"), {})
             if gateway.get("status") in ("failed", "needs-auth"):
                 raise RuntimeError(f"gateway MCP server {gateway.get('status')}")
-        elif isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, ToolUseBlock):
-                    name = block.name.removeprefix("mcp__homelab__")
-                    if block.name == "Skill":
-                        name = f"Skill:{(block.input or {}).get('skill', '?')}"
-                    tools_used[name] = tools_used.get(name, 0) + 1
         elif isinstance(message, ResultMessage):
             result = message
     if result is None or result.is_error or result.structured_output is None:
         reason = (result.subtype if result else "no result") + (f" {result.errors}" if result and result.errors else "")
         raise RuntimeError(f"triage failed: {reason}")
     usage = result.usage or {}
+    denials = result.permission_denials or []
     stats = {"turns": result.num_turns, "duration_ms": result.duration_ms, "cost_usd": result.total_cost_usd,
              "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
              "cache_read_tokens": usage.get("cache_read_input_tokens"), "session_id": result.session_id,
-             "tools_used": tools_used, "skills_loaded": len(init.get("skills", [])),
-             "permission_denials": len(result.permission_denials or [])}
+             "tools_used": trace.tools_used(), "skills_loaded": len(init.get("skills", [])),
+             "permission_denials": len(denials),
+             "denied": [str(d.get("tool_name", "?") if isinstance(d, dict) else d)[:80] for d in denials][:10],
+             **trace.metrics()}
     return result.structured_output, stats
 
 
@@ -361,6 +363,33 @@ def close_vault(vault):
         print(f"Vault revoke: {e}", file=sys.stderr)
 
 
+async def retro_step(agent, traced, sdk_init, state, claude_env, run_id, dry_run, summary, events):
+    """Run the retro over this run's traces and record what it found. Nothing here may
+    fail the run: the triages are already posted."""
+    try:
+        output, stats = await asyncio.wait_for(
+            retro.run(agent, traced, sdk_init, state.known_findings(), claude_env), config.RETRO_TIMEOUT_S)
+    except Exception as e:
+        summary["retro_error"] = (f"timed out after {config.RETRO_TIMEOUT_S} s" if isinstance(e, TimeoutError)
+                                  else f"{type(e).__name__}: {e}")[:300]
+        return
+    findings = output.get("findings", [])[:retro.MAX_FINDINGS]
+    summary.update(retro_findings=len(findings), retro_new=0, retro_cost_usd=stats["cost_usd"],
+                   retro_summary=output.get("summary"), retro_skill_invoked=stats["skill_invoked"])
+    summary["cost_usd"] += stats["cost_usd"]   # cost_usd is the whole run; retro_cost_usd is its share
+    if dry_run:
+        print(json.dumps(output, indent=2))
+        return
+    for f in findings:
+        keys = [traced[n - 1][0]["key"] for n in f.get("items", []) if 1 <= n <= len(traced)]
+        stored = state.save_finding(f)
+        summary["retro_new"] += stored["times_seen"] == 1
+        events.append(hec_event(agent, "retro", run_id=run_id, finding_id=stored["id"],
+                                times_seen=stored["times_seen"], category=stored["category"],
+                                target=stored["target"], title=stored["title"], severity=f["severity"],
+                                observation=f["observation"], proposal=f["proposal"], item_keys=keys))
+
+
 async def run(agent, dry_run, local_login, limit, collect_only=False, test=False):
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
@@ -368,6 +397,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                "retrying": 0, "deferred": 0, "cost_usd": 0.0, "posted": False}
     events, notes, hec_token, status = [], [], None, "ok"
     state, vault, webhook = None, None, None
+    claude_env, traced, sdk_init = {}, [], {}   # traced: (item, trace, stats) per triage tried
     try:
         vault = clients.Vault()
         webhook = vault.kv(config.VAULT_SLACK).get("webhook_url")
@@ -401,13 +431,14 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 # Out of time: the rest aren't posted or marked, so the next run triages them.
                 triage_now, summary["deferred"] = triage_now[:n], len(triage_now) - n
                 break
+            trace = Trace()
             try:
-                item["triage"], stats = await asyncio.wait_for(triage(agent, item, gtoken, claude_env),
-                                                               config.ITEM_TIMEOUT_S)
+                item["triage"], stats = await asyncio.wait_for(
+                    triage(agent, item, gtoken, claude_env, trace, sdk_init), config.ITEM_TIMEOUT_S)
                 summary["triaged"] += 1
                 summary["cost_usd"] += stats.get("cost_usd") or 0
             except Exception as e:  # one bad item mustn't stop the others
-                item["triage"], stats = None, {}
+                item["triage"], stats = None, {"tools_used": trace.tools_used(), **trace.metrics()}
                 item["triage_error"] = (f"timed out after {config.ITEM_TIMEOUT_S} s" if isinstance(e, TimeoutError)
                                         else str(e))[:300]
                 summary["triage_errors"] += 1
@@ -419,6 +450,9 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
             events.append(hec_event(agent, "item", run_id=run_id, key=item["key"], title=item["title"], severity=item["severity"],
                                     target_host=item["host"], origin=item["source"], triage=item["triage"],
                                     error=item.get("triage_error"), **stats))
+            events += [hec_event(agent, "step", run_id=run_id, key=item["key"], title=item["title"], **row)
+                       for row in trace.hec_steps()]
+            traced.append((item, trace, stats))
 
         report = [i for i in triage_now + to_repost
                   if (i.get("triage") or i.get("triage_error")) and not i.get("retry")]
@@ -450,6 +484,11 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
     finally:
         if vault:
             close_vault(vault)
+    if traced and state and status != "error" and config.RETRO_ENABLED:
+        if time.time() - started > config.RETRO_START_BY_S:
+            summary["retro_error"] = "skipped: the run was out of time"
+        else:
+            await retro_step(agent, traced, sdk_init, state, claude_env, run_id, dry_run, summary, events)
     summary["duration_s"] = round(time.time() - started, 1)
     summary["notes"] = notes
     try:  # a state DB error mustn't lose the run's HEC events

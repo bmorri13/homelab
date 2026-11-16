@@ -489,6 +489,26 @@
       "options": {
         "count": 20
       }
+    },
+    "viz_ag_retro": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_ag_retro"
+      },
+      "title": "Retro findings (last 14 days): what each run's retro suggests changing, most often seen first. Leads to check, not applied",
+      "options": {
+        "count": 20
+      }
+    },
+    "viz_ag_tools": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_ag_tools"
+      },
+      "title": "Tool calls made during triage (last 7 days)",
+      "options": {
+        "count": 20
+      }
     }
   },
   "dataSources": {
@@ -879,13 +899,37 @@
         },
         "refresh": "5m"
       }
+    },
+    "ds_ag_retro": {
+      "type": "ds.search",
+      "name": "ag_retro",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent kind=retro | stats dc(run_id) as Runs latest(severity) as Severity latest(observation) as \"Latest observation\" latest(proposal) as Proposal max(_time) as last by agent finding_id category target title | eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), \"Last seen\"=strftime(last, \"%Y-%m-%d %H:%M\") | sort - Runs - last | rename category as Category target as Change title as Finding | table Runs Agent Category Change Finding Proposal \"Latest observation\" Severity \"Last seen\"",
+        "queryParameters": {
+          "earliest": "-14d",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
+    },
+    "ds_ag_tools": {
+      "type": "ds.search",
+      "name": "ag_tools",
+      "options": {
+        "query": "index=ai_agents sourcetype=homelab:agent kind=step | eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), failed=if(is_error==\"true\", 1, 0) | stats count as Calls sum(failed) as Failed dc(key) as Items round(avg(result_chars)) as \"Avg result chars\" max(result_chars) as \"Max result chars\" round(avg(ms)) as \"Avg ms\" by Agent tool | eval \"Failed %\"=round(100*Failed/Calls, 1) | sort Agent - Calls | rename tool as Tool | table Agent Tool Calls Items Failed \"Failed %\" \"Avg result chars\" \"Max result chars\" \"Avg ms\"",
+        "queryParameters": {
+          "earliest": "-7d",
+          "latest": "now"
+        },
+        "refresh": "5m"
+      }
     }
   },
   "layout": {
     "type": "absolute",
     "options": {
       "width": 1200,
-      "height": 4400,
+      "height": 4980,
       "display": "auto-scale"
     },
     "structure": [
@@ -1277,6 +1321,26 @@
           "y": 4180,
           "w": 1200,
           "h": 220
+        }
+      },
+      {
+        "item": "viz_ag_retro",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 4400,
+          "w": 1200,
+          "h": 320
+        }
+      },
+      {
+        "item": "viz_ag_tools",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 4720,
+          "w": 1200,
+          "h": 260
         }
       }
     ],

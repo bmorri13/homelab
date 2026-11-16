@@ -229,9 +229,28 @@ S["ag_skills"] = (
     "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\") "
     "| stats count as Items by Agent Skill | sort Agent - Items"
 )
+# What the end-of-run retro found (kind=retro, one event each time a run sees a finding).
+# Runs = how many runs reported it: the ones seen most are the ones worth a pull request.
+S["ag_retro"] = (
+    "index=ai_agents sourcetype=homelab:agent kind=retro "
+    "| stats dc(run_id) as Runs latest(severity) as Severity latest(observation) as \"Latest observation\" "
+    "latest(proposal) as Proposal max(_time) as last by agent finding_id category target title "
+    "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), \"Last seen\"=strftime(last, \"%Y-%m-%d %H:%M\") "
+    "| sort - Runs - last | rename category as Category target as Change title as Finding "
+    "| table Runs Agent Category Change Finding Proposal \"Latest observation\" Severity \"Last seen\""
+)
+# Tool calls from the triage traces (kind=step, one event per call).
+S["ag_tools"] = (
+    "index=ai_agents sourcetype=homelab:agent kind=step "
+    "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), failed=if(is_error==\"true\", 1, 0) "
+    "| stats count as Calls sum(failed) as Failed dc(key) as Items round(avg(result_chars)) as \"Avg result chars\" "
+    "max(result_chars) as \"Max result chars\" round(avg(ms)) as \"Avg ms\" by Agent tool "
+    "| eval \"Failed %\"=round(100*Failed/Calls, 1) | sort Agent - Calls | rename tool as Tool "
+    "| table Agent Tool Calls Items Failed \"Failed %\" \"Avg result chars\" \"Max result chars\" \"Avg ms\""
+)
 
 # Searches with their own fixed window (default: last 24 h).
-WINDOW = {"ag_skills": "-7d"}
+WINDOW = {"ag_skills": "-7d", "ag_retro": "-14d", "ag_tools": "-7d"}
 # Searches that follow the time picker; the rest set their own short windows.
 TIMED = {"cpu_busy", "mem_used", "load_per_cpu", "disk_busy", "net_mbps", "disk_mbs", "k8s_phase", "k8s_node"}
 
@@ -372,6 +391,13 @@ table("viz_ag_skills", "ds_ag_skills",
       "Skills used by the agents (last 7 days): triaged items per Splunk agent skill; (none) = triaged without a skill")
 place("viz_ag_skills", 0, 1200, 220)
 y += 220
+table("viz_ag_retro", "ds_ag_retro",
+      "Retro findings (last 14 days): what each run's retro suggests changing, most often seen first. Leads to check, not applied")
+place("viz_ag_retro", 0, 1200, 320)
+y += 320
+table("viz_ag_tools", "ds_ag_tools", "Tool calls made during triage (last 7 days)")
+place("viz_ag_tools", 0, 1200, 260)
+y += 260
 
 data_sources = {}
 for key, q in S.items():
