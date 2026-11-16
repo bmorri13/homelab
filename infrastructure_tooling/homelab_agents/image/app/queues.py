@@ -56,6 +56,8 @@ DETECTION_RUNBOOKS = [
     ("HL - DNS lookup of a threat indicator", "threat-indicators.md"),
     ("HL - Threat feed", "threat-indicators.md"),
     ("HL - DNS lookup of a threat feed", "threat-indicators.md"),
+    ("HL - Connection with a Tor exit node", "threat-indicators.md"),
+    ("HL - Reported attacker IP", "threat-indicators.md"),
     ("HL - DNS", "dns.md"),
     ("HL - Cloudflare", "cloudflare.md"),
     ("HL - Web", "traefik.md"),

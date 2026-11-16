@@ -1,5 +1,6 @@
-# Installed by scripts/deploy.sh. Downloads the abuse.ch and CISA KEV feeds into the
-# 85_detections lookups (scripts/threat-feeds.py); started by hl-threat-feeds.timer.
+# Installed by scripts/deploy.sh. Downloads the threat-intel feeds (abuse.ch, OpenPhish,
+# CIRCL, Tor exits, blocklist.de, CISA KEV) and MISP warninglists into the 85_detections
+# lookups (scripts/threat-feeds.py); started by hl-threat-feeds.timer.
 # Runs as root only to read the root-only .env (one line of it, ABUSECH_AUTH_KEY) and
 # to give the lookups splunkd's owner; everything else is locked down. The lookups
 # path is the default SPLUNK_DATA_DIR (/srv/splunk); change both lines if that moves.
