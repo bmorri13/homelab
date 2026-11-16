@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS retro_findings (
     target     TEXT NOT NULL,
     title      TEXT NOT NULL,
     proposal   TEXT NOT NULL,
+    observation TEXT,          -- what the latest run that reported it saw
     first_seen REAL NOT NULL,
     last_seen  REAL NOT NULL,
     times_seen INTEGER NOT NULL DEFAULT 1
@@ -52,6 +53,8 @@ class State:
         self.db.executescript(SCHEMA)
         if "failures" not in [r["name"] for r in self.db.execute("PRAGMA table_info(items)")]:
             self.db.execute("ALTER TABLE items ADD COLUMN failures INTEGER NOT NULL DEFAULT 0")
+        if "observation" not in [r["name"] for r in self.db.execute("PRAGMA table_info(retro_findings)")]:
+            self.db.execute("ALTER TABLE retro_findings ADD COLUMN observation TEXT")
         self.renotify = config.AGENTS[agent]["renotify_hours"] * 3600
 
     def classify(self, items, now=None):
@@ -133,13 +136,15 @@ class State:
             row = self.db.execute("SELECT id, category, target, title, times_seen FROM retro_findings "
                                   "WHERE agent=? AND id=?", (self.agent, finding["repeat_of"])).fetchone()
         if row:
-            self.db.execute("UPDATE retro_findings SET last_seen=?, times_seen=times_seen+1 WHERE id=?", (now, row["id"]))
+            self.db.execute("UPDATE retro_findings SET last_seen=?, times_seen=times_seen+1, observation=? WHERE id=?",
+                            (now, finding.get("observation"), row["id"]))
             self.db.commit()
             return {**dict(row), "times_seen": row["times_seen"] + 1}
         cur = self.db.execute(
-            "INSERT INTO retro_findings (agent, category, target, title, proposal, first_seen, last_seen) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (self.agent, finding["category"], finding["target"], finding["title"], finding["proposal"], now, now))
+            "INSERT INTO retro_findings (agent, category, target, title, proposal, observation, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (self.agent, finding["category"], finding["target"], finding["title"], finding["proposal"],
+             finding.get("observation"), now, now))
         self.db.commit()
         return {"id": cur.lastrowid, "category": finding["category"], "target": finding["target"],
                 "title": finding["title"], "times_seen": 1}
