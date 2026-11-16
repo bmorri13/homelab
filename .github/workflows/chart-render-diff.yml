@@ -15,8 +15,15 @@ on:
   pull_request:
     branches:
       - main
+    # The files a chart is rendered from. A change to any other file in a chart's
+    # directory (one a template reads with .Files) does not start this: run it by
+    # hand on the branch for those.
     paths:
-      - 'infrastructure_tooling/**'
+      - 'infrastructure_tooling/**/Chart.yaml'
+      - 'infrastructure_tooling/**/Chart.lock'
+      - 'infrastructure_tooling/**/charts/**'
+      - 'infrastructure_tooling/**/templates/**'
+      - 'infrastructure_tooling/**/values*.yaml'
       - '.github/workflows/chart-render-diff.yml'
       - '.github/scripts/chart-render-diff.sh'
   workflow_dispatch:
