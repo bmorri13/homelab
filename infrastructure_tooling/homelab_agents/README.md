@@ -18,6 +18,7 @@ Results go to Slack as Block Kit cards, and every run, item and tool call is log
 | `image/` | The container: `app/` (runner, queues, state, tracing, retro, prompts, runbooks), `skills/` (our own skills: `retro`), `requirements.txt` (hash-locked, from `requirements.in` with `uv pip compile --generate-hashes`), `select_skills.py`, `Dockerfile`. Layered build on Chainguard images, both pinned by digest: `python:latest-dev` builds the virtualenv (wheels only, hashes checked) and selects the skills; the runtime is `python:latest` (no shell, no package manager, no pip, nonroot UID 65532) with only the venv, the app and the skills, all owned by root |
 | `Chart.yaml`, `values.yaml`, `templates/` | Helm chart: the two CronJobs, the state volume, the NetworkPolicy, the GHCR pull secret, the `homelab-agents-ca` ConfigMap (the homelab CA for HEC, `files/homelab-ca.crt`) |
 | `application.yaml` | Argo CD Application (applied once by hand) |
+| `RETRO_REVIEW.md`, `retro-findings.sh` | The weekly job that turns retro findings into draft pull requests, and the read-only script that lists them |
 | `.github/workflows/homelab-agents-image.yml` | Builds the image on GitHub-hosted runners and pushes `ghcr.io/bmorri13/homelab-agents` (`:main` from main, `:<branch>` from branches, `:sha-<commit>` always) |
 
 ## How a run works
@@ -108,7 +109,7 @@ flowchart LR
 
 An empty list is normal. The retro has no gateway, no web access and no write tools: it has `Skill` and `Read` (the skills folder) and nothing else, because the traces it reads contain text from logs.
 
-**Findings.** `state.db` keeps one row per distinct finding (`retro_findings`). Each retro is shown the findings of the last 14 days and reports a recurrence as a repeat of that row, so a problem is counted instead of restated; a repeat keeps its first wording. Every sighting is a `kind=retro` event (`finding_id`, `times_seen`, `category`, `target`, `title`, `observation`, `proposal`, `item_keys`), and the run event carries `retro_findings`, `retro_new`, `retro_cost_usd`, `retro_summary` and `retro_error`. `cost_usd` on the run is triage plus retro.
+**Findings.** `state.db` keeps one row per distinct finding (`retro_findings`, with the observation of the latest run that reported it). Each retro is shown the findings of the last 14 days and reports a recurrence as a repeat of that row, so a problem is counted instead of restated; a repeat keeps its first wording. Every sighting is a `kind=retro` event (`finding_id`, `times_seen`, `category`, `target`, `title`, `observation`, `proposal`, `item_keys`), and the run event carries `retro_findings`, `retro_new`, `retro_cost_usd`, `retro_summary` and `retro_error`. `cost_usd` on the run is triage plus retro.
 
 **Acting on them.** Nothing is applied automatically, and a finding is a lead, not an instruction: it was written by a model that read log text. *Homelab Operations* has **Retro findings** (most often seen first) and **Tool calls made during triage**. The same list in a search:
 
@@ -120,7 +121,11 @@ index=ai_agents sourcetype=homelab:agent kind=retro earliest=-14d
 
 Take the findings several runs agree on, check each against the items it cites (`item_keys`, and the item's `kind=step` events), and change the target in a pull request: a runbook line, a prompt edit, a detection exclusion in `85_detections`, a tool added to the agent's Cedar allowlist. A finding that stops being reported drops out of the known list after 14 days and out of `state.db` after 30; one that keeps coming back after its fix shows the fix didn't work.
 
+**The weekly review.** A scheduled coding agent on coding-box (a T3 Code scheduled task, Mondays 09:00 Eastern) follows [`RETRO_REVIEW.md`](RETRO_REVIEW.md): it lists the findings at least three runs reported (`./retro-findings.sh 3`, read-only, from `state.db` over Tailscale SSH), checks each against the repository, and opens at most three **draft** pull requests, one finding each, marked `Retro-Finding: <agent>#<id>`. It never merges, never touches a host, and leaves anything about tools or permissions for you to decide. Closing one of its pull requests unmerged tells it not to raise that finding again.
+
 To turn the retro off without a new image, set `env.RETRO: "0"` in `values.yaml`.
+
+**Tests.** `image/tests/test_offline.py` runs the trace, the findings store and whole runs against fakes (no network, nothing posted): from `image/`, `uv run --with-requirements requirements.in python tests/test_offline.py`.
 
 ## Splunk agent skills
 
