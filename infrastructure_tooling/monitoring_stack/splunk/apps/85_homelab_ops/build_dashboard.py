@@ -243,9 +243,10 @@ S["ag_retro"] = (
 S["ag_tools"] = (
     "index=ai_agents sourcetype=homelab:agent kind=step "
     "| eval Agent=if(agent==\"sec\", \"Security agent\", \"Ops agent\"), failed=if(is_error==\"true\", 1, 0) "
-    "| stats count as Calls sum(failed) as Failed dc(key) as Items round(avg(result_chars)) as \"Avg result chars\" "
-    "max(result_chars) as \"Max result chars\" round(avg(ms)) as \"Avg ms\" by Agent tool "
-    "| eval \"Failed %\"=round(100*Failed/Calls, 1) | sort Agent - Calls | rename tool as Tool "
+    "| stats count as Calls sum(failed) as Failed dc(key) as Items avg(result_chars) as avg_chars "
+    "max(result_chars) as \"Max result chars\" avg(ms) as avg_ms by Agent tool "
+    "| eval \"Failed %\"=round(100*Failed/Calls, 1), \"Avg result chars\"=round(avg_chars), \"Avg ms\"=round(avg_ms) "
+    "| sort Agent - Calls | rename tool as Tool "
     "| table Agent Tool Calls Items Failed \"Failed %\" \"Avg result chars\" \"Max result chars\" \"Avg ms\""
 )
 
