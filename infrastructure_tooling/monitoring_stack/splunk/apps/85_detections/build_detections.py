@@ -577,7 +577,8 @@ det("HL - DNS lookup of a threat indicator domain",
 
 # hl_ti_feed_indicators.csv: the same columns, written every 6 hours on the Splunk host
 # by hl-threat-feeds.service (scripts/threat-feeds.py) from abuse.ch ThreatFox, URLhaus
-# and Feodo Tracker; each row expires 30 days after its feed last listed it. Feeds are
+# and Feodo Tracker, OpenPhish and the CIRCL OSINT feed, minus what MISP warninglists
+# know as benign; each row expires 30 days (OpenPhish 7) after its feed last listed it. Feeds are
 # broad and machine-curated, so a match is medium, not high, and an indicator that is
 # also an active hand-picked row is left to the two detections above
 # (hl_ti_handpicked). An indicator seen by FEED_MAX_SEEN or more hosts (IPs) or
@@ -611,7 +612,7 @@ det("HL - Threat feed IP seen in logs",
     "| convert ctime(first_seen) ctime(last_seen) ",
     "on a monitored host: logger 'hl-test threat feed 198.51.100.74' (the feed canary row threat-feeds.py always adds, an RFC 5737 documentation address)",
     suppress="src,host,object", period="24h",
-    description="An IP address from the abuse.ch feeds (hl_ti_feed_indicators.csv: ThreatFox C2 and payload hosts, URLhaus malware download hosts, Feodo Tracker botnet C2s, refreshed every 6 hours) appeared in any event. Lower severity than the hand-picked list, which wins when both list the address; addresses seen on 5 or more hosts in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and the malware family. Feed addresses are often shared hosting and get reassigned, so corroborate before acting. Not searched: the agents' run log and gateway, and homelab:detection.")
+    description="An IP address from the threat feeds (hl_ti_feed_indicators.csv: abuse.ch ThreatFox C2 and payload hosts, URLhaus malware download hosts, Feodo Tracker botnet C2s, OpenPhish phishing hosts, CIRCL OSINT indicators; refreshed every 6 hours) appeared in any event. Lower severity than the hand-picked list, which wins when both list the address; addresses seen on 5 or more hosts in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and its context (the malware family, or the CIRCL event). Feed addresses are often shared hosting and get reassigned, so corroborate before acting. Not searched: the agents' run log and gateway, and homelab:detection.")
 
 det("HL - DNS lookup of a threat feed domain",
     "T1071", "Command and Control", "medium", "",
@@ -632,7 +633,62 @@ det("HL - DNS lookup of a threat feed domain",
     "| convert ctime(first_seen) ctime(last_seen) ",
     "from a client that uses AdGuard: dig hl-feed-canary.invalid (the feed canary row threat-feeds.py always adds; the reserved .invalid name never resolves)",
     suppress="src,object", period="24h",
-    description="A client looked up a domain from the abuse.ch feeds (hl_ti_feed_indicators.csv: ThreatFox C2 and payload domains, URLhaus malware download hosts), or a subdomain of it, also with a search domain appended. Lower severity than the hand-picked list, which wins when both list the domain; domains looked up by 5 or more clients in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and the malware family.")
+    description="A client looked up a domain from the threat feeds (hl_ti_feed_indicators.csv: abuse.ch ThreatFox C2 and payload domains, URLhaus malware download hosts, OpenPhish phishing hosts, CIRCL OSINT domains), or a subdomain of it, also with a search domain appended. Lower severity than the hand-picked list, which wins when both list the domain; domains looked up by 5 or more clients in one window, and those in the hl_ti_feed_allowed macro, are skipped. The detail names the feed and its context (the malware family, phishing, or the CIRCL event).")
+
+# hl_ti_feed_lowrisk.csv (indicator,type,category,source,context,added,expires), also
+# written by threat-feeds.py: Tor exit nodes (category tor, rows expire 3 days after
+# the Tor Project last listed them) and blocklist.de reported attackers (category
+# attacker, 3 days). Neither is malicious by itself, so they have low detections of
+# their own and never reach the medium ones above. An IP that is also an active row of
+# hl_threat_indicators.csv or hl_ti_feed_indicators.csv is left to those detections; a
+# Tor exit that blocklist.de also reports is only the Tor finding. hl_ti_feed_allowed
+# applies here too. In 2026-11 a day of logs held 2 blocklist.de addresses (Cloudflare
+# firewall events) and no Tor exit, so one finding per address and host a day is cheap.
+def lowrisk_ip_match(category_test):
+    return (
+        "| lookup hl_ti_feed_lowrisk indicator AS hl_ipv4 OUTPUT indicator AS ti_indicator "
+        "| where isnotnull(ti_indicator) "
+        "| mvexpand ti_indicator "
+        "| lookup hl_ti_feed_lowrisk indicator AS ti_indicator OUTPUT type AS ti_type category AS ti_category expires AS ti_expires context AS ti_context source AS ti_source "
+        f"| where ti_type==\"ip\" AND `hl_ti_active(ti_expires)` AND {category_test} "
+        "| lookup hl_ti_feed_indicators indicator AS ti_indicator OUTPUT expires AS hl_feed_expires "
+        "| `hl_ti_handpicked(ti_indicator)` "
+        "| where hl_handpicked==0 AND NOT (isnotnull(hl_feed_expires) AND `hl_ti_active(hl_feed_expires)`) AND NOT `hl_ti_feed_allowed` "
+    )
+
+
+LOWRISK_IP_TAIL = (
+    "| eval sample=substr(replace(replace(_raw, \"(?s)^.*?(.{0,80}(?<![0-9.])\".replace(ti_indicator, \"\\.\", \"[.]\").\"(?![0-9]).{0,80}).*$\", \"\\1\"), \"[\\x00-\\x1f\\s]+\", \" \"), 1, 200) "
+    "| stats count min(_time) as first_seen max(_time) as last_seen first(sample) as sample values(ti_context) as context values(ti_source) as sources by ti_indicator index sourcetype host "
+    "| eval user=\"\", src=ti_indicator, object=index.\"/\".sourcetype, "
+)
+TOR = "match(ti_category, \"(^|;)tor(;|$)\")"
+
+det("HL - Connection with a Tor exit node",
+    "T1090.003", "Command and Control", "low", "",
+    "index=* NOT index=ai_agents NOT sourcetype=homelab:detection NOT sourcetype=toolhive:vmcp:audit "
+    "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
+    "| rex max_match=0 field=_raw \"(?<hl_ipv4>(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?!\\.?[0-9]))\" "
+    "| where isnotnull(hl_ipv4) "
+    + lowrisk_ip_match(TOR) + LOWRISK_IP_TAIL +
+    "detail=\"Tor exit node \".ti_indicator.\" (\".mvjoin(context, \" | \").\") in \".count.\" events, index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\"; sample: \".sample "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "on a monitored host: logger 'hl-test tor <an address from | inputlookup hl_ti_feed_lowrisk where category=\"tor\">' (a log line only; nothing connects to it)",
+    suppress="src,host", period="24h",
+    description="An address on the Tor Project's exit list (hl_ti_feed_lowrisk.csv, category tor, refreshed every 6 hours) appeared in any event: something reached a service here through Tor, or a host connected to Tor (a pod or host making the connection is the serious case). Tor is not malicious by itself, so low. Addresses also on the hand-picked or medium feed lists are left to those detections, and those in the hl_ti_feed_allowed macro are skipped. Not searched: the agents' run log and gateway, and homelab:detection.")
+
+det("HL - Reported attacker IP seen in logs",
+    "T1110", "Credential Access", "low", "",
+    "index=* NOT index=ai_agents NOT sourcetype=homelab:detection NOT sourcetype=toolhive:vmcp:audit "
+    "NOT k8s.namespace.name IN (toolhive-clients, toolhive-mcp, toolhive-system) "
+    "| rex max_match=0 field=_raw \"(?<hl_ipv4>(?<![0-9.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?!\\.?[0-9]))\" "
+    "| where isnotnull(hl_ipv4) "
+    + lowrisk_ip_match(f"match(ti_category, \"(^|;)attacker(;|$)\") AND NOT {TOR}") + LOWRISK_IP_TAIL +
+    "detail=\"reported attacker \".ti_indicator.\" (\".mvjoin(context, \" | \").\") in \".count.\" events, index=\".index.\" sourcetype=\".sourcetype.\" host=\".host.\"; sample: \".sample "
+    "| convert ctime(first_seen) ctime(last_seen) ",
+    "on a monitored host: logger 'hl-test attacker <an address from | inputlookup hl_ti_feed_lowrisk where category=\"attacker\">' (a log line only; nothing connects to it)",
+    suppress="src,host", period="24h",
+    description="An address blocklist.de received reports about in the last days (hl_ti_feed_lowrisk.csv, category attacker: SSH, mail and web brute force, refreshed every 6 hours) appeared in any event, usually a blocked request or a failed login from it. Low: these hosts attack the whole Internet. It matters when something from the address succeeded. Research scanners and CDN ranges are removed by the feed job's warninglists; Tor exits are left to the Tor detection, and addresses on the hand-picked or medium feed lists to those detections. Not searched: the agents' run log and gateway, and homelab:detection.")
 
 # Category -> ATT&CK v20 technique, tactic, severity, and how the detail names it.
 # Webhook collectors and OOB callbacks are high: nothing here uses them, and a callback

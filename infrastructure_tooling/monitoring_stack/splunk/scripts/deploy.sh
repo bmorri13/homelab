@@ -155,7 +155,8 @@ else
     fi
 fi
 
-if [[ ! -f "$DATA_DIR/etc/apps/85_detections/lookups/hl_ti_feed_indicators.csv" ]]; then fetch_feeds; fi
+if [[ ! -f "$DATA_DIR/etc/apps/85_detections/lookups/hl_ti_feed_indicators.csv" \
+      || ! -f "$DATA_DIR/etc/apps/85_detections/lookups/hl_ti_feed_lowrisk.csv" ]]; then fetch_feeds; fi
 
 # The Leader reads its cert at startup. A brand-new Leader is still on HTTP and gets
 # switched to HTTPS by cribl-bootstrap.sh.
