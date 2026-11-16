@@ -44,6 +44,20 @@ RUN_BUDGET_S = 1200       # no new triage starts after this; the Job is killed a
 MAX_ITEMS_PER_RUN = 10    # the rest are posted untriaged, as a list
 TRIAGE_ATTEMPTS = 3       # runs that try a failing item before it's posted with the error
 
+# The retro: one more model call at the end of a run that triaged something, reading the
+# run's traces and suggesting changes to the prompt, runbooks, skills, tools and queue
+# (retro.py, the `retro` skill). RETRO=0 turns it off without a new image.
+RETRO_ENABLED = os.environ.get("RETRO", "1") != "0"
+RETRO_MODEL = "claude-sonnet-5-5"   # reads a transcript; runs up to 96 times a day
+RETRO_EFFORT = "medium"
+RETRO_MAX_TURNS = 8
+RETRO_TIMEOUT_S = 180
+RETRO_START_BY_S = 1260   # a retro starts only this early in a run, so it ends (1440 s) before
+                          # the Job's deadline (1500 s) and the run's log is still sent
+RETRO_TRACE_CHARS = 150_000   # above this the retro gets the calls without result previews
+RETRO_KNOWN_DAYS = 14     # findings seen this recently are shown to the retro as known
+RETRO_KNOWN_MAX = 20
+
 # Splunk documentation the skills cite; the only sites WebFetch may reach. All
 # Splunk-owned, so a prompt injected through log data can't send anything to a host
 # an attacker reads.

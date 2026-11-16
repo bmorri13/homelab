@@ -7,7 +7,7 @@ Two triage agents, run as Kubernetes CronJobs on k3s-01 every 30 minutes:
 | Security (`sec`) | `homelab-agent-sec`, :00 and :30 | HL - detection findings (`index=security sourcetype=homelab:detection`) and the Falco, honeypot and secret-leak alerts that fired | `agent-sec`, 15 read-only tools |
 | Operations (`ops`) | `homelab-agent-ops`, :15 and :45 | Capacity (filesystems, Proxmox storage, CPU, memory), Kubernetes workloads, pods and restarts, Docker restarts, Splunk scheduler skips/failures, Argo CD app health and sync | `agent-ops`, 23 read-only tools |
 
-Results go to Slack as Block Kit cards, and every run and item is logged to Splunk `index=ai_agents sourcetype=homelab:agent`.
+Results go to Slack as Block Kit cards, and every run, item and tool call is logged to Splunk `index=ai_agents sourcetype=homelab:agent`. Each run that triaged something ends with a **retro**: a second model call that reads the run's traces and suggests changes to the agent's prompt, runbooks, skills, tools and queue ([The improvement loop](#the-improvement-loop)).
 
 ![Homelab agents](../../docs/images/agents.drawio.svg)
 
@@ -15,7 +15,7 @@ Results go to Slack as Block Kit cards, and every run and item is logged to Splu
 
 | Path | What |
 |---|---|
-| `image/` | The container: `app/` (runner, queues, state, prompts, runbooks), `requirements.txt` (hash-locked, from `requirements.in` with `uv pip compile --generate-hashes`), `select_skills.py`, `Dockerfile`. Layered build on Chainguard images, both pinned by digest: `python:latest-dev` builds the virtualenv (wheels only, hashes checked) and selects the skills; the runtime is `python:latest` (no shell, no package manager, no pip, nonroot UID 65532) with only the venv, the app and the skills, all owned by root |
+| `image/` | The container: `app/` (runner, queues, state, tracing, retro, prompts, runbooks), `skills/` (our own skills: `retro`), `requirements.txt` (hash-locked, from `requirements.in` with `uv pip compile --generate-hashes`), `select_skills.py`, `Dockerfile`. Layered build on Chainguard images, both pinned by digest: `python:latest-dev` builds the virtualenv (wheels only, hashes checked) and selects the skills; the runtime is `python:latest` (no shell, no package manager, no pip, nonroot UID 65532) with only the venv, the app and the skills, all owned by root |
 | `Chart.yaml`, `values.yaml`, `templates/` | Helm chart: the two CronJobs, the state volume, the NetworkPolicy, the GHCR pull secret, the `homelab-agents-ca` ConfigMap (the homelab CA for HEC, `files/homelab-ca.crt`) |
 | `application.yaml` | Argo CD Application (applied once by hand) |
 | `.github/workflows/homelab-agents-image.yml` | Builds the image on GitHub-hosted runners and pushes `ghcr.io/bmorri13/homelab-agents` (`:main` from main, `:<branch>` from branches, `:sha-<commit>` always) |
@@ -52,7 +52,12 @@ sequenceDiagram
         K->>D: record item
     end
     K->>SL: alert card per non-routine item (+ digest if any not triaged)
-    K->>H: run and item logs
+    opt the run triaged something
+        K->>C: retro: prompt, runbooks and traces (no gateway, no web)
+        C-->>K: findings: what to change in the agent's environment
+        K->>D: count repeats, store new findings
+    end
+    K->>H: run, item, step and retro logs
 ```
 
 1. **Credentials.** The pod runs as the agent's own ServiceAccount (`agent-sec` or `agent-ops`, in `toolhive-clients`, created by the `toolhive_mcp` chart) with no Kubernetes API token. The kubelet projects two tokens into it, bound to the pod and rotated automatically:
@@ -74,6 +79,48 @@ sequenceDiagram
    - one **digest card** per run only when something wasn't triaged (over the per-run limit), one line each, repeats collapsed.
 
    Severity uses one scheme everywhere: red critical, orange high, yellow warning (medium), blue info (low). Text from logs or the model is escaped, so it can't add mentions or links. If a run fails, a card says so.
+6. **Retro.** After the cards are posted, a run that triaged at least one item runs the retro (next section). It can't fail the run or delay a card.
+
+## The improvement loop
+
+Each agent is built from parts that can be changed one at a time: the system prompt (`app/prompts/`), a runbook per kind of item (`app/runbooks/`), skills, the gateway tools its identity is allowed, and the queue (`app/queues.py` and the detections behind it). The loop that improves them:
+
+```mermaid
+flowchart LR
+    T["Triage<br/>each item"] --> TR["Trace<br/>every tool call"]
+    TR --> R["Retro<br/>end of the run"]
+    R --> F["Findings<br/>state.db + Splunk, repeats counted"]
+    F --> P["Person or coding agent<br/>checks the finding, opens a PR"]
+    P --> T
+```
+
+**Trace** (`app/tracing.py`). The runner records every tool call of a triage from the SDK's message stream: tool, input, how long it took, how much came back, whether it failed. A triage that fails or times out keeps the trace it got to. From it:
+- each item's log event gains `steps`, `tool_errors`, `repeat_calls` (the same call made twice), `result_chars`, `max_result_chars` and `denied` (tools the sandbox refused);
+- each call becomes a `kind=step` event (tool, input clipped to 500 characters, `ms`, `is_error`, `result_chars`, and the error text when it failed). Tool output is never sent, only its size.
+
+**Retro** (`app/retro.py`, `skills/retro/SKILL.md`). One more model call (`claude-sonnet-5-5`, 180 s at most) with the `retro` skill, adapted from [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering/retro) (MIT): that skill reviews a coding session, ours reviews a triage run with the same categories restated. It is given the agent's system prompt, the runbooks the run used, the tool and skill lists, and each item's result and trace (with a 300-character preview of each tool result, in memory only). It returns at most four findings, each with:
+
+| Field | What |
+|---|---|
+| `category` | `context_docs` (a fact a runbook should have stated), `deterministic_filter` (a fixed rule could have settled the item without a model), `tool_economy`, `tools_and_access`, `skills`, `system_prompt`, `no_op`, `output_quality` |
+| `target` | The one thing to change: `prompts/sec.md`, `runbooks/<name>.md`, `skill:<name>`, `tool:<name>`, `detection:<title>`, `queue`, `runner` |
+| `observation`, `proposal` | What the trace showed (item and step numbers), and the change itself |
+
+An empty list is normal. The retro has no gateway, no web access and no write tools: it has `Skill` and `Read` (the skills folder) and nothing else, because the traces it reads contain text from logs.
+
+**Findings.** `state.db` keeps one row per distinct finding (`retro_findings`). Each retro is shown the findings of the last 14 days and reports a recurrence as a repeat of that row, so a problem is counted instead of restated; a repeat keeps its first wording. Every sighting is a `kind=retro` event (`finding_id`, `times_seen`, `category`, `target`, `title`, `observation`, `proposal`, `item_keys`), and the run event carries `retro_findings`, `retro_new`, `retro_cost_usd`, `retro_summary` and `retro_error`. `cost_usd` on the run is triage plus retro.
+
+**Acting on them.** Nothing is applied automatically, and a finding is a lead, not an instruction: it was written by a model that read log text. *Homelab Operations* has **Retro findings** (most often seen first) and **Tool calls made during triage**. The same list in a search:
+
+```
+index=ai_agents sourcetype=homelab:agent kind=retro earliest=-14d
+| stats dc(run_id) as runs latest(proposal) as proposal latest(observation) as observation by agent finding_id category target title
+| sort - runs
+```
+
+Take the findings several runs agree on, check each against the items it cites (`item_keys`, and the item's `kind=step` events), and change the target in a pull request: a runbook line, a prompt edit, a detection exclusion in `85_detections`, a tool added to the agent's Cedar allowlist. A finding that stops being reported drops out of the known list after 14 days and out of `state.db` after 30; one that keeps coming back after its fix shows the fix didn't work.
+
+To turn the retro off without a new image, set `env.RETRO: "0"` in `values.yaml`.
 
 ## Splunk agent skills
 
@@ -163,7 +210,7 @@ kubectl -n toolhive-clients create job --from=cronjob/homelab-agent-sec sec-look
   jq '.spec.template.spec.containers[0].args += ["--collect-only"]' | kubectl create -f -
 ```
 
-In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time source status collected new triaged retrying cost_usd error error_at`. `error_at` is where a failed run broke, as our own frames outermost first (`runner.py:… run > clients.py:… _http`). Cost is the API-equivalent figure the SDK reports; on the subscription it counts against usage limits, not a bill. Pod logs, full tracebacks included, are in `index=ai_agents sourcetype=kube:container` (Cribl routes the `toolhive-clients` namespace there; Kubernetes events for it stay in `index=k8s`).
+In Splunk: `index=ai_agents sourcetype=homelab:agent kind=run | table _time source status collected new triaged retrying cost_usd retro_findings retro_error error error_at`. One triage's tool calls: `... kind=step key="<item key>" | sort n | table n tool input ms is_error result_chars error`. `error_at` is where a failed run broke, as our own frames outermost first (`runner.py:… run > clients.py:… _http`). Cost is the API-equivalent figure the SDK reports; on the subscription it counts against usage limits, not a bill. Pod logs, full tracebacks included, are in `index=ai_agents sourcetype=kube:container` (Cribl routes the `toolhive-clients` namespace there; Kubernetes events for it stay in `index=k8s`).
 
 **Watchdog.** A run that never starts can't report itself, so Splunk watches instead. *Agents - not running or failing* (app `85_homelab_ops`, at :05 and :35) posts a card to Slack through the `homelab_slack` action when an agent:
 - hasn't run for 75 minutes;

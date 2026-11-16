@@ -49,5 +49,8 @@ WORKDIR /app
 COPY --from=builder /app/venv /app/venv
 COPY app/ /app/
 COPY --from=skills /workspace /app/workspace
+# Our own skills (skills/): retro, which the end-of-run retro call invokes. The triage
+# agents don't list it (app/config.py AGENTS), so they can't.
+COPY skills/ /app/workspace/.claude/skills/
 USER 65532:65532
 ENTRYPOINT ["python", "/app/runner.py"]

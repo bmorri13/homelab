@@ -4,4 +4,5 @@
 !requirements.txt
 !select_skills.py
 !app/
+!skills/
 app/__pycache__
