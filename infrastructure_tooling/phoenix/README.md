@@ -12,7 +12,7 @@ It is one pod with SQLite on a 5Gi volume, at `https://phoenix.bmosan.com` from 
 | Pods in the namespaces listed under `senders` in `values.yaml` | Sending traces to `http://phoenix.phoenix.svc.cluster.local:6006/v1/traces` |
 | Anything else | Nothing |
 
-The login is Authentik's, by forward auth, the same way as the Cribl UI: Traefik shows each request to Authentik's embedded outpost first. The provider, the application and who may pass are in `../authentik/blueprints/cribl.yaml`; the outpost's login paths on this host are in `../authentik/templates/phoenix.yaml`. Phoenix's own login stays off, so senders inside the cluster need no API key. The network policy is what keeps other pods from reaching Phoenix without the gate.
+The login is Authentik's, by forward auth, the same way as the Cribl UI: Traefik shows each request to Authentik's embedded outpost first. The provider, the application and who may pass are in `../authentik/blueprints/cribl.yaml`; the outpost's login paths on this host are in `../authentik/templates/phoenix.yaml`. Phoenix's own login is switched off (`PHOENIX_ENABLE_AUTH=false`; Phoenix turns it on by default), so senders inside the cluster need no API key. The network policy is what keeps other pods from reaching Phoenix without the gate.
 
 The traces hold tool names, file paths, token counts and the triage verdicts; they do not hold prompts or file contents unless a sender turns that on.
 
