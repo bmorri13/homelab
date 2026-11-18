@@ -1,0 +1,6 @@
+apiVersion: v2
+name: phoenix
+description: Arize Phoenix, the trace viewer for the agents' OpenTelemetry traces
+type: application
+version: 0.1.0
+appVersion: "21.2.0"
