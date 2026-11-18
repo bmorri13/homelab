@@ -32,6 +32,14 @@ spec:
         {{- range .Values.networkPolicy.apiServer.ports }}
         - {protocol: TCP, port: {{ . }}}
         {{- end }}
+    {{- if .Values.traces.endpoint }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.traces.namespace }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.traces.port }}}
+    {{- end }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

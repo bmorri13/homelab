@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phoenix-data
+  labels:
+    {{- include "phoenix.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storage.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phoenix
+  labels:
+    {{- include "phoenix.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: phoenix
+  ports:
+    - {name: http, port: 6006, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phoenix
+  labels:
+    {{- include "phoenix.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # One writer on a ReadWriteOnce SQLite volume: stop the old pod before starting the new.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phoenix
+  template:
+    metadata:
+      labels:
+        {{- include "phoenix.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: phoenix
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}@{{ .Values.image.digest }}"
+          ports:
+            - {name: http, containerPort: 6006}
+          env:
+            - {name: PHOENIX_WORKING_DIR, value: /data}
+            - {name: PHOENIX_HOST, value: "0.0.0.0"}
+            - {name: PHOENIX_PORT, value: "6006"}
+            - {name: PHOENIX_ROOT_URL, value: "https://{{ .Values.host }}"}
+            - {name: PHOENIX_DEFAULT_RETENTION_POLICY_DAYS, value: {{ .Values.retentionDays | quote }}}
+            # Nothing leaves the pod: no usage pixels, no remote assets, and none of
+            # Phoenix's own assistant features, which can run commands and browse.
+            - {name: PHOENIX_TELEMETRY_ENABLED, value: "false"}
+            - {name: PHOENIX_ALLOW_EXTERNAL_RESOURCES, value: "false"}
+            - {name: PHOENIX_DISABLE_AGENT_ASSISTANT, value: "true"}
+            - {name: PHOENIX_DISABLE_MODEL_COST_AUTO_UPDATE, value: "true"}
+            - {name: HOME, value: /tmp}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: phoenix-data
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}

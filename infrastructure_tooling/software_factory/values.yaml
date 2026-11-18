@@ -32,6 +32,15 @@ vault:
   # The Claude credential the homelab agents use: field claude_oauth_token.
   claude: kv/homelab-agents
 
+# OpenTelemetry traces: one per pull request sent to the model, with every model request
+# and tool call under it. Empty endpoint: no traces. See ../phoenix.
+traces:
+  endpoint: http://phoenix.phoenix.svc.cluster.local:6006
+  namespace: phoenix
+  port: 6006
+  # Also record tool arguments (file paths, search patterns). Not prompts or file contents.
+  toolDetails: true
+
 # After a merge the agent reads the Argo CD Applications that deploy the changed files.
 argocd:
   namespace: argocd

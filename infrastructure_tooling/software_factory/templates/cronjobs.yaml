@@ -64,6 +64,16 @@ spec:
                     secretKeyRef: {name: software-factory-claude, key: token}
                 - name: FACTORY_ARGOCD_NAMESPACE
                   value: {{ $.Values.argocd.namespace | quote }}
+                {{- if $.Values.traces.endpoint }}
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: {{ $.Values.traces.endpoint | quote }}
+                - name: OTEL_SERVICE_NAME
+                  value: software-factory
+                {{- if $.Values.traces.toolDetails }}
+                - name: OTEL_LOG_TOOL_DETAILS
+                  value: "1"
+                {{- end }}
+                {{- end }}
                 - name: HOME
                   value: /home/agent
                 - name: CLAUDE_CONFIG_DIR

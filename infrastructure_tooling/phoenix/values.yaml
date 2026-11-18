@@ -1,0 +1,38 @@
+# Arize Phoenix (https://github.com/Arize-ai/phoenix, Elastic License 2.0): where the
+# agents' OpenTelemetry traces go to be read. One pod, SQLite on a volume. See README.md.
+
+image:
+  # The nonroot variant, pinned by digest. Bump the tag and the digest together.
+  repository: docker.io/arizephoenix/phoenix
+  tag: version-21.2.0-nonroot
+  digest: sha256:df3fca25b132cd0f7a911c70e462d4909a0bda23c6d750472e5043aa5cc6d19b
+
+host: phoenix.bmosan.com
+
+# Traces older than this are deleted. 0 keeps them for ever.
+retentionDays: 30
+
+# Namespaces whose pods may send traces (OTLP over HTTP to port 6006, path /v1/traces).
+senders:
+  - software-factory
+
+storage:
+  storageClass: local-path
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+ingress:
+  className: traefik
+  entrypoints: websecure
+  clusterIssuer: bmosan-cert
+  tlsSecretName: phoenix-bmosan-com-tls
+  # Tailscale (CGNAT + ULA) sources only; LAN clients get 403.
+  sourceRanges:
+    - 100.64.0.0/10
+    - fd7a:115c:a1e0::/48
