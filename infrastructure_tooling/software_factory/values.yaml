@@ -1,0 +1,49 @@
+# The software-factory agent: one CronJob per repository it looks after. Each run checks
+# the updates it merged earlier, triages the open Renovate and Dependabot pull requests,
+# posts one note on each, and merges only what that repository's .factory/risk.md lets it.
+# The code is in the private repository bmorri13/software-factory. See README.md.
+
+image:
+  # Built by that repository's "image" workflow on every push to main. CronJob pods are
+  # new every run, so with pullPolicy Always each run uses the newest main build.
+  repository: ghcr.io/bmorri13/software-factory
+  tag: main
+  pullPolicy: Always
+  # Private GHCR package: same read:packages credential as Apiary and the homelab agents.
+  pullSecretVaultPath: kv/apiary-ghcr-pull
+
+# Set true to stop every run without deleting anything.
+suspend: false
+
+# Minutes past the hour, UTC. A run that finds nothing new calls no model.
+schedule: "20,50 * * * *"
+
+repos:
+  - name: bmorri13/homelab
+    # false: notes only, nothing is ever merged, whatever the risk file says.
+    merge: true
+
+# Hard stop for one run.
+activeDeadlineSeconds: 1500
+
+vault:
+  # GitHub App bmorri13-software-factory: fields app_id and private_key.
+  githubApp: kv/software-factory/github-app
+  # The Claude credential the homelab agents use: field claude_oauth_token.
+  claude: kv/homelab-agents
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+networkPolicy:
+  # The pods talk only to HTTPS on the internet: GitHub and the Anthropic API. Private
+  # ranges are excluded so they can't reach the LAN, the tailnet or other pods.
+  internetExcept:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10

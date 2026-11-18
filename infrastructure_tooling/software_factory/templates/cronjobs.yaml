@@ -1,0 +1,98 @@
+{{- range .Values.repos }}
+{{- $slug := .name | lower | replace "/" "-" | replace "_" "-" | replace "." "-" }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: software-factory-{{ $slug | trunc 35 | trimSuffix "-" }}
+  labels:
+    {{- include "software-factory.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ $.Values.schedule | quote }}
+  timeZone: Etc/UTC
+  suspend: {{ $.Values.suspend }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "software-factory.labels" $ | nindent 8 }}
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ $.Values.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "software-factory.labels" $ | nindent 12 }}
+        spec:
+          # No Kubernetes API token: the agent has no API permissions and needs none.
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          enableServiceLinks: false
+          imagePullSecrets:
+            - name: software-factory-ghcr-pull
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: agent
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              args:
+                - run
+                - --repo
+                - {{ .name | quote }}
+                {{- if .merge }}
+                - --merge
+                {{- end }}
+              env:
+                - name: FACTORY_APP_ID
+                  valueFrom:
+                    secretKeyRef: {name: software-factory-github-app, key: app_id}
+                - name: FACTORY_APP_KEY_FILE
+                  value: /var/run/secrets/software-factory/github-app/private_key
+                - name: CLAUDE_CODE_OAUTH_TOKEN
+                  valueFrom:
+                    secretKeyRef: {name: software-factory-claude, key: token}
+                - name: HOME
+                  value: /home/agent
+                - name: CLAUDE_CONFIG_DIR
+                  value: /home/agent/.claude
+                - name: GH_CONFIG_DIR
+                  value: /home/agent/.config/gh
+                - name: TMPDIR
+                  value: /tmp
+                # No telemetry, error reporting or update checks from Claude Code.
+                - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                {{- toYaml $.Values.resources | nindent 16 }}
+              volumeMounts:
+                - {name: home, mountPath: /home/agent}
+                - {name: tmp, mountPath: /tmp}
+                - {name: github-app, mountPath: /var/run/secrets/software-factory/github-app, readOnly: true}
+          volumes:
+            - name: home
+              emptyDir: {sizeLimit: 512Mi}
+            # The repository copy for the run is unpacked here.
+            - name: tmp
+              emptyDir: {sizeLimit: 1Gi}
+            - name: github-app
+              secret:
+                secretName: software-factory-github-app
+                defaultMode: 0440
+                items:
+                  - {key: private_key, path: private_key}
+{{- end }}
