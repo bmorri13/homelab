@@ -40,6 +40,12 @@ cribl:
   # the outpost through a Service at this fixed address instead.
   forwardAuthClusterIP: 10.43.200.11
 
+# Phoenix, the agents' trace viewer, behind Authentik the same way (templates/phoenix.yaml
+# holds only the outpost's paths on this host; the rest is in infrastructure_tooling/phoenix).
+phoenix:
+  host: phoenix.bmosan.com
+  tlsSecretName: phoenix-outpost-bmosan-com-tls
+
 # Splunk Web (templates/splunk.yaml). No forward auth: Splunk logs in through Authentik
 # itself with SAML (blueprints/splunk.yaml). The Splunk host's firewall lets only
 # k3s-01 reach port 8000.

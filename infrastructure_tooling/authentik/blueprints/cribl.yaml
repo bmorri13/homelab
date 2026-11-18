@@ -1,6 +1,6 @@
 version: 1
 metadata:
-  name: homelab - Cribl UI forward auth
+  name: homelab - forward auth (Cribl UI, Phoenix)
 entries:
   # Forward auth for one host, served by the outpost embedded in the server.
   - model: authentik_providers_proxy.proxyprovider
@@ -29,6 +29,36 @@ entries:
       group: !Find [authentik_core.group, [name, authentik Admins]]
     attrs:
       order: 0
+  # Phoenix, the agents' trace viewer (infrastructure_tooling/phoenix). Phoenix's own
+  # login is off, so this gate is its only one. It is in this file because the embedded
+  # outpost's provider list below has to name every forward-auth provider in one place:
+  # a second blueprint setting it would undo this one every hour.
+  - model: authentik_providers_proxy.proxyprovider
+    id: phoenix-provider
+    identifiers:
+      name: phoenix
+    attrs:
+      mode: forward_single
+      external_host: https://phoenix.bmosan.com
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      access_token_validity: hours=5
+  - model: authentik_core.application
+    id: phoenix-app
+    identifiers:
+      slug: phoenix
+    attrs:
+      name: Phoenix
+      provider: !KeyOf phoenix-provider
+      meta_launch_url: https://phoenix.bmosan.com
+      policy_engine_mode: any
+  # Only authentik Admins may open it.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf phoenix-app
+      group: !Find [authentik_core.group, [name, authentik Admins]]
+    attrs:
+      order: 0
   - model: authentik_outposts.outpost
     identifiers:
       managed: goauthentik.io/outposts/embedded
@@ -37,3 +67,4 @@ entries:
       type: proxy
       providers:
         - !KeyOf cribl-provider
+        - !KeyOf phoenix-provider

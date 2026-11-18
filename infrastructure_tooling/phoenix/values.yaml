@@ -32,6 +32,10 @@ ingress:
   entrypoints: websecure
   clusterIssuer: bmosan-cert
   tlsSecretName: phoenix-bmosan-com-tls
+  # Authentik's embedded outpost, at the fixed address Traefik reaches it on (Traefik is
+  # on the host network and can't resolve cluster DNS). Same value as
+  # cribl.forwardAuthClusterIP in ../authentik/values.yaml.
+  forwardAuthClusterIP: 10.43.200.11
   # Tailscale (CGNAT + ULA) sources only; LAN clients get 403.
   sourceRanges:
     - 100.64.0.0/10

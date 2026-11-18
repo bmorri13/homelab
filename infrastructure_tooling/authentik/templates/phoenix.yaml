@@ -1,0 +1,30 @@
+# The outpost's own paths on https://{{ .Values.phoenix.host }} (login start and callback),
+# without forward auth. Phoenix itself, its Ingress and the forward-auth middleware on
+# it are in infrastructure_tooling/phoenix; this part is here because an Ingress can
+# only point at a Service in its own namespace. It gets a certificate of its own for
+# the same reason: the Phoenix one is a Secret in the phoenix namespace.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phoenix-outpost
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-tailnet-only@kubernetescrd
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.phoenix.host }}
+      http:
+        paths:
+          - path: /outpost.goauthentik.io
+            pathType: Prefix
+            backend:
+              service:
+                name: authentik-server
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - {{ .Values.phoenix.host }}
+      secretName: {{ .Values.phoenix.tlsSecretName }}
