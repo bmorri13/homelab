@@ -15,6 +15,10 @@ trivy-operator:
     builtInTrivyServer: true
     vulnerabilityScannerEnabled: true
     vulnerabilityScannerScanOnlyCurrentRevisions: true
+    # No SBOM reports (the chart turns them on). Nothing reads them, and at ~124 MB
+    # for 171 reports, rewritten daily, they bloated k3s's SQLite datastore until
+    # kine's compaction stalled and k3s crashed (three times on 2026-11-18).
+    sbomGenerationEnabled: false
     configAuditScannerEnabled: true
     rbacAssessmentScannerEnabled: true
     exposedSecretScannerEnabled: true
