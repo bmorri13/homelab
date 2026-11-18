@@ -1,0 +1,41 @@
+# Nothing reaches the pods. They reach DNS, HTTPS on the internet, and the Kubernetes
+# API (to read Argo CD Applications).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: software-factory
+  labels:
+    {{- include "software-factory.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: software-factory
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        {{- range .Values.networkPolicy.apiServer.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.apiServer.ports }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.internetExcept | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: 443}
