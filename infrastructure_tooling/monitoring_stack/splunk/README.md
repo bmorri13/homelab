@@ -86,6 +86,8 @@ If every enabled audit device fails to write, Vault refuses requests. Stdout doe
 
 The daily news app's backend (`news-backend` in compose project `bmosan-news` on docker-compose-03) logs JSON. `hec_in` tags it `sourcetype=bmosan:news:json` and splits it by its `event` field: `llm_call` (every Claude API call, with tokens and latency) goes to `ai_agents`, `trigger_invoked`/`trigger_denied` go to `security`, and the rest goes to `apps`. Cloudflare Tunnel connectors (`cloudflared-tunnel` containers) go to `network` as `sourcetype=cloudflare:cloudflared`.
 
+The software-factory agent (k8s namespace `software-factory`) prints one JSON line per pull request it triages, per merge it checks and per retro finding. `hec_in` tags those `sourcetype=software_factory:json` and sends them to `ai_agents`; the pod's plain progress lines stay in `k8s`.
+
 Cloudflare's account logs arrive through `hec_in` from `hl-cloudflare-logs.service` on this host (`source=cloudflare-logs:<stream>`, see [Cloudflare logs](#cloudflare-logs)). A final rule sends `cloudflare:audit` and `cloudflare:access` to `audit`, and `cloudflare:tunnel`, `cloudflare:firewall` and `cloudflare:traffic` to `network`, before the drop rules (a blocked request's path can contain "debug").
 
 `hec_in` receives the OTel collectors: the host agents in [`otel-agent/`](otel-agent/README.md) (journald, Docker containers and metrics on the VMs and Proxmox nodes) and the k3s-01 DaemonSet in `infrastructure_tooling/otel_collector_k3s`. It picks the index:
@@ -204,6 +206,7 @@ Current base apps:
 - `85_hashicorp_vault`: JSON field extraction for the Vault audit log (`hashicorp_vault_audit_log`).
 - `85_kubernetes_audit`: JSON field extraction for the k3s API audit log (`kube:apiserver:audit`, see `infrastructure_tooling/k3s_audit`).
 - `85_bmosan_news`: the daily news app's backend JSON (`bmosan:news:json`) and Cloudflare Tunnel logs (`cloudflare:cloudflared`).
+- `85_software_factory`: the software-factory agent's JSON events (`software_factory:json`, `index=ai_agents`): each triage, each after-merge check, each retro finding.
 - `85_cloudflare`: search-time fields for the Cloudflare account logs (`cloudflare:audit`, `cloudflare:access`, `cloudflare:tunnel`, `cloudflare:firewall`, `cloudflare:traffic`), with CIM-style `user`, `src`, `action` and `dest`. See [Cloudflare logs](#cloudflare-logs).
 - `85_linux_auth`: adds to the Unix and Linux add-on's `linux_secure` parsing: Tailscale SSH logins (`tailscaled` "audit: SSH login", how the Ubuntu VMs are reached), Proxmox web UI and API logins (`pvedaemon`/`pveproxy`), sudo sessions in the Ubuntu 24.04 log format, and the sudo command line. Each Tailscale SSH session's command (or login shell) is mapped to CIM Endpoint Processes, with `parent_process_name=tailscaled`, the local `user`, the tailnet identity `ts_user` and `src`.
 - `85_secret_leaks`: the hourly backstop alert for credentials that got past Cribl's masking (see [Secret masking](#secret-masking)).
