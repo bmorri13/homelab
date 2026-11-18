@@ -56,6 +56,21 @@ functions:
       already skips successful health checks and keeps debug off.
   - id: eval
     filter: >-
+      __e['k8s.namespace.name'] == 'software-factory' && /^\{"event": ?"software_factory\./.test(_raw)
+    conf:
+      add:
+        - name: index
+          value: "'ai_agents'"
+        - name: sourcetype
+          value: "'software_factory:json'"
+    final: true
+    description: >-
+      The software-factory agent (infrastructure_tooling/software_factory): its JSON
+      event lines (triage, validate, retro, run) to ai_agents, beside the other
+      agents. Final, so no drop rule below discards one. Its plain progress lines
+      stay in k8s.
+  - id: eval
+    filter: >-
       __e['container.name'] == 'opencanary' && /^\{"dst_host"/.test(_raw)
     conf:
       add:
