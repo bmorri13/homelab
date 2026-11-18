@@ -1,4 +1,5 @@
-# Nothing reaches the pods, and they reach only DNS and HTTPS on the internet.
+# Nothing reaches the pods. They reach DNS, HTTPS on the internet, and the Kubernetes
+# API (to read Argo CD Applications).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -22,6 +23,15 @@ spec:
       ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
+    - to:
+        {{- range .Values.networkPolicy.apiServer.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.apiServer.ports }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

@@ -32,6 +32,10 @@ vault:
   # The Claude credential the homelab agents use: field claude_oauth_token.
   claude: kv/homelab-agents
 
+# After a merge the agent reads the Argo CD Applications that deploy the changed files.
+argocd:
+  namespace: argocd
+
 resources:
   requests:
     cpu: 50m
@@ -40,8 +44,14 @@ resources:
     memory: 1Gi
 
 networkPolicy:
-  # The pods talk only to HTTPS on the internet: GitHub and the Anthropic API. Private
-  # ranges are excluded so they can't reach the LAN, the tailnet or other pods.
+  # API server as seen after kube-proxy DNAT (same as apiary and toolhive_mcp).
+  apiServer:
+    cidrs:
+      - 192.168.4.98/32
+      - 10.43.0.1/32
+    ports: [6443, 443]
+  # Otherwise the pods talk only to HTTPS on the internet: GitHub and the Anthropic API.
+  # Private ranges are excluded so they can't reach the LAN, the tailnet or other pods.
   internetExcept:
     - 10.0.0.0/8
     - 172.16.0.0/12

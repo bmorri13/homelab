@@ -1,0 +1,37 @@
+# The agent checks, after an update is merged, that the Argo CD apps it deploys are
+# Synced and Healthy. For that it may read Application objects in Argo CD's namespace
+# and nothing else: no secrets, no workloads, no writes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: software-factory
+  labels:
+    {{- include "software-factory.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: software-factory-read-applications
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "software-factory.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: software-factory-read-applications
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "software-factory.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: software-factory-read-applications
+subjects:
+  - kind: ServiceAccount
+    name: software-factory
+    namespace: {{ .Release.Namespace }}

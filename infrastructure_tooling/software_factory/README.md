@@ -4,7 +4,7 @@ The dependency-update triage agent, run as a CronJob. Its code and documentation
 
 Every run, for each repository in `values.yaml`:
 
-1. Checks the updates it merged earlier: reads the workflow runs on the merge commit, writes the result into the pull request's note, and opens a revert if they failed.
+1. Checks the updates merged since the last run, by it or by a person: the workflow runs on the merge commit, and whether each Argo CD app the update deploys picked it up and is Synced and Healthy. It writes the result into the pull request's note and opens a revert if that failed. It never merges the revert.
 2. Triages the open Renovate and Dependabot pull requests against that repository's `.factory/risk.md` and posts one note on each.
 3. Merges only what a rule in that risk file marks `merge`, and only when every check in code passes.
 
@@ -18,7 +18,7 @@ A run that finds nothing new calls no model.
 | `kv/homelab-agents` | `claude_oauth_token` | The Claude credential the homelab agents use |
 | `kv/apiary-ghcr-pull` | `username`, `token` | GHCR `read:packages`, for the private image |
 
-The pod has no Kubernetes API token, a read-only root filesystem, and can reach only DNS and HTTPS on the internet.
+The pod's only Kubernetes permission is `get` on Argo CD Applications. It has a read-only root filesystem and can reach only DNS, the API server and HTTPS on the internet.
 
 ## Install
 

@@ -28,8 +28,9 @@ spec:
           labels:
             {{- include "software-factory.labels" $ | nindent 12 }}
         spec:
-          # No Kubernetes API token: the agent has no API permissions and needs none.
-          automountServiceAccountToken: false
+          # Its only API permission is reading Argo CD Applications (templates/rbac.yaml).
+          serviceAccountName: software-factory
+          automountServiceAccountToken: true
           restartPolicy: Never
           enableServiceLinks: false
           imagePullSecrets:
@@ -61,6 +62,8 @@ spec:
                 - name: CLAUDE_CODE_OAUTH_TOKEN
                   valueFrom:
                     secretKeyRef: {name: software-factory-claude, key: token}
+                - name: FACTORY_ARGOCD_NAMESPACE
+                  value: {{ $.Values.argocd.namespace | quote }}
                 - name: HOME
                   value: /home/agent
                 - name: CLAUDE_CONFIG_DIR
