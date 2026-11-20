@@ -45,6 +45,12 @@ traces:
 argocd:
   namespace: argocd
 
+# After a merge the agent can also check that the next run of a CronJob succeeded (a
+# rule's `After merge: cronjob namespace/name` in a repository's risk file). It may list
+# Job objects in these namespaces for that, and nothing else there.
+cronjobNamespaces:
+  - toolhive-clients
+
 resources:
   requests:
     cpu: 50m
