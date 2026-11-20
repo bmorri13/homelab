@@ -49,7 +49,12 @@ CHARSETS = {
 }
 
 
+LOOPBACK_HTTP = "http://127.0.0.1:"  # a throwaway test Leader (cribl-ci-test.sh), before HTTPS is set up
+
+
 def load_env():
+    if not (STACK / ".env").exists():  # the test Leader: everything comes from the environment
+        return
     for line in (STACK / ".env").read_text().splitlines():
         m = re.match(r"\s*([A-Za-z_]\w*)=(.*)", line)
         if m:
@@ -59,7 +64,7 @@ def load_env():
 class Cribl:
     def __init__(self):
         data_dir = os.environ.get("CRIBL_DATA_DIR", "/srv/cribl")
-        self.ctx = ssl.create_default_context(
+        self.ctx = None if API.startswith(LOOPBACK_HTTP) else ssl.create_default_context(
             cafile=os.environ.get("CRIBL_CACERT", f"{data_dir}/local/cribl/auth/homelab-tls/ca.crt"))
         self.token = None
         for _ in range(5):  # logins are rate-limited
@@ -80,7 +85,7 @@ class Cribl:
                                      headers={"Content-Type": "application/json"})
         if self.token:
             req.add_header("Authorization", f"Bearer {self.token}")
-        # API is checked to be https in main()
+        # API is checked to be https, or the loopback test Leader, in main()
         with urllib.request.urlopen(req, context=self.ctx, timeout=120) as resp:  # nosemgrep: dynamic-urllib-use-detected
             return json.load(resp)
 
@@ -128,7 +133,7 @@ def main():
     live = "--live" in args
     events_file = args[args.index("--events") + 1] if "--events" in args else None
     load_env()
-    if not API.startswith("https://"):
+    if not API.startswith(("https://", LOOPBACK_HTTP)):
         sys.exit("CRIBL_API must be an https:// URL")
     cribl = Cribl()
 
