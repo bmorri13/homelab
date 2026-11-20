@@ -1,0 +1,40 @@
+# Check a Cribl version before it merges (the cribl/cribl image in
+# infrastructure_tooling/monitoring_stack/splunk/docker-compose.yml): start the image as
+# a throwaway Leader, load this repository's pipelines into it and run the secret
+# masking tests. See scripts/cribl-ci-test.sh for what it does and does not prove.
+# No secrets. GitHub-hosted runner: the ARC runners for this repo cannot run containers.
+name: Cribl image
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - infrastructure_tooling/monitoring_stack/splunk/docker-compose.yml
+      - infrastructure_tooling/monitoring_stack/splunk/cribl/**
+      - infrastructure_tooling/monitoring_stack/splunk/scripts/cribl-*
+      - .github/workflows/cribl-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cribl-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Start Cribl and test the pipelines
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the pinned image and test it
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || sudo apt-get install -y -qq python3-yaml
+          infrastructure_tooling/monitoring_stack/splunk/scripts/cribl-ci-test.sh
