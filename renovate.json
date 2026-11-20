@@ -270,7 +270,6 @@
       "description": "As above, for the images the agent may merge that sit in files shared with other packages.",
       "matchPackageNames": [
         "ghcr.io/sirkirby/unifi-network-mcp",
-        "cribl/cribl",
         "docker.io/library/postgres"
       ],
       "minimumReleaseAge": "3 days"
