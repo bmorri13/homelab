@@ -14,6 +14,11 @@
       "/(^|/)application\\.yaml$/"
     ]
   },
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^infrastructure_tooling/homelab_agents/image/requirements\\.txt$/"
+    ]
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -148,7 +153,7 @@
       ]
     },
     {
-      "description": "Everything in the homelab agents image (Python lock and both Chainguard digests, which must move together) rebuilds the same :main image the CronJobs run: one PR, one rebuild. requirements.txt is a uv pip compile lock that Renovate edits pin by pin (its pip-compile manager can't take --python-platform), so if the build fails, re-run the uv pip compile command in its header on the PR branch.",
+      "description": "Everything in the homelab agents image (Python lock and both Chainguard digests, which must move together) rebuilds the same :main image the CronJobs run: one PR, one rebuild. requirements.txt is a uv pip compile lock that Renovate regenerates itself (the pip-compile manager, above) from the pins in requirements.in, so every transitive pin moves with the package that needs it.",
       "matchFileNames": [
         "infrastructure_tooling/homelab_agents/image/**"
       ],
@@ -162,13 +167,12 @@
       "groupName": "mcp-for-argocd image"
     },
     {
-      "description": "pydantic pins pydantic-core to one exact version, so pydantic-core only moves when pydantic does (re-locking with the uv pip compile command in requirements.txt picks it up). Renovate bumped it on its own once (#295), to a version pydantic couldn't use and with no Python 3.14 wheel, and the image build failed.",
-      "matchFileNames": [
-        "infrastructure_tooling/homelab_agents/image/**"
+      "description": "The homelab agents lock is regenerated whole by the pip-compile manager. Editing it pin by pin (the pip_requirements manager) once moved pydantic without pydantic-core, which pydantic pins to one exact version, and the image build failed (#295, #470).",
+      "matchManagers": [
+        "pip_requirements"
       ],
-      "matchPackageNames": [
-        "pydantic-core",
-        "pydantic_core"
+      "matchFileNames": [
+        "infrastructure_tooling/homelab_agents/image/requirements.txt"
       ],
       "enabled": false
     },
