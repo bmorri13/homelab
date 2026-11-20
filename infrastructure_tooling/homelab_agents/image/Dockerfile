@@ -13,8 +13,8 @@
 # Python): bump them together. Nothing secret is built in; credentials are read at run
 # time from Vault and projected ServiceAccount tokens.
 
-ARG PYTHON_DEV=cgr.dev/chainguard/python:latest-dev@sha256:62c16c709c48c8e66647c843b5aceeac81d4523134c742bc017a46f5a86ba5dd
-ARG PYTHON_RUNTIME=cgr.dev/chainguard/python:latest@sha256:c932048a3f1db1fecefbd589d4fb90bf1d364b4c1ebd9aa8c866f29bb93e88cc
+ARG PYTHON_DEV=cgr.dev/chainguard/python:latest-dev@sha256:c0328ed1997b6826d7d2ae4ea972345d3487a80f15ceb1d26f211f7c02f8c177
+ARG PYTHON_RUNTIME=cgr.dev/chainguard/python:latest@sha256:4b2cec05cea94a58e635f21ca5d7c642d24ec58258008bf9341a0c062de5d99d
 
 # --- builder: virtualenv with the pinned, hash-checked dependencies -------------------
 FROM ${PYTHON_DEV} AS builder
