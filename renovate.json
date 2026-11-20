@@ -257,6 +257,23 @@
       "schedule": [
         "* 0-5 * * 1"
       ]
+    },
+    {
+      "description": "Updates the triage agent may merge without a person (the `merge` rules in .factory/risk.md, and the ones being moved there) wait until the release is three days old, so a release that upstream pulls or that turns out to be compromised is not merged within the hour. Keep the two rules below in step with the risk file.",
+      "matchFileNames": [
+        "infrastructure_tooling/proxmox/terraform/**",
+        "infrastructure_tooling/mcp_for_argocd_image/**"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "As above, for the images the agent may merge that sit in files shared with other packages.",
+      "matchPackageNames": [
+        "ghcr.io/sirkirby/unifi-network-mcp",
+        "cribl/cribl",
+        "docker.io/library/postgres"
+      ],
+      "minimumReleaseAge": "3 days"
     }
   ]
 }

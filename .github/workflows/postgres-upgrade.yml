@@ -1,0 +1,43 @@
+# Check a PostgreSQL image bump for Authentik's database before it merges
+# (postgres.image in infrastructure_tooling/authentik/values.yaml): start the image on
+# the base branch, write data, then start the pull request's image on the same data
+# directory. See infrastructure_tooling/authentik/scripts/postgres-upgrade-test.sh.
+# No secrets. GitHub-hosted runner: the ARC runners for this repo cannot run containers.
+name: Postgres upgrade
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - infrastructure_tooling/authentik/values.yaml
+      - infrastructure_tooling/authentik/templates/postgres*.yaml
+      - infrastructure_tooling/authentik/scripts/postgres-upgrade-test.sh
+      - .github/workflows/postgres-upgrade.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postgres-upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Start the new Postgres on the old data
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Old image, then the new one on its data
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          values=infrastructure_tooling/authentik/values.yaml
+          git fetch --quiet --depth=1 origin "refs/heads/$BASE_REF"
+          git show "FETCH_HEAD:$values" > "$RUNNER_TEMP/values-before.yaml"
+          infrastructure_tooling/authentik/scripts/postgres-upgrade-test.sh "$RUNNER_TEMP/values-before.yaml" "$values"
