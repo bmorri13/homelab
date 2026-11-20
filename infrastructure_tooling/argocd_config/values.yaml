@@ -17,6 +17,10 @@ resourceCustomizations:
     # Report Ingress resources as Healthy despite an empty status.loadBalancer,
     # which never populates on this cluster's hostNetwork Traefik setup.
     enabled: true
+  mcpServerHealth:
+    # Report a ToolHive MCPServer's own state as its health. Without this Argo CD has no
+    # opinion on the kind, so an app is Healthy even when a backend never starts.
+    enabled: true
 
 # Local Argo CD accounts with API keys only (no UI login). Each gets the
 # built-in role named here through argocd-rbac-cm. Mint a key with the script
