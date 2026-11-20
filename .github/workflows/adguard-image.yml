@@ -1,0 +1,39 @@
+# Check an AdGuard Home version before it merges (the adguardhome image in
+# infrastructure_tooling/adguard/manifests/adguard.yaml): start it with this
+# repository's config and ask it to resolve a name. See
+# infrastructure_tooling/adguard/test-image.sh for what it does and does not prove.
+# No secrets. GitHub-hosted runner: the ARC runners for this repo cannot run containers.
+name: AdGuard image
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - infrastructure_tooling/adguard/**
+      - .github/workflows/adguard-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adguard-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Start AdGuard Home and resolve a name
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the pinned image and test it
+        run: |
+          command -v dig >/dev/null || sudo apt-get install -y -qq dnsutils
+          python3 -c 'import yaml' 2>/dev/null || sudo apt-get install -y -qq python3-yaml
+          infrastructure_tooling/adguard/test-image.sh
