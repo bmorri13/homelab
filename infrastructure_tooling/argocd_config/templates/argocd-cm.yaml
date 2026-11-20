@@ -141,6 +141,36 @@ data:
     hs.message = "Ingress is served by hostNetwork Traefik; no loadBalancer status expected on this cluster"
     return hs
 {{- end }}
+{{- if .Values.resourceCustomizations.mcpServerHealth.enabled }}
+  # A ToolHive MCPServer (toolhive_mcp mcpServers) is what the operator makes of it:
+  # Ready is Healthy, Failed is Degraded, Stopped is Suspended, and anything else, or a
+  # change the operator has not acted on yet, is Progressing. Argo CD has no built-in
+  # check for the kind, so without this an app stays Healthy when a backend's new image
+  # never starts, and the after-merge check in .factory/risk.md proves nothing.
+  resource.customizations.health.toolhive.stacklok.dev_MCPServer: |
+    hs = {}
+    if obj.status == nil or obj.status.phase == nil then
+      hs.status = "Progressing"
+      hs.message = "Waiting for the ToolHive operator"
+      return hs
+    end
+    if obj.status.observedGeneration ~= nil and obj.metadata.generation ~= nil and obj.status.observedGeneration ~= obj.metadata.generation then
+      hs.status = "Progressing"
+      hs.message = "The ToolHive operator has not acted on the latest change yet"
+      return hs
+    end
+    hs.message = obj.status.message or obj.status.phase
+    if obj.status.phase == "Ready" then
+      hs.status = "Healthy"
+    elseif obj.status.phase == "Failed" then
+      hs.status = "Degraded"
+    elseif obj.status.phase == "Stopped" then
+      hs.status = "Suspended"
+    else
+      hs.status = "Progressing"
+    end
+    return hs
+{{- end }}
 {{- range $name, $acct := .Values.apiAccounts }}
   # API-key-only account; its role is bound in argocd-rbac-cm.
   accounts.{{ $name }}: apiKey

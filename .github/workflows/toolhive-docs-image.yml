@@ -1,0 +1,36 @@
+# Check a ToolHive docs MCP version before it merges (the toolhive-doc-mcp image in
+# infrastructure_tooling/toolhive_mcp/values.yaml): start it and speak MCP to it. See
+# infrastructure_tooling/toolhive_mcp/test-docs-image.sh for what it does and does not prove.
+# No secrets. GitHub-hosted runner: the ARC runners for this repo cannot run containers.
+name: ToolHive docs image
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - infrastructure_tooling/toolhive_mcp/values.yaml
+      - infrastructure_tooling/toolhive_mcp/test-docs-image.sh
+      - .github/workflows/toolhive-docs-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toolhive-docs-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Start the docs MCP server and query it
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the pinned image and test it
+        run: infrastructure_tooling/toolhive_mcp/test-docs-image.sh
