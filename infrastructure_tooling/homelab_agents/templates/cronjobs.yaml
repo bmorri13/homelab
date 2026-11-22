@@ -62,6 +62,21 @@ spec:
                   value: /home/agent/.claude
                 - name: TMPDIR
                   value: /tmp
+                {{- if $.Values.traces.endpoint }}
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: {{ $.Values.traces.endpoint | quote }}
+                - name: OTEL_SERVICE_NAME
+                  value: homelab-agent-{{ $agent }}
+                # One Phoenix project for both agents (service.name tells them apart).
+                # Read by the runner's exporter and inherited by Claude Code's, so
+                # both layers of a trace land in the same project.
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: openinference.project.name=homelab-agents
+                {{- if $.Values.traces.toolDetails }}
+                - name: OTEL_LOG_TOOL_DETAILS
+                  value: "1"
+                {{- end }}
+                {{- end }}
                 # No telemetry, error reporting or update checks from Claude Code.
                 - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
                   value: "1"
