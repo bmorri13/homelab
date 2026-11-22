@@ -181,6 +181,10 @@ for want in (b"triage sec", b"retro sec", b"tool splunk-agent_splunk_run_query",
 assert b"row row row" not in body                                           # tool output never exported
 run_id = [e["event"] for e in sent if e["event"]["kind"] == "run"][0]["run_id"]
 assert body.count(b"session.id") >= 3 and body.count(run_id.encode()) >= 3, run_id   # every span in the run's session
+# Phoenix keeps a trace's first session.id: each traced span's "session" marker (ours) must
+# be exported before the SDK call starts, i.e. in an earlier request than its parent span.
+first = [i for i, (_, b) in enumerate(received) if run_id.encode() in b][0]
+assert b"triage sec" not in received[first][1] and b"session" in received[first][1]
 assert [e["event"]["kind"] for e in sent].count("step") == 2                 # Splunk steps unchanged
 srv.shutdown()
 print("otel ok")

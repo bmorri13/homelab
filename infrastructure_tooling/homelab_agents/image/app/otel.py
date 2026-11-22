@@ -127,7 +127,23 @@ def span(name, **attributes):
     with _tracer.start_as_current_span(name, attributes={"openinference.span.kind": "AGENT"}) as s:
         wrapped = Span(s)
         wrapped.set(**attributes)
+        if attributes.get("session.id"):
+            _claim_session(attributes["session.id"])
         yield wrapped
+
+
+def _claim_session(session_id):
+    """Phoenix files a trace under the first session.id it receives for it and ignores
+    later ones. Claude Code puts its own session id on every span it exports while the
+    call runs, and our span only goes out when it ends, so Claude's id would win. A
+    short child span with ours, sent before the SDK call starts, gets there first."""
+    with _tracer.start_as_current_span("session", attributes={"openinference.span.kind": "CHAIN",
+                                                             "session.id": session_id}):
+        pass
+    try:
+        _provider.force_flush(5_000)
+    except Exception as e:
+        print(f"otel: {e}", file=sys.stderr)
 
 
 def steps(span_, trace):
