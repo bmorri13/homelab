@@ -67,11 +67,10 @@ spec:
                   value: {{ $.Values.traces.endpoint | quote }}
                 - name: OTEL_SERVICE_NAME
                   value: homelab-agent-{{ $agent }}
-                # One Phoenix project for both agents (service.name tells them apart).
-                # Read by the runner's exporter and inherited by Claude Code's, so
-                # both layers of a trace land in the same project.
+                # A Phoenix project per agent. Read by the runner's exporter and
+                # inherited by Claude Code's, so both layers of a trace land in it.
                 - name: OTEL_RESOURCE_ATTRIBUTES
-                  value: openinference.project.name=homelab-agents
+                  value: openinference.project.name=homelab-agent-{{ $agent }}
                 {{- if $.Values.traces.toolDetails }}
                 - name: OTEL_LOG_TOOL_DETAILS
                   value: "1"

@@ -154,11 +154,12 @@ SELF_TEST_SCHEMA = {"type": "object", "additionalProperties": False,
                                        "note": {"type": "string"}}}}}}
 
 
-async def self_test(agent, gateway_token, claude_env):
+async def self_test(agent, gateway_token, claude_env, run_id=None):
     """Ask the agent to try allowed and forbidden actions; return its report plus the
     SDK's own record of tool calls and permission denials (the ground truth)."""
     tools_used, result = [], None
-    with otel.span(f"self-test {agent}", agent=agent) as sp, otel.sdk_env(claude_env) as env:
+    with otel.span(f"self-test {agent}", agent=agent, run_id=run_id, **{"session.id": run_id}) as sp, \
+            otel.sdk_env(claude_env) as env:
         async for message in query(prompt=SELF_TEST_PROMPT,
                                    options=agent_options(agent, gateway_token, env, SELF_TEST_SCHEMA)):
             if isinstance(message, AssistantMessage):
@@ -375,7 +376,8 @@ def close_vault(vault):
 async def retro_step(agent, traced, sdk_init, state, claude_env, run_id, dry_run, summary, events):
     """Run the retro over this run's traces and record what it found. Nothing here may
     fail the run: the triages are already posted."""
-    with otel.span(f"retro {agent}", agent=agent, run_id=run_id, items=[t[0]["key"] for t in traced]) as sp:
+    with otel.span(f"retro {agent}", agent=agent, run_id=run_id, items=[t[0]["key"] for t in traced],
+                   **{"session.id": run_id}) as sp:
         try:
             output, stats = await asyncio.wait_for(
                 retro.run(agent, traced, sdk_init, state.known_findings(), claude_env), config.RETRO_TIMEOUT_S)
@@ -429,7 +431,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
         state = State(agent)   # after Vault, so a state error can still be posted and logged
         gtoken = clients.read_token(config.GATEWAY_TOKEN_FILE)
         if test:
-            print(json.dumps(await self_test(agent, gtoken, claude_env), indent=2))
+            print(json.dumps(await self_test(agent, gtoken, claude_env, run_id), indent=2))
             return 0
         items = queues.COLLECTORS[agent](clients.Gateway(gtoken))
         if collect_only:
@@ -449,7 +451,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
             trace = Trace()
             with otel.span(f"triage {agent}", agent=agent, run_id=run_id, key=item["key"], title=item["title"],
                            severity=item["severity"], target_host=item["host"], origin=item["source"],
-                           **{"input.value": json.dumps(item.get("facts"), default=str)}) as sp:
+                           **{"input.value": json.dumps(item.get("facts"), default=str), "session.id": run_id}) as sp:
                 try:
                     item["triage"], stats = await asyncio.wait_for(
                         triage(agent, item, gtoken, claude_env, trace, sdk_init), config.ITEM_TIMEOUT_S)

@@ -6,7 +6,8 @@ and the retro. This exports the same story as OTLP so a trace viewer can show it
 Two layers end up in one trace (the pattern of the software-factory agent):
   - ours: one span per triage, retro or self-test, with the item and the verdict as
     attributes and every tool call as a span event (the fields Splunk gets: input,
-    duration, size, error; never the tool output)
+    duration, size, error; never the tool output). Each carries the run's id as the
+    OpenInference session.id, so Phoenix's Sessions tab shows one row per run.
   - the Claude Agent SDK's: its bundled CLI exports a span for each model request and
     tool call, nested under ours because the SDK hands it the current span as parent.
 

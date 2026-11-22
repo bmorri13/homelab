@@ -1,6 +1,6 @@
 # Phoenix
 
-[Arize Phoenix](https://github.com/Arize-ai/phoenix) is where the agents' OpenTelemetry traces go to be read: one trace per pull request the software-factory agent triages (project `default`), and one per triage, retro or self-test of the homelab sec and ops agents (project `homelab-agents`, see `../homelab_agents`), each with every model request and tool call under it. Later it also holds the eval datasets and results.
+[Arize Phoenix](https://github.com/Arize-ai/phoenix) is where the agents' OpenTelemetry traces go to be read: one trace per pull request the software-factory agent triages (project `default`), and one per triage, retro or self-test of the homelab sec and ops agents (projects `homelab-agent-sec` and `homelab-agent-ops`, each run a session; see `../homelab_agents`), each with every model request and tool call under it. Later it also holds the eval datasets and results.
 
 It is one pod with SQLite on a 5Gi volume, at `https://phoenix.bmosan.com` from the tailnet only.
 
