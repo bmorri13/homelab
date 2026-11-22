@@ -69,6 +69,9 @@ spec:
                   value: {{ $.Values.traces.endpoint | quote }}
                 - name: OTEL_SERVICE_NAME
                   value: software-factory
+                # Phoenix files these traces under a project of their own.
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: openinference.project.name=software-factory
                 {{- if $.Values.traces.toolDetails }}
                 - name: OTEL_LOG_TOOL_DETAILS
                   value: "1"

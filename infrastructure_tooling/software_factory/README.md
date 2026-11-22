@@ -34,6 +34,6 @@ kubectl apply -f infrastructure_tooling/software_factory/application.yaml
 | Keep the notes but stop all merging | `merge: false` on the repository in `values.yaml` |
 | Stop merging one kind of update | Change `merge` to `comment` on its rule in `.factory/risk.md` |
 | Run it now | `kubectl -n software-factory create job --from=cronjob/software-factory-bmorri13-homelab manual-1` |
-| See a run step by step | `https://phoenix.bmosan.com`: one trace per pull request, with each model request and tool call |
+| See a run step by step | `https://phoenix.bmosan.com`, project `software-factory`: each run is a session (its `run_id`), with one trace per pull request and one for the retro, each with its model requests and tool calls |
 | See what a run did | `kubectl -n software-factory logs job/<name>`: one JSON line per pull request (`software_factory.triage`, `software_factory.validate`) |
 | Add a repository | Install the GitHub App on it, add `.factory/risk.md` to it, add it to `repos` |
