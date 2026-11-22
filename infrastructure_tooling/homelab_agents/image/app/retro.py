@@ -15,6 +15,7 @@ import os
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, ToolUseBlock, query
 
 import config
+import otel
 
 CATEGORIES = ["context_docs", "deterministic_filter", "tool_economy", "tools_and_access",
               "skills", "system_prompt", "no_op", "output_quality"]
@@ -111,18 +112,20 @@ def options(claude_env):
         output_format={"type": "json_schema", "schema": SCHEMA},
         cwd=config.WORKSPACE,
         env=claude_env,
+        stderr=otel.diag,
     )
 
 
 async def run(agent, traced, init, known, claude_env):
     """Returns (output, stats). Raises when the model gave no usable result."""
     result, skill_invoked = None, False
-    async for message in query(prompt=build_prompt(agent, traced, init, known), options=options(claude_env)):
-        if isinstance(message, AssistantMessage):
-            skill_invoked |= any(isinstance(b, ToolUseBlock) and b.name == "Skill"
-                                 and (b.input or {}).get("skill") == "retro" for b in message.content)
-        elif isinstance(message, ResultMessage):
-            result = message
+    with otel.sdk_env(claude_env) as env:
+        async for message in query(prompt=build_prompt(agent, traced, init, known), options=options(env)):
+            if isinstance(message, AssistantMessage):
+                skill_invoked |= any(isinstance(b, ToolUseBlock) and b.name == "Skill"
+                                     and (b.input or {}).get("skill") == "retro" for b in message.content)
+            elif isinstance(message, ResultMessage):
+                result = message
     if result is None or result.is_error or result.structured_output is None:
         reason = (result.subtype if result else "no result") + (f" {result.errors}" if result and result.errors else "")
         raise RuntimeError(f"retro failed: {reason}")

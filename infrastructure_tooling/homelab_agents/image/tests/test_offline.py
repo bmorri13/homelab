@@ -139,4 +139,53 @@ old.executescript("DROP TABLE retro_findings; CREATE TABLE retro_findings (id IN
 old.close()
 assert State("sec").save_finding({**f, "observation": "o"})["times_seen"] == 1
 print("migration ok")
+
+# OpenTelemetry (otel.py): off without an endpoint; on, a run exports its spans to the
+# endpoint (a fake Phoenix on loopback), each SDK call gets a fresh CLAUDE_CONFIG_DIR that
+# is removed after, and tool output stays out of the spans.
+import http.server, threading
+import otel
+with otel.sdk_env({"CLAUDE_CODE_OAUTH_TOKEN": "tok"}) as env:
+    assert env == {"CLAUDE_CODE_OAUTH_TOKEN": "tok"}, env                   # tracing off: unchanged
+received = []
+class Sink(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        received.append((self.path, self.rfile.read(int(self.headers["Content-Length"]))))
+        self.send_response(200); self.end_headers()
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(("127.0.0.1", 0), Sink)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"http://127.0.0.1:{srv.server_port}"
+os.environ["OTEL_SERVICE_NAME"] = "homelab-agent-sec"
+with otel.sdk_env({}) as env:                                               # --local-login: no fresh dir
+    assert "CLAUDE_CONFIG_DIR" not in env and env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
+envs = []
+inner = fake_query
+async def recording_query(prompt, options):
+    envs.append(dict(options.env))
+    assert os.path.isdir(options.env["CLAUDE_CONFIG_DIR"])
+    async for m in inner(prompt, options):
+        yield m
+runner.query = retro.query = recording_query
+config.RETRO_START_BY_S = 1260; calls["triage"] = 20; sent.clear()
+for i in ITEMS: i["key"] += "e"
+rc = asyncio.run(runner.run("sec", False, False, 10)); otel.flush()
+assert rc == 0 and len(envs) == 3, envs                                     # 2 triages + the retro
+dirs = {e["CLAUDE_CONFIG_DIR"] for e in envs}
+assert len(dirs) == 3 and not any(os.path.exists(d) for d in dirs), dirs     # one each, removed after
+assert all(e["CLAUDE_CODE_OAUTH_TOKEN"] == "tok" and e["OTEL_TRACES_EXPORTER"] == "otlp" for e in envs)
+body = b"".join(b for path, b in received if path == "/v1/traces")
+for want in (b"triage sec", b"retro sec", b"tool splunk-agent_splunk_run_query", b"SECRETLOGLINE",
+             b"agent.verdict", b"suspicious", b"homelab-agent-sec", b"AGENT", b"Same actor every time"):
+    assert want in body, want
+assert b"row row row" not in body                                           # tool output never exported
+run_id = [e["event"] for e in sent if e["event"]["kind"] == "run"][0]["run_id"]
+assert body.count(b"session.id") >= 3 and body.count(run_id.encode()) >= 3, run_id   # every span in the run's session
+# Phoenix keeps a trace's first session.id: each traced span's "session" marker (ours) must
+# be exported before the SDK call starts, i.e. in an earlier request than its parent span.
+first = [i for i, (_, b) in enumerate(received) if run_id.encode() in b][0]
+assert b"triage sec" not in received[first][1] and b"session" in received[first][1]
+assert [e["event"]["kind"] for e in sent].count("step") == 2                 # Splunk steps unchanged
+srv.shutdown()
+print("otel ok")
 print("all ok")

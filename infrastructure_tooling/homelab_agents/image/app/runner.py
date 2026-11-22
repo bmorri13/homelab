@@ -34,6 +34,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage
 
 import clients
 import config
+import otel
 import queues
 import retro
 from state import State
@@ -93,6 +94,7 @@ def agent_options(agent, gateway_token, claude_env, output_schema):
         output_format={"type": "json_schema", "schema": output_schema},
         cwd=config.WORKSPACE,
         env=claude_env,
+        stderr=otel.diag,
     )
 
 
@@ -107,18 +109,19 @@ async def triage(agent, item, gateway_token, claude_env, trace, sdk_init):
         f"<item>\n{json.dumps({k: item[k] for k in ('title', 'severity', 'host', 'source', 'facts')}, indent=2)}\n</item>\n\n"
         f"<runbook>\n{runbook}\n</runbook>"
     )
-    options = agent_options(agent, gateway_token, claude_env, schema(agent))
     result, init = None, {}
-    async for message in query(prompt=prompt, options=options):
-        trace.add(message)
-        if isinstance(message, SystemMessage) and message.subtype == "init":
-            init = message.data
-            sdk_init.update(init)
-            gateway = next((m for m in init.get("mcp_servers", []) if m.get("name") == "homelab"), {})
-            if gateway.get("status") in ("failed", "needs-auth"):
-                raise RuntimeError(f"gateway MCP server {gateway.get('status')}")
-        elif isinstance(message, ResultMessage):
-            result = message
+    with otel.sdk_env(claude_env) as env:
+        options = agent_options(agent, gateway_token, env, schema(agent))
+        async for message in query(prompt=prompt, options=options):
+            trace.add(message)
+            if isinstance(message, SystemMessage) and message.subtype == "init":
+                init = message.data
+                sdk_init.update(init)
+                gateway = next((m for m in init.get("mcp_servers", []) if m.get("name") == "homelab"), {})
+                if gateway.get("status") in ("failed", "needs-auth"):
+                    raise RuntimeError(f"gateway MCP server {gateway.get('status')}")
+            elif isinstance(message, ResultMessage):
+                result = message
     if result is None or result.is_error or result.structured_output is None:
         reason = (result.subtype if result else "no result") + (f" {result.errors}" if result and result.errors else "")
         raise RuntimeError(f"triage failed: {reason}")
@@ -151,17 +154,24 @@ SELF_TEST_SCHEMA = {"type": "object", "additionalProperties": False,
                                        "note": {"type": "string"}}}}}}
 
 
-async def self_test(agent, gateway_token, claude_env):
+async def self_test(agent, gateway_token, claude_env, run_id=None):
     """Ask the agent to try allowed and forbidden actions; return its report plus the
     SDK's own record of tool calls and permission denials (the ground truth)."""
     tools_used, result = [], None
-    async for message in query(prompt=SELF_TEST_PROMPT,
-                               options=agent_options(agent, gateway_token, claude_env, SELF_TEST_SCHEMA)):
-        if isinstance(message, AssistantMessage):
-            tools_used += [{"tool": b.name, "input": str(b.input)[:120]} for b in message.content
-                           if isinstance(b, ToolUseBlock)]
-        elif isinstance(message, ResultMessage):
-            result = message
+    with otel.span(f"self-test {agent}", agent=agent, run_id=run_id, **{"session.id": run_id}) as sp, \
+            otel.sdk_env(claude_env) as env:
+        async for message in query(prompt=SELF_TEST_PROMPT,
+                                   options=agent_options(agent, gateway_token, env, SELF_TEST_SCHEMA)):
+            if isinstance(message, AssistantMessage):
+                tools_used += [{"tool": b.name, "input": str(b.input)[:120]} for b in message.content
+                               if isinstance(b, ToolUseBlock)]
+                for b in message.content:
+                    if isinstance(b, ToolUseBlock):
+                        sp.event(f"tool {b.name}", input=str(b.input)[:120])
+            elif isinstance(message, ResultMessage):
+                result = message
+        sp.set(tool_calls=len(tools_used), permission_denials=len(result.permission_denials or []) if result else None,
+               **{"output.value": json.dumps(result.structured_output) if result and result.structured_output else None})
     return {"report": result.structured_output if result else None,
             "tool_calls": tools_used,
             "permission_denials": [str(d)[:200] for d in (result.permission_denials or [])] if result else None}
@@ -366,13 +376,20 @@ def close_vault(vault):
 async def retro_step(agent, traced, sdk_init, state, claude_env, run_id, dry_run, summary, events):
     """Run the retro over this run's traces and record what it found. Nothing here may
     fail the run: the triages are already posted."""
-    try:
-        output, stats = await asyncio.wait_for(
-            retro.run(agent, traced, sdk_init, state.known_findings(), claude_env), config.RETRO_TIMEOUT_S)
-    except Exception as e:
-        summary["retro_error"] = (f"timed out after {config.RETRO_TIMEOUT_S} s" if isinstance(e, TimeoutError)
-                                  else f"{type(e).__name__}: {e}")[:300]
-        return
+    with otel.span(f"retro {agent}", agent=agent, run_id=run_id, items=[t[0]["key"] for t in traced],
+                   **{"session.id": run_id}) as sp:
+        try:
+            output, stats = await asyncio.wait_for(
+                retro.run(agent, traced, sdk_init, state.known_findings(), claude_env), config.RETRO_TIMEOUT_S)
+        except Exception as e:
+            summary["retro_error"] = (f"timed out after {config.RETRO_TIMEOUT_S} s" if isinstance(e, TimeoutError)
+                                      else f"{type(e).__name__}: {e}")[:300]
+            sp.failed(summary["retro_error"])
+            return
+        for f in output.get("findings", [])[:retro.MAX_FINDINGS]:
+            sp.event("finding", **f)
+        sp.set(findings=len(output.get("findings", [])), cost_usd=stats["cost_usd"],
+               **{"output.value": output.get("summary")})
     findings = output.get("findings", [])[:retro.MAX_FINDINGS]
     summary.update(retro_findings=len(findings), retro_new=0, retro_cost_usd=stats["cost_usd"],
                    retro_summary=output.get("summary"), retro_skill_invoked=stats["skill_invoked"])
@@ -414,7 +431,7 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
         state = State(agent)   # after Vault, so a state error can still be posted and logged
         gtoken = clients.read_token(config.GATEWAY_TOKEN_FILE)
         if test:
-            print(json.dumps(await self_test(agent, gtoken, claude_env), indent=2))
+            print(json.dumps(await self_test(agent, gtoken, claude_env, run_id), indent=2))
             return 0
         items = queues.COLLECTORS[agent](clients.Gateway(gtoken))
         if collect_only:
@@ -432,16 +449,23 @@ async def run(agent, dry_run, local_login, limit, collect_only=False, test=False
                 triage_now, summary["deferred"] = triage_now[:n], len(triage_now) - n
                 break
             trace = Trace()
-            try:
-                item["triage"], stats = await asyncio.wait_for(
-                    triage(agent, item, gtoken, claude_env, trace, sdk_init), config.ITEM_TIMEOUT_S)
-                summary["triaged"] += 1
-                summary["cost_usd"] += stats.get("cost_usd") or 0
-            except Exception as e:  # one bad item mustn't stop the others
-                item["triage"], stats = None, {"tools_used": trace.tools_used(), **trace.metrics()}
-                item["triage_error"] = (f"timed out after {config.ITEM_TIMEOUT_S} s" if isinstance(e, TimeoutError)
-                                        else str(e))[:300]
-                summary["triage_errors"] += 1
+            with otel.span(f"triage {agent}", agent=agent, run_id=run_id, key=item["key"], title=item["title"],
+                           severity=item["severity"], target_host=item["host"], origin=item["source"],
+                           **{"input.value": json.dumps(item.get("facts"), default=str), "session.id": run_id}) as sp:
+                try:
+                    item["triage"], stats = await asyncio.wait_for(
+                        triage(agent, item, gtoken, claude_env, trace, sdk_init), config.ITEM_TIMEOUT_S)
+                    summary["triaged"] += 1
+                    summary["cost_usd"] += stats.get("cost_usd") or 0
+                except Exception as e:  # one bad item mustn't stop the others
+                    item["triage"], stats = None, {"tools_used": trace.tools_used(), **trace.metrics()}
+                    item["triage_error"] = (f"timed out after {config.ITEM_TIMEOUT_S} s" if isinstance(e, TimeoutError)
+                                            else str(e))[:300]
+                    summary["triage_errors"] += 1
+                    sp.failed(item["triage_error"])
+                otel.steps(sp, trace)
+                sp.set(verdict=(item["triage"] or {}).get("verdict"), **{k: v for k, v in stats.items() if k != "tools_used"},
+                       **{"output.value": json.dumps(item["triage"]) if item["triage"] else None})
             if item["triage"] is None and state.triage_failed(item["key"]) < config.TRIAGE_ATTEMPTS:
                 item["retry"] = True  # not posted or marked; the next run tries again
                 summary["retrying"] += 1
@@ -514,7 +538,9 @@ def main():
     p.add_argument("--collect-only", action="store_true")
     p.add_argument("--self-test", action="store_true", help="check the sandbox: allowed and forbidden tool use")
     a = p.parse_args()
-    sys.exit(asyncio.run(run(a.agent, a.dry_run, a.local_login, a.limit, a.collect_only, a.self_test)))
+    code = asyncio.run(run(a.agent, a.dry_run, a.local_login, a.limit, a.collect_only, a.self_test))
+    otel.flush()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

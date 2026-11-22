@@ -1,5 +1,5 @@
 # The agent pods accept no connections and can reach only: DNS, the vMCP gateway,
-# Vault, Splunk HEC, and HTTPS on the public internet (Anthropic API, Slack, Splunk
+# Vault, Splunk HEC, Phoenix (traces, when set), and HTTPS on the public internet (Anthropic API, Slack, Splunk
 # docs). The gateway side admits them with its own policy (toolhive_mcp
 # networkpolicies.yaml, allow-agents).
 apiVersion: networking.k8s.io/v1
@@ -49,6 +49,14 @@ spec:
             cidr: {{ .Values.networkPolicy.hec.cidr }}
       ports:
         - {protocol: TCP, port: {{ .Values.networkPolicy.hec.port }}}
+    {{- if .Values.traces.endpoint }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.traces.namespace }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.traces.port }}}
+    {{- end }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

@@ -15,6 +15,7 @@ retentionDays: 30
 # Namespaces whose pods may send traces (OTLP over HTTP to port 6006, path /v1/traces).
 senders:
   - software-factory
+  - toolhive-clients   # the homelab sec and ops agents (../homelab_agents)
 
 storage:
   storageClass: local-path

@@ -34,6 +34,18 @@ env:
   # The end-of-run retro (image/app/retro.py): "0" turns it off, the triage is unaffected.
   RETRO: "1"
 
+# OpenTelemetry traces to Phoenix (../phoenix): one per triage, retro or self-test, with
+# every tool call as an event and Claude Code's own model and tool spans under it
+# (image/app/otel.py). Empty endpoint: no traces. Splunk's kind=step events are kept
+# either way.
+traces:
+  endpoint: http://phoenix.phoenix.svc.cluster.local:6006
+  namespace: phoenix
+  port: 6006
+  # Also record tool arguments in Claude Code's spans (SPL queries, file paths). Not
+  # prompts or tool output.
+  toolDetails: true
+
 # Projected ServiceAccount tokens. The gateway validates audience
 # https://mcp.bmosan.com; Vault role homelab-agents expects audience "vault".
 tokens:

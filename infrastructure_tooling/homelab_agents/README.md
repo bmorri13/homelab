@@ -99,6 +99,8 @@ flowchart LR
 - each item's log event gains `steps`, `tool_errors`, `repeat_calls` (the same call made twice), `result_chars`, `max_result_chars` and `denied` (tools the sandbox refused);
 - each call becomes a `kind=step` event (tool, input clipped to 500 characters, `ms`, `is_error`, `result_chars`, and the error text when it failed). Tool output is never sent, only its size.
 
+**Traces in Phoenix** (`app/otel.py`, [`../phoenix`](../phoenix/README.md)). When `traces.endpoint` is set in `values.yaml`, the same story is also exported as OpenTelemetry, one Phoenix project per agent (`homelab-agent-sec`, `homelab-agent-ops`). Each run is a Phoenix session (`session.id` is the run's `run_id`, the same id as in Splunk), so a project's Sessions tab lists the runs and each opens to its triages and retro in order. Claude Code tags its own spans with its session id, and Phoenix keeps the first one it sees, so each traced span first sends a short `session` child span carrying the run id. Each triage is one span with the item (title, severity, host, facts as `input.value`), the verdict and the item's stats as attributes and every tool call as an event carrying the same fields as its `kind=step` event; the retro and `--self-test` get a span each. Claude Code's own spans for each model request and tool call nest under it (tool arguments included, `OTEL_LOG_TOOL_DETAILS`; never prompts or tool output). That layer is best effort, as the SDK's tracing is in beta, so the runner's span carries the whole record by itself. With tracing on, each SDK call gets a configuration directory of its own under `/tmp`, removed after: Claude Code's spans arrive broken on the second and later runs in one directory (seen in software-factory, 2026-11-18). An empty endpoint turns all of it off; Splunk gets its events either way.
+
 **Retro** (`app/retro.py`, `skills/retro/SKILL.md`). One more model call (`claude-sonnet-5-5`, 180 s at most) with the `retro` skill, adapted from [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering/retro) (MIT): that skill reviews a coding session, ours reviews a triage run with the same categories restated. It is given the agent's system prompt, the runbooks the run used, the tool and skill lists, and each item's result and trace (with a 300-character preview of each tool result, in memory only). It returns at most four findings, each with:
 
 | Field | What |
@@ -196,9 +198,10 @@ The pods accept no connections. They can reach:
 - the vMCP Service (`vmcp-homelab.toolhive-mcp:4483`), which admits them through the gateway's `allow-agents` NetworkPolicy;
 - Vault (`vault.vault:8200`);
 - Splunk HEC (`192.168.4.11:8443`, HTTPS; the cert is checked against the homelab CA only, `files/homelab-ca.crt`);
+- Phoenix (`phoenix.phoenix:6006`, traces), when `traces.endpoint` is set; Phoenix admits the namespace through `senders` in its own values;
 - HTTPS on the public internet (Anthropic API, Slack, Splunk docs), with private ranges excluded.
 
-Claude Code's telemetry and update checks are off (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`).
+Claude Code's own telemetry to Anthropic, error reporting and update checks are off (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`); its OpenTelemetry export to Phoenix is a separate switch, turned on per call by the runner.
 
 ## Operating it
 
