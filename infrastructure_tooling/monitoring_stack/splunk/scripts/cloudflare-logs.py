@@ -25,7 +25,8 @@ from OVERLAP before the checkpoint, so late events are picked up, and skips ids 
 already sent, so nothing is sent twice. A checkpoint only moves after Cribl accepted
 the events, so a failed send is retried on the next run. The first run of a stream
 goes back 24 hours (audit: 29 days, so the "first seen" detections have a baseline
-from the start; a few hundred events). traffic keeps the last hour it sent per zone.
+from the start; a few hundred events). traffic keeps the last hour it asked for per
+zone, whether or not that hour had requests, and never asks for more than 71 hours.
 
 Event time is Cloudflare's timestamp (the snapshot time for tunnel). host is
 "cloudflare"; source is cloudflare-logs:<stream>.
@@ -72,6 +73,7 @@ OVERLAP = dt.timedelta(minutes=30)   # asked again each run, for late events
 BACKFILL = dt.timedelta(hours=24)    # how far back a stream's first run goes
 AUDIT_BACKFILL = dt.timedelta(days=29)   # the audit log's first run: a baseline for the detections
 FIREWALL_MAX_AGE = dt.timedelta(hours=23)   # GraphQL caps a query's range; stay under a day
+TRAFFIC_MAX_AGE = dt.timedelta(hours=71)    # httpRequests1hGroups refuses ranges over 3 days
 MAX_PAGES = 50                       # per stream per run; the rest waits for the next run
 HEC_BATCH = 200                      # events per HEC request
 
@@ -367,13 +369,19 @@ def firewall(cf, zone_id, zone_name, cp, until):
 
 
 def traffic(cf, zone_id, zone_name, last_hour, until):
-    """Complete hours after last_hour (or the last BACKFILL) for one zone."""
+    """Complete hours after last_hour (or the last BACKFILL) for one zone, and the last
+    hour asked for. A zone with no requests returns no rows, so the caller keeps that
+    hour rather than the newest row: otherwise a quiet zone's range grows each run until
+    GraphQL refuses it (bmosanlabs.com, 2026-11-20). The range is capped at
+    TRAFFIC_MAX_AGE for the same reason, so a long outage loses its oldest hours instead
+    of failing for good."""
     # The start of the current hour, or of the last one while its totals may still be
     # arriving (the first 15 minutes after it ends).
     hour = (until - dt.timedelta(minutes=15)).replace(minute=0, second=0, microsecond=0)
     start = last_hour + dt.timedelta(hours=1) if last_hour else hour - BACKFILL
+    start = max(start, hour - TRAFFIC_MAX_AGE)
     if start >= hour:
-        return []
+        return [], last_hour
     data = cf.graphql(TRAFFIC_QUERY, {"zone": zone_id, "since": iso(start), "until": iso(hour)})
     rows = ((data.get("viewer") or {}).get("zones") or [{}])[0].get("httpRequests1hGroups") or []
     out = []
@@ -383,7 +391,7 @@ def traffic(cf, zone_id, zone_name, last_hour, until):
             continue
         event = {"zone": zone_name, "hour": iso(t), **(r.get("sum") or {}), **(r.get("uniq") or {})}
         out.append((f"{zone_name}|{iso(t)}", t, event))
-    return out
+    return out, hour - dt.timedelta(hours=1)
 
 
 # ---- output -----------------------------------------------------------------------------
@@ -486,10 +494,10 @@ def main():
                             zstate[zone_name] = cp.dump()
                         else:
                             last = parse_time(zstate.get(zone_name))
-                            events = traffic(cf, zone_id, zone_name, last, until)
+                            events, asked = traffic(cf, zone_id, zone_name, last, until)
                             sender.send(stream, events)
-                            if events:
-                                zstate[zone_name] = iso(max(t for _, t, _ in events))
+                            if asked:
+                                zstate[zone_name] = iso(asked)
                         commit()
                         total += len(events)
                     except Skip as e:
