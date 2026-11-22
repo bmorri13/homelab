@@ -1,0 +1,23 @@
+{
+  "id": "poc_samples_fs",
+  "type": "filesystem",
+  "description": "siem-software-factory POC: captured Splunk events as JSON lines, one directory per capture run (host /srv/siem-factory/incoming). Not used by any route.",
+  "destPath": "/opt/cribl/siem-factory/incoming",
+  "stagePath": "/opt/cribl/siem-factory/.staging",
+  "addIdToStagePath": true,
+  "removeEmptyDirs": true,
+  "partitionExpr": "`${sf_run_id}`",
+  "format": "json",
+  "baseFileName": "`events`",
+  "fileNameSuffix": "`.${C.env[\"CRIBL_WORKER_ID\"]}.jsonl`",
+  "compress": "none",
+  "maxFileSizeMB": 64,
+  "maxFileOpenTimeSec": 60,
+  "maxFileIdleTimeSec": 5,
+  "maxOpenFiles": 10,
+  "onBackpressure": "block",
+  "onDiskFullBackpressure": "block",
+  "deadletterEnabled": false,
+  "systemFields": [],
+  "streamtags": ["siem-factory-poc"]
+}

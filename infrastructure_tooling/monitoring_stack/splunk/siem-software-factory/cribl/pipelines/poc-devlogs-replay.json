@@ -1,0 +1,62 @@
+{
+  "id": "poc-devlogs-replay",
+  "conf": {
+    "output": "default",
+    "streamtags": [
+      "siem-factory-poc"
+    ],
+    "groups": {},
+    "asyncFuncTimeout": 1000,
+    "description": "siem-software-factory POC: turn saved sample records back into their original events for Splunk index=devlogs over HEC. Used only by collector poc-dataset-replay.",
+    "functions": [
+      {
+        "id": "comment",
+        "filter": "true",
+        "conf": {
+          "comment": "Input: one events.jsonl record per event (breaker poc-dataset-jsonl). Output: the original _raw, _time, host, source and sourcetype; index forced to devlogs; sf_* correlation fields sent as HEC indexed fields."
+        }
+      },
+      {
+        "id": "code",
+        "filter": "true",
+        "description": "Restore original event from the sample record",
+        "conf": {
+          "maxNumOfIterations": 5000,
+          "activeLogSampleRate": 1,
+          "code": "// One events.jsonl record per event (schema siem-factory.event/v1). Restore the\n// original event exactly as captured; only the index changes, to devlogs.\nlet rec = null;\ntry { rec = JSON.parse(__e._raw); } catch (err) { rec = null; }\nif (!rec || rec.sf_schema !== 'siem-factory.event/v1' || typeof rec._raw !== 'string' || !(rec._time > 0)) {\n  __e.sf_drop_reason = 'not_a_sample_record';\n} else {\n  __e._raw = rec._raw;\n  __e._time = rec._time;                       // original event time, not now\n  __e.host = rec.sf_orig_host;\n  __e.source = rec.sf_orig_source;\n  __e.sourcetype = rec.sf_orig_sourcetype;     // unchanged, so its props apply\n  __e.index = 'devlogs';                       // the HEC token allows nothing else\n  __e.sf_orig_index = rec.sf_orig_index;\n  __e.sf_dataset_id = rec.sf_dataset_id;\n  __e.sf_seq = rec.sf_seq;\n  __e.sf_run_id = rec.sf_run_id;\n  __e.sf_splunk_event_id = rec.sf_splunk_event_id;\n  __e.sf_raw_sha256 = rec.sf_raw_sha256;\n  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(String(__e.sf_replay_id || ''))) {\n    __e.sf_replay_id = 'manual';\n  }\n}"
+        }
+      },
+      {
+        "id": "drop",
+        "filter": "!!sf_drop_reason",
+        "description": "Not a sample record",
+        "conf": {}
+      },
+      {
+        "id": "eval",
+        "filter": "true",
+        "description": "Send only the original event and the correlation fields",
+        "conf": {
+          "keep": [
+            "_raw",
+            "_time",
+            "host",
+            "source",
+            "sourcetype",
+            "index",
+            "sf_orig_index",
+            "sf_dataset_id",
+            "sf_seq",
+            "sf_run_id",
+            "sf_replay_id",
+            "sf_splunk_event_id",
+            "sf_raw_sha256"
+          ],
+          "remove": [
+            "*"
+          ]
+        }
+      }
+    ]
+  }
+}

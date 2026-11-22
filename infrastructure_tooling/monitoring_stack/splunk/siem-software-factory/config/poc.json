@@ -1,0 +1,46 @@
+{
+  "_comment": "Non-secret settings for the siem-software-factory POC. Secrets live in Cribl (encrypted secrets), Splunk (tokens) and /root/.siem-factory on security-tooling-01 - never here.",
+  "collector_id": "poc-splunk-search",
+  "replay_collector_id": "poc-dataset-replay",
+  "source": {
+    "index": "security",
+    "sourcetype": "falco:ocsf",
+    "category": "falco",
+    "earliest": "-48h",
+    "latest": "now"
+  },
+  "max_events_default": 100,
+  "max_events_limit": 1000,
+  "dev_index": "devlogs",
+  "splunk": {
+    "api": "https://192.168.4.11:8089",
+    "worker_search_head": "https://192.168.4.11:8089",
+    "worker_hec": "https://splunk-homelab:8088/services/collector/event",
+    "app": "siem_factory_poc",
+    "collector_user": "sscpoc-search-collector",
+    "collector_role": "sscpoc_search_collector",
+    "validator_user": "sscpoc-validator",
+    "validator_role": "sscpoc_validator",
+    "hec_input": "sscpoc_devlogs",
+    "token_lifetime": "+30d",
+    "token_renew_days": 7
+  },
+  "cribl": {
+    "search_token_secret": "poc_splunk_search_token",
+    "hec_token_secret": "poc_devlogs_hec_token",
+    "capture_pipeline": "poc-sample-processing",
+    "replay_pipeline": "poc-devlogs-replay",
+    "capture_output": "poc_samples_fs",
+    "replay_output": "poc_devlogs_hec"
+  },
+  "paths": {
+    "host_data": "/srv/siem-factory",
+    "worker_data": "/opt/cribl/siem-factory",
+    "secrets_dir": "/root/.siem-factory"
+  },
+  "timeouts": {
+    "job_seconds": 600,
+    "file_settle_seconds": 120,
+    "index_settle_seconds": 180
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "poc-splunk-search-json",
+  "lib": "custom",
+  "description": "siem-software-factory POC: one event per line of a Splunk search export (output_mode=json). The shipped Splunk Search Ruleset's json rule (condition __outputMode === \"json\") did not match on Cribl 4.20.4, so its events fell to the fallback breaker. The time comes from result._time in poc-sample-processing, not from here.",
+  "tags": "siem-factory-poc",
+  "minRawLength": 256,
+  "rules": [
+    {
+      "name": "splunk-export-ndjson",
+      "condition": "true",
+      "type": "regex",
+      "eventBreakerRegex": "/[\\n\\r]+(?=\\{)/",
+      "timestampAnchorRegex": "/^/",
+      "timestamp": {"type": "current", "length": 150},
+      "timestampTimezone": "utc",
+      "maxEventBytes": 1048576,
+      "disabled": false
+    }
+  ]
+}

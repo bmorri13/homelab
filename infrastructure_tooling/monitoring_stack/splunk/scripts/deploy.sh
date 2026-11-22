@@ -16,6 +16,7 @@ DATA_DIR="${SPLUNK_DATA_DIR:-/srv/splunk}"
 ARCHIVE_DIR="${SPLUNK_ARCHIVE_HOST_DIR:-/mnt/unraid-splunk}"
 CRIBL_DIR="${CRIBL_DATA_DIR:-/srv/cribl}"
 CRIBL_WORKER_DIR="${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}"
+SIEM_FACTORY_DIR="${SIEM_FACTORY_DATA_DIR:-/srv/siem-factory}"
 CRIBL_GROUP=default
 
 wait_healthy() {
@@ -31,6 +32,8 @@ wait_healthy() {
 }
 
 mkdir -p "$DATA_DIR/etc" "$DATA_DIR/var" "$ARCHIVE_DIR" "$CRIBL_DIR" "$CRIBL_WORKER_DIR"
+# Captured Splunk events (siem-software-factory/): root only.
+install -d -m 700 "$SIEM_FACTORY_DIR"
 
 # Only k3s-01 may reach the published Splunk management port. Applied before any
 # container starts, and on every boot by the systemd unit.

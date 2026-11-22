@@ -1,0 +1,20 @@
+{
+  "id": "poc-dataset-jsonl",
+  "lib": "custom",
+  "description": "siem-software-factory POC: one sample record (events.jsonl line) per event, left unparsed for poc-devlogs-replay. The time comes from the record, not from here.",
+  "tags": "siem-factory-poc",
+  "minRawLength": 256,
+  "rules": [
+    {
+      "name": "dataset-record-per-line",
+      "condition": "true",
+      "type": "regex",
+      "eventBreakerRegex": "/[\\n\\r]+(?=\\{)/",
+      "timestampAnchorRegex": "/^/",
+      "timestamp": {"type": "current", "length": 150},
+      "timestampTimezone": "utc",
+      "maxEventBytes": 1048576,
+      "disabled": false
+    }
+  ]
+}

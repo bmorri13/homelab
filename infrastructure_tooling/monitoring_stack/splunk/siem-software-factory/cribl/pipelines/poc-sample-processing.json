@@ -1,0 +1,56 @@
+{
+  "id": "poc-sample-processing",
+  "conf": {
+    "output": "default",
+    "streamtags": [
+      "siem-factory-poc"
+    ],
+    "groups": {},
+    "asyncFuncTimeout": 1000,
+    "description": "siem-software-factory POC: turn Splunk search export lines back into the original events, with their Splunk metadata and collection metadata (sf_*). Used only by collector poc-splunk-search.",
+    "functions": [
+      {
+        "id": "comment",
+        "filter": "true",
+        "conf": {
+          "comment": "Input: one Splunk export line per event (breaker poc-splunk-search-json). Output: _raw/_time/host/source/sourcetype/index of the ORIGINAL event, plus sf_* fields. The export wrapper never reaches the output."
+        }
+      },
+      {
+        "id": "code",
+        "filter": "true",
+        "description": "Unwrap result, restore original event and metadata",
+        "conf": {
+          "maxNumOfIterations": 5000,
+          "activeLogSampleRate": 1,
+          "code": "// A Splunk export line is {\"preview\":false,\"offset\":N,\"result\":{...}}. The\n// result holds the original event; everything outside it is the API's wrapper.\nlet w = null;\ntry { w = JSON.parse(__e._raw); } catch (err) { w = null; }\nconst r = w && w.result;\nif (!r || typeof r._raw !== 'string') {\n  __e.sf_drop_reason = 'not_a_result';           // messages, empty lines\n} else if (w.preview === true) {\n  __e.sf_drop_reason = 'preview_row';            // partial results would duplicate\n} else if (r.index === 'devlogs') {\n  __e.sf_drop_reason = 'dev_index_loop_guard';   // never capture our own output\n} else {\n  // Original event time. time_format=%s.%6N gives epoch seconds; otherwise\n  // Splunk's default \"YYYY-mm-dd HH:MM:SS.mmm GMT\".\n  const t = String(r._time);\n  const epoch = /^\\d+(\\.\\d+)?$/.test(t) ? parseFloat(t)\n    : Date.parse(t.replace(/ GMT$/, 'Z').replace(' ', 'T')) / 1000;\n  if (!(epoch > 0)) {                         // NaN fails too\n    __e.sf_drop_reason = 'unparsed_time';\n  } else {\n    __e._raw = r._raw;\n    __e._time = epoch;\n    __e.host = r.host;\n    __e.source = r.source;\n    __e.sourcetype = r.sourcetype;\n    __e.index = r.index;\n    __e.sf_schema = 'siem-factory.event/v1';\n    __e.sf_orig_index = r.index;\n    __e.sf_orig_host = r.host;\n    __e.sf_orig_source = r.source;\n    __e.sf_orig_sourcetype = r.sourcetype;\n    __e.sf_splunk_event_id = r.splunk_server + '/' + r._bkt + '/' + r._cd;\n    __e.sf_splunk_indextime = parseInt(r._indextime, 10);\n    __e.sf_result_offset = w.offset;\n    __e.sf_raw_sha256 = C.Mask.sha256(r._raw);\n    __e.sf_collected_at = new Date().toISOString();\n    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(String(__e.sf_run_id || ''))) {\n      __e.sf_run_id = 'manual';                  // run from the UI: no run id passed\n    }\n  }\n}"
+        }
+      },
+      {
+        "id": "drop",
+        "filter": "!!sf_drop_reason",
+        "description": "Not an event, a preview row, or from the dev index",
+        "conf": {}
+      },
+      {
+        "id": "eval",
+        "filter": "true",
+        "description": "Keep only the sample schema fields",
+        "conf": {
+          "keep": [
+            "_raw",
+            "_time",
+            "host",
+            "source",
+            "sourcetype",
+            "index",
+            "sf_*"
+          ],
+          "remove": [
+            "*"
+          ]
+        }
+      }
+    ]
+  }
+}

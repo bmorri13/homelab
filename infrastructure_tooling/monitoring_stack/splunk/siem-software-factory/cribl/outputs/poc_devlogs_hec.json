@@ -1,0 +1,23 @@
+{
+  "id": "poc_devlogs_hec",
+  "type": "splunk_hec",
+  "description": "siem-software-factory POC: replayed sample events to Splunk index=devlogs over HEC (HTTPS, cert verified). Its token may only write devlogs. Not used by any route.",
+  "url": "https://splunk-homelab:8088/services/collector/event",
+  "authType": "secret",
+  "textSecret": "poc_devlogs_hec_token",
+  "rejectUnauthorized": true,
+  "loadBalanced": false,
+  "concurrency": 2,
+  "maxPayloadSizeKB": 1024,
+  "maxPayloadEvents": 0,
+  "compress": true,
+  "timeoutSec": 30,
+  "flushPeriodSec": 1,
+  "failedRequestLoggingMode": "none",
+  "onBackpressure": "block",
+  "nextQueue": "indexQueue",
+  "tcpRouting": "nowhere",
+  "enableMultiMetrics": false,
+  "systemFields": [],
+  "streamtags": ["siem-factory-poc"]
+}

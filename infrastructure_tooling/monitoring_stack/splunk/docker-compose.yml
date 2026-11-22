@@ -100,6 +100,9 @@ services:
       - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
       - CRIBL_DIST_MODE=worker
       - CRIBL_DIST_MASTER_URL=tcp://${CRIBL_DIST_TOKEN:?set CRIBL_DIST_TOKEN in .env}@cribl:4200?group=default
+      # Trust the homelab CA (written by tls-certs.sh) for the Worker's own HTTPS
+      # calls to Splunk at splunk-homelab:8089/8088 (siem-software-factory/).
+      - NODE_EXTRA_CA_CERTS=/opt/cribl/tls/ca.crt
     ports:
       - "514:9514/udp"    # syslog: Proxmox, Unraid, other hosts -> index=infra
       - "514:9514/tcp"
@@ -115,6 +118,9 @@ services:
       - ${CRIBL_WORKER_DATA_DIR:-/srv/cribl-worker}:/opt/cribl/config-volume
       # The HEC input's cert and key, written by scripts/tls-certs.sh.
       - ${CRIBL_WORKER_TLS_DIR:-/srv/cribl-worker-tls}:/opt/cribl/tls:ro
+      # Sample datasets captured from Splunk by siem-software-factory/: the
+      # filesystem destination writes here and the replay collector reads here.
+      - ${SIEM_FACTORY_DATA_DIR:-/srv/siem-factory}:/opt/cribl/siem-factory
     depends_on:
       - cribl
       - splunk

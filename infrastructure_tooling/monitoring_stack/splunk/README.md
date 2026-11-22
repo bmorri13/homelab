@@ -28,6 +28,7 @@ Every source sends to Cribl. Splunk receives only from Cribl, and its receiving 
 | Config backups | Unraid NFS share at `/mnt/unraid-splunk/backups` | Splunk `etc` + Cribl Leader `local` and `groups`, 14 nightly archives of about 80 MB each. Files the Splunk image ships in its built-in apps are left out (the image has them); their `local/`, `lookups/` and `metadata/local.meta` are kept. |
 | Repo-managed Splunk apps | `apps/` | Base config (`00_`), props/transforms for our data (`85_`), and Splunkbase apps. See [Splunk apps](#splunk-apps). |
 | Repo-managed Cribl settings | `cribl/local/cribl/` | Inputs, routes, pipelines, the Splunk output |
+| Splunk Search Collector POC: captured sample datasets | `/srv/siem-factory` on the VM (root only), mounted into the Worker at `/opt/cribl/siem-factory` | Real, unsanitized events: never committed. See [siem-software-factory/](siem-software-factory/README.md). |
 
 ### Indexes
 
@@ -315,7 +316,7 @@ chmod 600 .env
 `deploy.sh` is safe to re-run. It:
 
 1. Installs and runs the host firewall for ports 8089, 9000, 514, 5514 and 8443 (`scripts/mgmt-firewall.sh`, and the `splunk-mgmt-firewall` systemd unit that reapplies it before Docker starts on boot).
-2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes).
+2. Runs `tls-certs.sh`, which creates the homelab CA on first run and issues or renews the certs for Splunk's port 8089, the Cribl Leader, and the Worker's HEC input (`/srv/cribl-worker-tls`, mounted read-only into the Worker, which is restarted when it changes). It also copies the CA there as `ca.crt`, which the Worker trusts through `NODE_EXTRA_CA_CERTS` for its own HTTPS calls to Splunk (the [siem-software-factory](siem-software-factory/README.md) collector and HEC destination verify Splunk's cert against it).
 3. Starts the stack and waits for Splunk to become healthy.
 4. Syncs every app under `apps/` into Splunk, restarting splunkd only if something or its cert changed. Changes made in Splunk Web land in each app's `local/` and are never overwritten. Apps removed from the repo are not removed from Splunk; apps added by hand (like the Splunk MCP Server app) are left alone.
 5. Seeds the Cribl Worker Group config once, while the Leader is stopped: from the old single-instance config in `/srv/cribl/local/cribl/` if there is one (the one-time move to Leader + Worker), otherwise from `cribl/local/cribl/`.

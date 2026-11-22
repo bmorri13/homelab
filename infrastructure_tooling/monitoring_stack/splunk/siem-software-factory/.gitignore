@@ -1,0 +1,11 @@
+# Captured events are real, unsanitized homelab telemetry: never commit them.
+# Only the empty category directories are tracked. To add a sanitized fixture,
+# put it under fixtures/ (not samples/) after review.
+samples/**
+!samples/*/
+!samples/*/.gitkeep
+reports/**
+!reports/.gitkeep
+__pycache__/
+*.token
+.secrets/

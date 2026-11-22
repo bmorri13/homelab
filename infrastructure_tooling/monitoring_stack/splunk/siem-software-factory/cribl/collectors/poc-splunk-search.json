@@ -1,0 +1,89 @@
+{
+  "id": "poc-splunk-search",
+  "type": "collection",
+  "description": "siem-software-factory POC: bounded export of index=security sourcetype=falco:ocsf (last 48h, head 100). Manual runs only. Bypasses routes: poc-sample-processing -> poc_samples_fs.",
+  "ttl": "4h",
+  "ignoreGroupJobsLimit": false,
+  "removeFields": [],
+  "resumeOnBoot": false,
+  "schedule": {
+    "enabled": false,
+    "cronSchedule": "0 */6 * * *",
+    "maxConcurrentRuns": 1,
+    "skippable": true,
+    "resumeMissed": false,
+    "run": {
+      "mode": "run",
+      "timeRangeType": "relative",
+      "earliest": "-48h",
+      "latest": "now",
+      "expression": "true",
+      "minTaskSize": "1MB",
+      "maxTaskSize": "10MB",
+      "rescheduleDroppedTasks": true,
+      "maxTaskReschedule": 1,
+      "logLevel": "info",
+      "jobTimeout": "10m"
+    }
+  },
+  "collector": {
+    "type": "splunk",
+    "conf": {
+      "searchHead": "https://192.168.4.11:8089",
+      "endpoint": "/services/search/v2/jobs/export",
+      "outputMode": "json",
+      "search": "search index=security sourcetype=\"falco:ocsf\" earliest=-48h latest=now | head 100 | fields _raw _time _indextime _cd _bkt host source sourcetype index splunk_server",
+      "earliest": "-48h",
+      "latest": "now",
+      "collectRequestParams": [
+        {
+          "name": "time_format",
+          "value": "'%s.%6N'"
+        }
+      ],
+      "collectRequestHeaders": [],
+      "authentication": "tokenSecret",
+      "tokenSecret": "poc_splunk_search_token",
+      "timeout": 120,
+      "useRoundRobinDns": false,
+      "disableTimeFilter": true,
+      "rejectUnauthorized": true,
+      "handleEscapedChars": false,
+      "retryRules": {
+        "type": "backoff",
+        "interval": 1000,
+        "limit": 3,
+        "multiplier": 2,
+        "codes": [
+          429,
+          503
+        ],
+        "enableHeader": true,
+        "retryConnectTimeout": false,
+        "retryConnectReset": false
+      }
+    },
+    "destructive": false,
+    "encoding": "utf8"
+  },
+  "input": {
+    "type": "collection",
+    "staleChannelFlushMs": 10000,
+    "sendToRoutes": false,
+    "preprocess": {
+      "disabled": true
+    },
+    "throttleRatePerSec": "0",
+    "breakerRulesets": [
+      "poc-splunk-search-json"
+    ],
+    "pipeline": "poc-sample-processing",
+    "output": "poc_samples_fs",
+    "metadata": [
+      {
+        "name": "sf_collector_id",
+        "value": "'poc-splunk-search'"
+      }
+    ]
+  }
+}

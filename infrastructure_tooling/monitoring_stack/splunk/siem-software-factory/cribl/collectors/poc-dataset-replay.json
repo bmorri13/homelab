@@ -1,0 +1,53 @@
+{
+  "id": "poc-dataset-replay",
+  "type": "collection",
+  "description": "siem-software-factory POC: replay ONE saved dataset's events.jsonl to Splunk index=devlogs. scripts/replay.py sets the dataset directory per run; the saved path is a placeholder that matches nothing, so a bare UI run replays nothing. Bypasses routes: poc-devlogs-replay -> poc_devlogs_hec.",
+  "ttl": "4h",
+  "ignoreGroupJobsLimit": false,
+  "removeFields": [],
+  "resumeOnBoot": false,
+  "schedule": {
+    "enabled": false,
+    "cronSchedule": "0 */6 * * *",
+    "maxConcurrentRuns": 1,
+    "skippable": true,
+    "resumeMissed": false,
+    "run": {
+      "mode": "run",
+      "timeRangeType": "relative",
+      "expression": "source.endsWith('/events.jsonl')",
+      "minTaskSize": "1MB",
+      "maxTaskSize": "10MB",
+      "rescheduleDroppedTasks": true,
+      "maxTaskReschedule": 1,
+      "logLevel": "info",
+      "jobTimeout": "10m"
+    }
+  },
+  "collector": {
+    "type": "filesystem",
+    "conf": {
+      "path": "/opt/cribl/siem-factory/samples/_set-by-replay.py",
+      "recurse": false,
+      "maxBatchSize": 10,
+      "extractors": []
+    },
+    "destructive": false,
+    "encoding": "utf8"
+  },
+  "input": {
+    "type": "collection",
+    "staleChannelFlushMs": 10000,
+    "sendToRoutes": false,
+    "preprocess": {
+      "disabled": true
+    },
+    "throttleRatePerSec": "0",
+    "breakerRulesets": ["poc-dataset-jsonl"],
+    "pipeline": "poc-devlogs-replay",
+    "output": "poc_devlogs_hec",
+    "metadata": [
+      {"name": "sf_replay_collector_id", "value": "'poc-dataset-replay'"}
+    ]
+  }
+}
