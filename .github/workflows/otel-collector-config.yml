@@ -1,0 +1,41 @@
+# Check an OTel collector chart or image bump before it merges (infrastructure_tooling/
+# otel_collector_k3s): render the chart and have the pinned collector image validate the
+# config that comes out. Argo CD syncs this chart within minutes of a merge, and a config
+# the collector rejects stops every log and metric from k3s-01. See
+# infrastructure_tooling/otel_collector_k3s/test-collector-config.sh for what it does and
+# does not prove.
+# No secrets. GitHub-hosted runner: the ARC runners for this repo cannot run containers.
+name: OTel collector config
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'infrastructure_tooling/otel_collector_k3s/**'
+      - .github/workflows/otel-collector-config.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: otel-collector-config-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate the rendered config with the collector image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Render the chart and validate its config
+        run: |
+          helm version --short
+          yq --version
+          infrastructure_tooling/otel_collector_k3s/test-collector-config.sh
