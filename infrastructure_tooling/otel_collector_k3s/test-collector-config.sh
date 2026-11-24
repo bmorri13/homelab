@@ -15,7 +15,7 @@
 # that the kubelet or the API server answer it, or that anything arrives in Splunk.
 # After a merge, look at the DaemonSet rollout and that pod logs and index=metrics keep arriving.
 #
-# Needs helm, yq (mikefarah) and docker. No secrets, no cluster.
+# Needs helm, yq (mikefarah), openssl and docker. No secrets, no cluster.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -51,9 +51,21 @@ while read -r dir; do
   [ -n "$dir" ] && [ "$dir" != "null" ] && dir_args+=(--tmpfs "$dir")
 done < <(yq '.extensions // {} | to_entries | .[] | select(.key | test("^file_storage")) | .value.directory' "$work/relay.yaml")
 
+# Receivers that talk to the kubelet or the API server read the pod's service account
+# when they are built, without connecting. A throwaway CA and token stand in for it.
+sa="$work/serviceaccount"
+mkdir "$sa"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=placeholder" \
+  -keyout "$work/ca.key" -out "$sa/ca.crt" 2>/dev/null
+echo placeholder > "$sa/token"
+echo otel-collector > "$sa/namespace"
+chmod 0755 "$sa" && chmod 0644 "$sa"/*
+env_args+=(-e KUBERNETES_SERVICE_HOST=127.0.0.1 -e KUBERNETES_SERVICE_PORT=6443)
+
 chmod 0644 "$work/relay.yaml"
 chmod 0755 "$work"
 echo "Validating the rendered config with $image"
 docker run --rm "${env_args[@]}" "${dir_args[@]}" -v "$work/relay.yaml:/conf/relay.yaml:ro" \
+  -v "$sa:/var/run/secrets/kubernetes.io/serviceaccount:ro" \
   --entrypoint "$binary" "$image" validate --config=/conf/relay.yaml
 echo "ok: $image accepts the rendered config"
