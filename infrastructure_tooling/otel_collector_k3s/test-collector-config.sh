@@ -44,9 +44,16 @@ while read -r name; do
   esac
 done < <(grep -o '\${env:[A-Za-z_0-9]*' "$work/relay.yaml" | sed 's/^\${env://' | sort -u)
 
+# file_storage refuses a config whose directory is missing. On the node it is a host
+# path the chart mounts; here an empty one stands in.
+dir_args=()
+while read -r dir; do
+  [ -n "$dir" ] && [ "$dir" != "null" ] && dir_args+=(--tmpfs "$dir")
+done < <(yq '.extensions // {} | to_entries | .[] | select(.key | test("^file_storage")) | .value.directory' "$work/relay.yaml")
+
 chmod 0644 "$work/relay.yaml"
 chmod 0755 "$work"
 echo "Validating the rendered config with $image"
-docker run --rm "${env_args[@]}" -v "$work/relay.yaml:/conf/relay.yaml:ro" \
+docker run --rm "${env_args[@]}" "${dir_args[@]}" -v "$work/relay.yaml:/conf/relay.yaml:ro" \
   --entrypoint "$binary" "$image" validate --config=/conf/relay.yaml
 echo "ok: $image accepts the rendered config"
